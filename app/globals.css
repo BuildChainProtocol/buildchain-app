@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bc-dark: #0f1923;
+  --bc-navy: #162032;
+  --bc-card: #1e2d40;
+  --bc-border: #2a3f57;
+  --bc-gold: #c9a84c;
+  --bc-gold-light: #e8c97a;
+  --bc-blue: #2d7dd2;
+  --bc-teal: #1ab3a6;
+  --bc-muted: #7f9ab0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--bc-dark);
+  color: #e8edf2;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bc-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bc-muted); }
+
+@layer utilities {
+  .text-muted { color: var(--bc-muted); }
+  .bg-card { background-color: var(--bc-card); }
+  .border-bc { border-color: var(--bc-border); }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide;
+  }
+  .badge-green { @apply bg-green-500/15 text-green-400; }
+  .badge-blue { @apply bg-blue-500/15 text-blue-400; }
+  .badge-yellow { @apply bg-yellow-500/15 text-yellow-400; }
+  .badge-red { @apply bg-red-500/15 text-red-400; }
+  .badge-gold { background: rgba(201,168,76,0.15); color: var(--bc-gold); }
+  .badge-gray { @apply bg-gray-500/15 text-gray-400; }
+}
