@@ -2,10 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
-  const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,19 +14,25 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
 
-    if (authError) {
-      setError(authError.message)
-      setLoading(false)
-      return
-    }
+      const json = await res.json()
 
-    // Force full page reload so server-side middleware picks up the session cookie
-    if (data.user) {
-      window.location.href = '/'
-    } else {
-      setError('Unable to sign in. Please try again.')
+      if (!res.ok) {
+        setError(json.error || 'Sign in failed. Please try again.')
+        setLoading(false)
+        return
+      }
+
+      // Server set the session cookie — hard redirect to dashboard
+      window.location.href = `/${json.role}`
+    } catch {
+      setError('Network error. Please try again.')
       setLoading(false)
     }
   }
