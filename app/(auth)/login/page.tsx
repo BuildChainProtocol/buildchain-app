@@ -32,7 +32,7 @@ export default function LoginPage() {
         .from('profiles')
         .select('role')
         .eq('id', data.user.id)
-        .single()
+        .single() as { data: { role: string } | null }
 
       router.push(`/${profile?.role || 'borrower'}`)
       router.refresh()
