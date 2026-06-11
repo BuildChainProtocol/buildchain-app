@@ -35,7 +35,9 @@ export default function LoginPage() {
         .single() as { data: { role: string } | null }
 
       router.push(`/${profile?.role || 'borrower'}`)
-      router.refresh()
+    } else {
+      setError('Unable to sign in. Please confirm your email or try again.')
+      setLoading(false)
     }
   }
 

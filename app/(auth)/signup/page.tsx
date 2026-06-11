@@ -29,7 +29,7 @@ export default function SignupPage() {
           full_name: formData.fullName,
           company_name: formData.companyName,
         },
-        emailRedirectTo: `${window.location.origin}/${formData.role}`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/${formData.role}`,
       },
     })
 
