@@ -21,18 +21,26 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       })
 
-      const json = await res.json()
+      let json: { role?: string; error?: string } = {}
+      try {
+        json = await res.json()
+      } catch {
+        setError(`Server error (${res.status}). Please try again.`)
+        setLoading(false)
+        return
+      }
 
       if (!res.ok) {
-        setError(json.error || 'Sign in failed. Please try again.')
+        setError(json.error || 'Invalid email or password.')
         setLoading(false)
         return
       }
 
       // Server set the session cookie — hard redirect to dashboard
-      window.location.href = `/${json.role}`
-    } catch {
-      setError('Network error. Please try again.')
+      window.location.href = `/${json.role || 'admin'}`
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setError(`Connection error: ${msg}`)
       setLoading(false)
     }
   }
