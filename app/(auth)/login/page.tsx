@@ -1,12 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
-  const router = useRouter()
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -26,17 +24,11 @@ export default function LoginPage() {
       return
     }
 
-    // Get role and redirect
+    // Force full page reload so server-side middleware picks up the session cookie
     if (data.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single() as { data: { role: string } | null }
-
-      router.push(`/${profile?.role || 'borrower'}`)
+      window.location.href = '/'
     } else {
-      setError('Unable to sign in. Please confirm your email or try again.')
+      setError('Unable to sign in. Please try again.')
       setLoading(false)
     }
   }
