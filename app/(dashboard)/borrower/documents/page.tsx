@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import DocumentUploadButton from '@/components/ui/DocumentUploadButton'
 
 export default async function BorrowerDocumentsPage() {
   const supabase = createClient()
@@ -61,21 +62,7 @@ export default async function BorrowerDocumentsPage() {
                   <div className="flex items-center gap-3">
                     <span className={`badge ${statusBadge[doc.status] || 'badge-gray'}`}>{doc.status}</span>
                     {['required', 'overdue', 'rejected'].includes(doc.status) && (
-                      <label className="cursor-pointer px-3 py-1 rounded-lg text-xs font-bold border transition-all hover:border-[var(--bc-gold)]"
-                        style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
-                        📎 Upload
-                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0]
-                            if (!file) return
-                            const fd = new FormData()
-                            fd.append('file', file)
-                            fd.append('project_id', project.id)
-                            fd.append('document_id', doc.id)
-                            await fetch('/api/documents', { method: 'POST', body: fd })
-                            window.location.reload()
-                          }} />
-                      </label>
+                      <DocumentUploadButton projectId={project.id} documentId={doc.id} />
                     )}
                     {doc.storage_path && (
                       <button className="text-xs px-3 py-1 rounded-lg border transition-all hover:border-[var(--bc-gold)]"

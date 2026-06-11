@@ -3,13 +3,16 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { searchParams } = new URL(request.url)
   const projectId = searchParams.get('project_id')
   const status = searchParams.get('status')
 
   let query = supabase
     .from('draw_requests')
-    .select(`*, projects(name, loan_number, borrower_id, lender_id)`)
+    .select(`*, projects(name, loan_number, borrower_id, lender_id, loan_amount, amount_drawn)`)
     .order('created_at', { ascending: false })
 
   if (projectId) query = query.eq('project_id', projectId)

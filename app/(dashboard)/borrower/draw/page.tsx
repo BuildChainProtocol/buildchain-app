@@ -63,6 +63,17 @@ export default function SubmitDrawPage() {
     })
 
     if (res.ok) {
+      const { data: draw } = await res.json()
+      // Upload any supporting documents attached to this draw
+      if (files.length > 0 && draw?.id) {
+        await Promise.all(files.map(file => {
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('project_id', form.project_id)
+          fd.append('draw_request_id', draw.id)
+          return fetch('/api/documents', { method: 'POST', body: fd })
+        }))
+      }
       setSuccess(true)
       setTimeout(() => router.push('/borrower'), 2000)
     }

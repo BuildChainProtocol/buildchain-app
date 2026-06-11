@@ -11,7 +11,8 @@ export default async function BorrowerDashboard() {
 
   const { data: borrower } = await supabase.from('borrowers').select('*').eq('profile_id', user.id).single()
 
-  let projects: ReturnType<typeof Array<{ id: string; name: string; loan_amount: number; amount_drawn: number; stage: string; loan_number: string | null; lenders: { company_name: string } | null }>> = []
+  type BorrowerProject = { id: string; name: string; loan_amount: number; amount_drawn: number; stage: string; loan_number: string | null; lenders: { company_name: string } | null }
+  let projects: BorrowerProject[] = []
   let pendingDraws: { amount: number }[] = []
 
   if (borrower) {

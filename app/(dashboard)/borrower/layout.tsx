@@ -16,7 +16,7 @@ export default async function BorrowerLayout({ children }: { children: React.Rea
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-  if (!profile || (profile.role !== 'borrower' && profile.role !== 'admin')) redirect('/login')
+  if (!profile || (profile.role !== 'borrower' && profile.role !== 'admin')) redirect(`/${profile?.role || 'login'}`)
 
   // Get overdue doc count
   const { data: borrower } = await supabase.from('borrowers').select('id').eq('profile_id', user.id).single()

@@ -16,7 +16,7 @@ export default async function LenderLayout({ children }: { children: React.React
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-  if (!profile || (profile.role !== 'lender' && profile.role !== 'admin')) redirect('/login')
+  if (!profile || (profile.role !== 'lender' && profile.role !== 'admin')) redirect(`/${profile?.role || 'login'}`)
 
   const { data: lender } = await supabase.from('lenders').select('id').eq('profile_id', user.id).single()
   let pendingCount = 0

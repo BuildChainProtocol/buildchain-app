@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { formatCurrency, timeAgo } from '@/lib/utils'
 import type { DrawRequest } from '@/lib/types/database'
 
-type DrawWithProject = DrawRequest & { projects: { name: string; loan_number: string } }
+type DrawWithProject = DrawRequest & { projects: { name: string; loan_number: string; loan_amount: number; amount_drawn: number } }
 
 export default function AdminDrawsPage() {
   const [draws, setDraws] = useState<DrawWithProject[]>([])
