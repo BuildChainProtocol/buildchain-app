@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { loginAction } from '@/app/actions/auth'
+import { createClient } from '@/lib/supabase/client'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -17,20 +17,43 @@ function LoginForm() {
     setLoading(true)
     setError('')
 
-    const formData = new FormData(e.currentTarget)
-    const result = await loginAction(formData)
+    try {
+      const form = e.currentTarget
+      const email = (form.elements.namedItem('email') as HTMLInputElement).value
+      const password = (form.elements.namedItem('password') as HTMLInputElement).value
 
-    if (result.error) {
-      setError(result.error)
+      // Use the browser Supabase client — @supabase/ssr stores the session
+      // directly in document.cookie so the server can read it on the next request.
+      // This avoids the Server Action → Set-Cookie timing issue entirely.
+      const supabase = createClient()
+
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (signInError || !data.user) {
+        setError(signInError?.message || 'Invalid email or password.')
+        setLoading(false)
+        return
+      }
+
+      // Determine where to redirect based on the user's role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+
+      const role = (profile as { role: string } | null)?.role || 'borrower'
+
+      // Hard navigation — cookies are already in the browser jar, so the
+      // next request to /<role> will include a valid session.
+      window.location.href = `/${role}`
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred.'
+      setError(message)
       setLoading(false)
-      return
-    }
-
-    if (result.redirect) {
-      // Hard navigation: browser commits the session cookies from the
-      // server action response BEFORE making the next request, so the
-      // middleware/layout will always see a valid session.
-      window.location.href = result.redirect
     }
   }
 
