@@ -2,9 +2,13 @@
 
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
 
-export async function loginAction(formData: FormData) {
+type LoginResult = {
+  error: string | null
+  redirect: string | null
+}
+
+export async function loginAction(formData: FormData): Promise<LoginResult> {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
 
@@ -19,9 +23,13 @@ export async function loginAction(formData: FormData) {
           return cookieStore.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // Handled by middleware on subsequent requests
+          }
         },
       },
     }
@@ -30,8 +38,10 @@ export async function loginAction(formData: FormData) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error || !data.user) {
-    const msg = encodeURIComponent(error?.message || 'Invalid email or password.')
-    redirect(`/login?error=${msg}`)
+    return {
+      error: error?.message || 'Invalid email or password.',
+      redirect: null,
+    }
   }
 
   // Get role for dashboard redirect
@@ -42,5 +52,8 @@ export async function loginAction(formData: FormData) {
     .single()
 
   const role = (profile as { role: string } | null)?.role || 'borrower'
-  redirect(`/${role}`)
+
+  // Return redirect URL — client will use window.location.href for a hard
+  // navigation so the browser commits session cookies before the next request
+  return { error: null, redirect: `/${role}` }
 }
