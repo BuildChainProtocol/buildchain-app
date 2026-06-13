@@ -1,22 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
  * GET /auth/set-session?at=ACCESS_TOKEN&rt=REFRESH_TOKEN&role=ROLE
  *
- * After the browser Supabase client signs in, it holds valid tokens but
- * stores the session in a cookie format that @supabase/ssr on the server
- * cannot parse (version mismatch in cookie encoding).
+ * Bridge between the browser Supabase client (which stores the session in
+ * a cookie format the server can't parse) and the server Supabase client
+ * (which writes cookies in a format it CAN parse).
  *
- * Solution: redirect here with the raw tokens. The SERVER creates a
- * Supabase client, calls setSession(), which stores the session in the
- * server's own cookie format via cookieStore.set(). The Set-Cookie headers
- * go out with the redirect response, so by the time the browser lands on
- * /admin (or /borrower), the cookies are already committed in the right format.
- *
- * TODO: rotate to POST + short-lived signed token before adding real users.
+ * Key: In Next.js Route Handler GET methods, cookies().set() from
+ * next/headers is a no-op. Cookies MUST be stamped directly onto the
+ * NextResponse object via response.cookies.set().
  */
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
@@ -28,19 +23,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?error=missing_tokens', url.origin))
   }
 
-  const cookieStore = cookies()
+  // Build the redirect response up-front so we can stamp cookies onto it
+  const response = NextResponse.redirect(new URL(`/${role}`, url.origin))
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll()
+          return request.cookies.getAll()
         },
+        // Stamp every cookie Supabase wants to set directly onto the response
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options ?? {})
+          })
         },
       },
     }
@@ -58,6 +56,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Cookies are now set in the response headers — redirect to dashboard
-  return NextResponse.redirect(new URL(`/${role}`, url.origin))
+  // response already has the session cookies — browser will commit them
+  // before following the redirect to /{role}
+  return response
 }
