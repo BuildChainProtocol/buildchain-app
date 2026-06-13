@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// TEMPORARY DEBUG ENDPOINT — DELETE BEFORE LAUNCH
+// TEMPORARY DEBUG ENDPOINT — DELETE BEFORE LAUNCH (v2)
 // Visit https://buildchain-app.vercel.app/api/debug-auth after signing in
 // to see whether the server can read your session cookies.
 export async function GET(request: NextRequest) {
