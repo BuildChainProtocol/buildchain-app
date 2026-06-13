@@ -56,9 +56,15 @@ function LoginForm() {
       console.log('[BC] 4. Profile result:', { profile, error: profileError?.message })
 
       const role = (profile as { role: string } | null)?.role || 'borrower'
-      console.log('[BC] 5. Navigating to /' + role)
+      console.log('[BC] 5. Navigating via set-session to /' + role)
 
-      window.location.href = `/${role}`
+      // Route through /auth/set-session so the server sets the cookie in its
+      // own format — this fixes the @supabase/ssr browser↔server cookie mismatch.
+      const setSessionUrl = new URL('/auth/set-session', window.location.origin)
+      setSessionUrl.searchParams.set('at', data.session!.access_token)
+      setSessionUrl.searchParams.set('rt', data.session!.refresh_token)
+      setSessionUrl.searchParams.set('role', role)
+      window.location.href = setSessionUrl.toString()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred.'
       console.error('[BC] CATCH:', err)
