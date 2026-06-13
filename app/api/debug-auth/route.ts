@@ -41,6 +41,17 @@ export async function GET(request: NextRequest) {
     getUserError = e instanceof Error ? e.message : String(e)
   }
 
+  // Show truncated value of each supabase cookie so we can see the storage format
+  const supabaseCookieDetails = request.cookies.getAll()
+    .filter(c => c.name.includes('sb-') || c.name.includes('supabase'))
+    .map(c => ({
+      name: c.name,
+      valueLength: c.value.length,
+      valueStart: c.value.substring(0, 80),
+      looksLikeJson: c.value.trimStart().startsWith('{'),
+      looksLikeBase64: /^[A-Za-z0-9+/=_-]{20,}$/.test(c.value.substring(0, 40)),
+    }))
+
   return NextResponse.json({
     serverCanSeeUser: !!user,
     user,
@@ -48,6 +59,6 @@ export async function GET(request: NextRequest) {
     supabaseUrl,
     anonKeyPrefix,
     cookiesReceived: allCookieNames,
-    supabaseCookies: allCookieNames.filter(n => n.includes('sb-') || n.includes('supabase')),
+    supabaseCookieDetails,
   })
 }

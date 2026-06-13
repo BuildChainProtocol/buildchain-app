@@ -56,7 +56,14 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // response already has the session cookies — browser will commit them
-  // before following the redirect to /{role}
-  return response
+  // TEMP DEBUG: redirect to debug-auth so we can verify the server sees
+  // the session cookies after setSession() — revert to /{role} once confirmed
+  const debugResponse = NextResponse.redirect(
+    new URL('/api/debug-auth?from=set-session', url.origin)
+  )
+  // Stamp the same cookies onto the debug redirect
+  response.cookies.getAll().forEach(({ name, value, ...rest }) => {
+    debugResponse.cookies.set(name, value, rest)
+  })
+  return debugResponse
 }
