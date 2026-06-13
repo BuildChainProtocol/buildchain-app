@@ -22,14 +22,18 @@ function LoginForm() {
       const email = (form.elements.namedItem('email') as HTMLInputElement).value
       const password = (form.elements.namedItem('password') as HTMLInputElement).value
 
-      // Use the browser Supabase client — @supabase/ssr stores the session
-      // directly in document.cookie so the server can read it on the next request.
-      // This avoids the Server Action → Set-Cookie timing issue entirely.
+      console.log('[BC] 1. Starting sign-in for', email)
       const supabase = createClient()
 
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
+      })
+
+      console.log('[BC] 2. signInWithPassword result:', {
+        userId: data?.user?.id,
+        error: signInError?.message,
+        hasSession: !!data?.session,
       })
 
       if (signInError || !data.user) {
@@ -38,20 +42,26 @@ function LoginForm() {
         return
       }
 
+      // Check what cookies are now set in the browser
+      const cookieKeys = document.cookie.split(';').map(c => c.trim().split('=')[0])
+      console.log('[BC] 3. Cookies after sign-in:', cookieKeys)
+
       // Determine where to redirect based on the user's role
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', data.user.id)
         .single()
 
-      const role = (profile as { role: string } | null)?.role || 'borrower'
+      console.log('[BC] 4. Profile result:', { profile, error: profileError?.message })
 
-      // Hard navigation — cookies are already in the browser jar, so the
-      // next request to /<role> will include a valid session.
+      const role = (profile as { role: string } | null)?.role || 'borrower'
+      console.log('[BC] 5. Navigating to /' + role)
+
       window.location.href = `/${role}`
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred.'
+      console.error('[BC] CATCH:', err)
       setError(message)
       setLoading(false)
     }
