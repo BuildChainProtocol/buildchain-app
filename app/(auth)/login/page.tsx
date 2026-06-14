@@ -1,88 +1,77 @@
-'use client'
-
-import { useState } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
 import Link from 'next/link'
-import { loginAction } from '@/app/actions/auth'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 
-function LoginForm() {
-  const searchParams = useSearchParams()
-  const urlError = searchParams.get('error')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+async function login(formData: FormData) {
+  'use server'
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+  const email = formData.get('email') as string
+  const password = formData.get('password') as string
 
-    try {
-      const form = e.currentTarget
-      const email = (form.elements.namedItem('email') as HTMLInputElement).value
-      const password = (form.elements.namedItem('password') as HTMLInputElement).value
+  const supabase = createClient()
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
-      const formData = new FormData()
-      formData.set('email', email)
-      formData.set('password', password)
-
-      // Server Action — uses cookies() from next/headers which is writable
-      // in Server Actions, so setAll() correctly persists the session tokens.
-      const result = await loginAction(formData)
-
-      if (result.error) {
-        setError(result.error)
-        setLoading(false)
-        return
-      }
-
-      // Hard navigation so the browser sends the newly committed session
-      // cookies with the next request to the dashboard.
-      window.location.href = result.redirect!
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred.')
-      setLoading(false)
-    }
+  if (error || !data.user) {
+    redirect(`/login?error=${encodeURIComponent(error?.message ?? 'Invalid email or password')}`)
   }
 
-  const displayError = error || (urlError ? decodeURIComponent(urlError) : '')
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', data.user.id)
+    .single()
+
+  redirect(`/${profile?.role ?? 'borrower'}`)
+}
+
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: { error?: string }
+}) {
+  const errorMessage = searchParams.error ? decodeURIComponent(searchParams.error) : null
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bc-dark)' }}>
       <div className="w-full max-w-md px-6">
-        {/* Logo */}
+
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-base" style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-base"
+              style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
               BC
             </div>
             <span className="text-2xl font-bold">
               Build<span style={{ color: 'var(--bc-gold)' }}>Chain</span> Protocol
             </span>
           </div>
-          <p style={{ color: 'var(--bc-muted)' }} className="text-sm">Construction loan management platform</p>
+          <p style={{ color: 'var(--bc-muted)' }} className="text-sm">
+            Construction loan management platform
+          </p>
         </div>
 
-        {/* Card */}
         <div className="rounded-xl p-8 border" style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
           <h1 className="text-xl font-bold mb-6">Sign in to your account</h1>
 
-          {displayError && (
-            <div className="mb-4 p-3 rounded-lg text-sm border" style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#e74c3c' }}>
-              {displayError}
+          {errorMessage && (
+            <div className="mb-4 p-3 rounded-lg text-sm border"
+              style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#e74c3c' }}>
+              {errorMessage}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form action={login} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>
+              <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wide mb-1.5"
+                style={{ color: 'var(--bc-muted)' }}>
                 Email Address
               </label>
               <input
+                id="email"
                 name="email"
                 type="email"
                 required
-                disabled={loading}
+                autoComplete="email"
                 className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
                 style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: '#e8edf2' }}
                 placeholder="you@company.com"
@@ -90,14 +79,16 @@ function LoginForm() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>
+              <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wide mb-1.5"
+                style={{ color: 'var(--bc-muted)' }}>
                 Password
               </label>
               <input
+                id="password"
                 name="password"
                 type="password"
                 required
-                disabled={loading}
+                autoComplete="current-password"
                 className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
                 style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: '#e8edf2' }}
                 placeholder="••••••••"
@@ -106,15 +97,15 @@ function LoginForm() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-lg font-bold text-sm transition-all mt-2 disabled:opacity-60"
+              className="w-full py-2.5 rounded-lg font-bold text-sm transition-all mt-2"
               style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}
             >
-              {loading ? 'Signing in…' : 'Sign In'}
+              Sign In
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t text-center text-sm" style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
+          <div className="mt-6 pt-6 border-t text-center text-sm"
+            style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
             Don&apos;t have an account?{' '}
             <Link href="/signup" style={{ color: 'var(--bc-gold)' }} className="font-semibold hover:underline">
               Sign up
@@ -127,13 +118,5 @@ function LoginForm() {
         </p>
       </div>
     </div>
-  )
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
   )
 }
