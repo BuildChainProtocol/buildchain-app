@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 // BUILD_ID — bump this any time you deploy so you can confirm which
 // version is live: look for "v6" in the bottom-right corner of the page.
-const BUILD_ID = 'v7'
+const BUILD_ID = 'v8'
 
 export default function LoginPage({
   searchParams,
