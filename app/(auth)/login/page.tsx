@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -22,53 +21,30 @@ function LoginForm() {
       const email = (form.elements.namedItem('email') as HTMLInputElement).value
       const password = (form.elements.namedItem('password') as HTMLInputElement).value
 
-      console.log('[BC] 1. Starting sign-in for', email)
-      const supabase = createClient()
-
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // POST credentials to our server-side login handler.
+      // The handler signs in via @supabase/ssr createServerClient and stamps
+      // the session cookies directly onto the JSON response. The browser
+      // commits those Set-Cookie headers when this fetch() resolves — so by
+      // the time window.location.href fires the session is already in the
+      // cookie jar and middleware/layouts can read it with no format mismatch.
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       })
 
-      console.log('[BC] 2. signInWithPassword result:', {
-        userId: data?.user?.id,
-        error: signInError?.message,
-        hasSession: !!data?.session,
-      })
+      const data = await res.json()
 
-      if (signInError || !data.user) {
-        setError(signInError?.message || 'Invalid email or password.')
+      if (!res.ok) {
+        setError(data.error ?? 'Sign in failed. Please try again.')
         setLoading(false)
         return
       }
 
-      // Check what cookies are now set in the browser
-      const cookieKeys = document.cookie.split(';').map(c => c.trim().split('=')[0])
-      console.log('[BC] 3. Cookies after sign-in:', cookieKeys)
-
-      // Determine where to redirect based on the user's role
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single()
-
-      console.log('[BC] 4. Profile result:', { profile, error: profileError?.message })
-
-      const role = (profile as { role: string } | null)?.role || 'borrower'
-      console.log('[BC] 5. Navigating via set-session to /' + role)
-
-      // Route through /auth/set-session so the server sets the cookie in its
-      // own format — this fixes the @supabase/ssr browser↔server cookie mismatch.
-      const setSessionUrl = new URL('/auth/set-session', window.location.origin)
-      setSessionUrl.searchParams.set('at', data.session!.access_token)
-      setSessionUrl.searchParams.set('rt', data.session!.refresh_token)
-      setSessionUrl.searchParams.set('role', role)
-      window.location.href = setSessionUrl.toString()
+      // Navigate — session cookies already committed
+      window.location.href = data.redirectTo
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An unexpected error occurred.'
-      console.error('[BC] CATCH:', err)
-      setError(message)
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred.')
       setLoading(false)
     }
   }
