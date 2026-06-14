@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { loginAction } from '@/app/actions/auth'
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -21,28 +22,23 @@ function LoginForm() {
       const email = (form.elements.namedItem('email') as HTMLInputElement).value
       const password = (form.elements.namedItem('password') as HTMLInputElement).value
 
-      // POST credentials to our server-side login handler.
-      // The handler signs in via @supabase/ssr createServerClient and stamps
-      // the session cookies directly onto the JSON response. The browser
-      // commits those Set-Cookie headers when this fetch() resolves — so by
-      // the time window.location.href fires the session is already in the
-      // cookie jar and middleware/layouts can read it with no format mismatch.
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
+      const formData = new FormData()
+      formData.set('email', email)
+      formData.set('password', password)
 
-      const data = await res.json()
+      // Server Action — uses cookies() from next/headers which is writable
+      // in Server Actions, so setAll() correctly persists the session tokens.
+      const result = await loginAction(formData)
 
-      if (!res.ok) {
-        setError(data.error ?? 'Sign in failed. Please try again.')
+      if (result.error) {
+        setError(result.error)
         setLoading(false)
         return
       }
 
-      // Navigate — session cookies already committed
-      window.location.href = data.redirectTo
+      // Hard navigation so the browser sends the newly committed session
+      // cookies with the next request to the dashboard.
+      window.location.href = result.redirect!
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.')
       setLoading(false)
