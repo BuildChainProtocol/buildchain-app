@@ -33,18 +33,29 @@ export async function POST(request: NextRequest) {
       options: Record<string, unknown>
     }> = []
 
+    // Mirror the cookie store in memory so that after signInWithPassword calls
+    // setAll() with the new session tokens, subsequent getAll() calls (used by
+    // the Supabase client to build the auth header for the profile query) will
+    // include those new tokens. Without this, getAll() only returns the original
+    // request cookies (no session yet), so the profile query runs unauthenticated,
+    // auth.uid() is NULL, RLS returns nothing, and role defaults to 'borrower'.
+    const cookieStore = new Map(
+      request.cookies.getAll().map(c => [c.name, c.value])
+    )
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll() {
-            return request.cookies.getAll()
+            return Array.from(cookieStore.entries()).map(([name, value]) => ({ name, value }))
           },
           setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) =>
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value)
               pendingCookies.push({ name, value, options: options ?? {} })
-            )
+            })
           },
         },
       }
