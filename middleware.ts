@@ -32,7 +32,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from auth pages.
+  // IMPORTANT: only redirect if profile lookup actually returns a role.
+  // If profiles returns null (e.g. RLS error), fall through and let the
+  // user stay on /login — redirecting creates an infinite loop:
+  //   middleware → /borrower → borrower layout → /login → middleware → repeat
   if (user && (pathname === '/login' || pathname === '/signup' || pathname === '/')) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -40,8 +44,11 @@ export async function middleware(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    const role = profile?.role || 'borrower'
-    return NextResponse.redirect(new URL(`/${role}`, request.url))
+    if (profile?.role) {
+      return NextResponse.redirect(new URL(`/${profile.role}`, request.url))
+    }
+    // Profile lookup failed — don't redirect, let the user stay on the page
+    return supabaseResponse
   }
 
   // Role-based route protection
