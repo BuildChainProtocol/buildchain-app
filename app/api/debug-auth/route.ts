@@ -1,64 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// TEMPORARY DEBUG ENDPOINT — DELETE BEFORE LAUNCH (v2)
-// Visit https://buildchain-app.vercel.app/api/debug-auth after signing in
-// to see whether the server can read your session cookies.
+// TEMPORARY DEBUG ENDPOINT — DELETE BEFORE LAUNCH
 export async function GET(request: NextRequest) {
-  const cookieHeader = request.headers.get('cookie') || ''
-  const allCookieNames = cookieHeader
-    .split(';')
-    .map(c => c.trim().split('=')[0])
-    .filter(Boolean)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return request.cookies.getAll() },
+        setAll() {},
+      },
+    }
+  )
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'NOT SET'
-  const anonKeyPrefix = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.substring(0, 30) + '...'
-    : 'NOT SET'
+  // ── Auth check ──────────────────────────────────────────────
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-  let user = null
-  let getUserError = null
-
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll() {},
-        },
-      }
-    )
-    const result = await supabase.auth.getUser()
-    user = result.data.user
-      ? { id: result.data.user.id, email: result.data.user.email }
-      : null
-    getUserError = result.error?.message || null
-  } catch (e: unknown) {
-    getUserError = e instanceof Error ? e.message : String(e)
+  // ── Profile query — the exact same query the layouts use ────
+  let profile = null
+  let profileError = null
+  if (user) {
+    const result = await supabase
+      .from('profiles')
+      .select('id, role, email')
+      .eq('id', user.id)
+      .single()
+    profile = result.data
+    profileError = result.error ? { message: result.error.message, code: result.error.code, details: result.error.details, hint: result.error.hint } : null
   }
 
-  // Show truncated value of each supabase cookie so we can see the storage format
-  const supabaseCookieDetails = request.cookies.getAll()
-    .filter(c => c.name.includes('sb-') || c.name.includes('supabase'))
-    .map(c => ({
-      name: c.name,
-      valueLength: c.value.length,
-      valueStart: c.value.substring(0, 80),
-      looksLikeJson: c.value.trimStart().startsWith('{'),
-      looksLikeBase64: /^[A-Za-z0-9+/=_-]{20,}$/.test(c.value.substring(0, 40)),
-    }))
+  // ── RLS test: try selecting all profiles (admin-only) ───────
+  let allProfilesCount = null
+  let allProfilesError = null
+  if (user) {
+    const result = await supabase.from('profiles').select('id', { count: 'exact', head: true })
+    allProfilesCount = result.count
+    allProfilesError = result.error?.message ?? null
+  }
 
   return NextResponse.json({
     serverCanSeeUser: !!user,
-    user,
-    getUserError,
-    supabaseUrl,
-    anonKeyPrefix,
-    cookiesReceived: allCookieNames,
-    supabaseCookieDetails,
-  })
+    userError: userError?.message ?? null,
+    user: user ? { id: user.id, email: user.email } : null,
+    profile,
+    profileError,
+    allProfilesCount,
+    allProfilesError,
+    cookiesReceived: request.cookies.getAll().map(c => c.name),
+  }, { status: 200 })
 }
