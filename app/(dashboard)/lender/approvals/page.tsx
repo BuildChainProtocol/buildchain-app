@@ -124,12 +124,12 @@ export default function LenderApprovalsPage() {
                     </div>
                   )}
 
-                  <div className="flex gap-3">
-                    <button onClick={() => act(draw.id, 'funded')}
-                      disabled={actionLoading === draw.id + 'funded'}
+                  <div className="flex gap-3 items-center">
+                    <button onClick={() => act(draw.id, 'approved')}
+                      disabled={actionLoading === draw.id + 'approved'}
                       className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
                       style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
-                      {actionLoading === draw.id + 'funded' ? 'Processing…' : '✓ Approve & Fund'}
+                      {actionLoading === draw.id + 'approved' ? 'Creating escrow…' : '⬡ Approve & Lock Escrow'}
                     </button>
                     <button onClick={() => act(draw.id, 'declined')}
                       disabled={actionLoading === draw.id + 'declined'}
@@ -137,10 +137,9 @@ export default function LenderApprovalsPage() {
                       style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>
                       ✗ Decline
                     </button>
-                    <button className="px-4 py-2 rounded-lg text-sm font-semibold border transition-all"
-                      style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
-                      Request More Info
-                    </button>
+                    <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                      Admin releases funds after escrow review
+                    </span>
                   </div>
                 </div>
               </div>

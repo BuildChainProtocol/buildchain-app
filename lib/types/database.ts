@@ -102,6 +102,10 @@ export interface Database {
           wire_reference: string | null
           inspection_done: boolean
           lien_waiver: boolean
+          escrow_sequence: number | null
+          escrow_txn_hash: string | null
+          escrow_finish_hash: string | null
+          escrow_finish_after: string | null
           created_at: string
           updated_at: string
         }

@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
+import { createDrawEscrow, finishDrawEscrow, isXrplConfigured } from '@/lib/xrpl/escrow'
 import { NextRequest, NextResponse } from 'next/server'
+
+// Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
+export const runtime = 'nodejs'
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -13,25 +17,84 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const updates: Record<string, unknown> = { ...body, reviewed_at: new Date().toISOString() }
+  // Fetch the draw before we mutate anything
+  const { data: draw, error: fetchError } = await supabase
+    .from('draw_requests')
+    .select('*, projects(borrower_id, borrowers(xrp_address))')
+    .eq('id', params.id)
+    .single()
 
+  if (fetchError || !draw) {
+    return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+  }
+
+  const updates: Record<string, unknown> = {
+    ...body,
+    reviewed_at: new Date().toISOString(),
+  }
+
+  // ─── APPROVE: Create XRPL escrow ───────────────────────────────────────────
   if (body.status === 'approved') {
     updates.approved_by = user.id
-    updates.wire_reference = `WIRE-${Date.now()}`
-  }
-  if (body.status === 'funded') {
-    updates.funded_at = new Date().toISOString()
-    // Update project amount_drawn
-    const { data: draw } = await supabase.from('draw_requests').select('amount, project_id').eq('id', params.id).single()
-    if (draw) {
-      await supabase.rpc('increment_amount_drawn', { p_project_id: draw.project_id, p_amount: draw.amount })
+
+    if (isXrplConfigured()) {
+      try {
+        // Use per-borrower XRP address if set, otherwise fall back to env default
+        const borrowerXrpAddress = (draw.projects as any)?.borrowers?.xrp_address ?? undefined
+
+        const escrow = await createDrawEscrow({ destinationAddress: borrowerXrpAddress })
+
+        updates.escrow_sequence    = escrow.escrowSequence
+        updates.escrow_txn_hash    = escrow.txnHash
+        updates.escrow_finish_after = escrow.finishAfter.toISOString()
+
+        console.log(`[XRPL] EscrowCreate OK — seq ${escrow.escrowSequence} hash ${escrow.txnHash}`)
+      } catch (xrplError) {
+        const message = xrplError instanceof Error ? xrplError.message : 'XRPL error'
+        console.error('[XRPL] EscrowCreate failed:', message)
+        return NextResponse.json(
+          { error: `XRPL escrow creation failed: ${message}` },
+          { status: 502 }
+        )
+      }
+    } else {
+      console.warn('[XRPL] Not configured — skipping escrow creation (set XRPL_WALLET_SEED + XRPL_DEFAULT_DESTINATION)')
     }
   }
+
+  // ─── FUND: Finish XRPL escrow + update project drawn amount ────────────────
+  if (body.status === 'funded') {
+    updates.funded_at = new Date().toISOString()
+
+    if (isXrplConfigured() && draw.escrow_sequence != null) {
+      try {
+        const finish = await finishDrawEscrow({ escrowSequence: draw.escrow_sequence })
+        updates.escrow_finish_hash = finish.txnHash
+        console.log(`[XRPL] EscrowFinish OK — hash ${finish.txnHash}`)
+      } catch (xrplError) {
+        const message = xrplError instanceof Error ? xrplError.message : 'XRPL error'
+        console.error('[XRPL] EscrowFinish failed:', message)
+        return NextResponse.json(
+          { error: `XRPL escrow release failed: ${message}. The escrow FinishAfter time may not have passed yet.` },
+          { status: 502 }
+        )
+      }
+    }
+
+    // Always increment project amount_drawn, regardless of XRPL
+    await supabase.rpc('increment_amount_drawn', {
+      p_project_id: draw.project_id,
+      p_amount: draw.amount,
+    })
+  }
+
+  // ─── DECLINE ───────────────────────────────────────────────────────────────
   if (body.status === 'declined') {
     updates.declined_by = user.id
   }
 
-  const { data, error } = await supabase
+  // Apply updates
+  const { data: updated, error } = await supabase
     .from('draw_requests')
     .update(updates)
     .eq('id', params.id)
@@ -40,15 +103,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // Log activity
+  // Activity log
   await supabase.from('activity_log').insert({
-    project_id: data.project_id,
+    project_id: updated.project_id,
     user_id: user.id,
     action: `draw_${body.status}`,
     entity_type: 'draw_request',
     entity_id: params.id,
-    details: { status: body.status },
+    details: {
+      status: body.status,
+      ...(body.status === 'approved' && updated.escrow_txn_hash
+        ? { xrpl_escrow_hash: updated.escrow_txn_hash, xrpl_sequence: updated.escrow_sequence }
+        : {}),
+      ...(body.status === 'funded' && updated.escrow_finish_hash
+        ? { xrpl_finish_hash: updated.escrow_finish_hash }
+        : {}),
+    },
   })
 
-  return NextResponse.json({ data })
+  return NextResponse.json({ data: updated })
 }
