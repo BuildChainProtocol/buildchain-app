@@ -20,7 +20,7 @@ const TESTNET_EXPLORER = 'https://testnet.xrpl.org/transactions'
 export default function AdminDrawsPage() {
   const [draws, setDraws] = useState<DrawWithProject[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<string>('pending')
+  const [filter, setFilter] = useState<string>('submitted')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [errorModal, setErrorModal] = useState<string | null>(null)
@@ -63,7 +63,7 @@ export default function AdminDrawsPage() {
     funded: 'badge-green', declined: 'badge-red', draft: 'badge-gray',
   }
 
-  const FILTERS = ['pending', 'approved', 'funded', 'declined', 'all']
+  const FILTERS = ['submitted', 'approved', 'funded', 'declined', 'all']
 
   return (
     <div>

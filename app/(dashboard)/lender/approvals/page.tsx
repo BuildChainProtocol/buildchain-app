@@ -27,7 +27,7 @@ export default function LenderApprovalsPage() {
 
   async function fetchDraws() {
     setLoading(true)
-    const res = await fetch('/api/draws?status=pending')
+    const res = await fetch('/api/draws?status=submitted')
     const json = await res.json()
     setDraws(json.data || [])
     setLoading(false)
