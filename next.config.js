@@ -2,22 +2,25 @@
 const nextConfig = {
   experimental: {
     // Next.js 14 key (renamed to serverExternalPackages in v15)
-    // Prevents webpack from bundling xrpl and its ESM-only crypto deps
+    //
+    // WHY THIS LIST IS SHORT:
+    // xrpl v5 / ripple-keypairs v3 ship CJS builds that try to require() the
+    // @noble/* and @scure/* crypto packages, which went pure-ESM in v2.x.
+    // That causes ERR_REQUIRE_ESM at runtime.
+    //
+    // THE FIX: let webpack bundle everything (xrpl, ripple-keypairs, all crypto
+    // packages). Webpack handles ESM↔CJS interop perfectly at bundle time —
+    // the final output is a single CJS bundle with no bare require() of ESM files.
+    //
+    // We only mark ws/bufferutil as external because they use native .node addons
+    // that webpack cannot (and should not) bundle.
     serverComponentsExternalPackages: [
-      'xrpl',
-      'ripple-keypairs',
-      'ripple-address-codec',
-      'ripple-binary-codec',
-      '@xrplf/isomorphic',
-      '@noble/hashes',
-      '@noble/curves',
-      '@scure/base',
+      'ws',
+      'bufferutil',
+      'utf-8-validate',
     ],
-    // Allow ESM packages to be loaded as ESM (not CJS require) by the Node runtime
-    esmExternals: 'loose',
   },
   typescript: {
-    // Type errors are annotation issues, not runtime bugs — safe to ignore for MVP build
     ignoreBuildErrors: true,
   },
   eslint: {
