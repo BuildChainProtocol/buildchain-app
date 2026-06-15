@@ -118,6 +118,103 @@ export async function finishDrawEscrow({
   }
 }
 
+/**
+ * Mints an XRPL NFToken as an immutable record of a draw lifecycle event.
+ *
+ * The NFT URI encodes JSON metadata (draw ID, project, amount, event type,
+ * timestamp) as uppercase hex — this becomes the permanent on-chain record.
+ *
+ * On testnet: token visible at https://testnet.xrpl.org/nft/{nftTokenId}
+ * Non-blocking: caller must wrap in try/catch.
+ */
+export async function mintDrawNFT({
+  drawRequestId,
+  drawNumber,
+  projectName,
+  drawAmount,
+  eventType,
+}: {
+  drawRequestId: string
+  drawNumber: string
+  projectName: string
+  drawAmount: number
+  eventType: 'approval' | 'release'
+}): Promise<{ nftTokenId: string; txnHash: string }> {
+  const wallet = getPlatformWallet()
+
+  const metadata = {
+    platform: 'BuildChain',
+    version: '1',
+    type: eventType === 'approval' ? 'draw_approval' : 'draw_release',
+    draw_request_id: drawRequestId,
+    draw_number: drawNumber,
+    project: projectName,
+    amount_usd: drawAmount,
+    timestamp: new Date().toISOString(),
+    network: (process.env.XRPL_NETWORK ?? '').includes('altnet') ? 'testnet' : 'mainnet',
+  }
+
+  // XRPL URI field must be uppercase hex-encoded UTF-8
+  const uriHex = Buffer.from(JSON.stringify(metadata), 'utf8').toString('hex').toUpperCase()
+
+  const client = await getConnectedClient()
+  try {
+    const txTemplate = {
+      TransactionType: 'NFTokenMint' as const,
+      Account: wallet.address,
+      URI: uriHex,
+      Flags: 8,           // tfTransferable — allows future transfer if needed
+      TransferFee: 0,
+      NFTokenTaxon: 1,    // BuildChain platform taxon
+    }
+
+    const prepared = await client.autofill(txTemplate)
+    const { tx_blob, hash } = wallet.sign(prepared)
+    const result = await client.submitAndWait(tx_blob)
+
+    const meta = result.result.meta as Record<string, unknown>
+    const txResult = meta?.TransactionResult
+    if (txResult !== 'tesSUCCESS') {
+      throw new Error(`NFTokenMint failed: ${String(txResult)}`)
+    }
+
+    const nftTokenId = extractNFTokenId(meta)
+    if (!nftTokenId) throw new Error('NFTokenID not found in transaction result')
+
+    return { nftTokenId, txnHash: hash }
+  } finally {
+    await client.disconnect()
+  }
+}
+
+/**
+ * Extract the newly minted NFTokenID from NFTokenMint transaction metadata.
+ * Tries the direct field first (xrpl.js v3+), then parses AffectedNodes.
+ */
+function extractNFTokenId(meta: Record<string, unknown>): string | null {
+  // xrpl.js v3+ surfaces this directly
+  if (typeof meta.nftoken_id === 'string') return meta.nftoken_id
+
+  // Fallback: find the new token in the modified NFTokenPage
+  const nodes = (meta.AffectedNodes as Record<string, unknown>[]) || []
+  for (const node of nodes) {
+    const modified = (node.ModifiedNode ?? node.CreatedNode) as Record<string, unknown> | undefined
+    if (!modified || modified.LedgerEntryType !== 'NFTokenPage') continue
+
+    const finalFields = (modified.FinalFields ?? modified.NewFields) as Record<string, unknown> | undefined
+    const nftokens = (finalFields?.NFTokens as Record<string, unknown>[]) || []
+    const prevTokens = ((modified.PreviousFields as Record<string, unknown>)?.NFTokens as Record<string, unknown>[]) || []
+
+    const prevIds = new Set(prevTokens.map((t) => (t.NFToken as Record<string, unknown>)?.NFTokenID))
+    for (const token of nftokens) {
+      const id = (token.NFToken as Record<string, unknown>)?.NFTokenID
+      if (typeof id === 'string' && !prevIds.has(id)) return id
+    }
+  }
+
+  return null
+}
+
 /** Check whether XRPL is configured (used to gracefully skip if env vars missing) */
 export function isXrplConfigured(): boolean {
   return !!(process.env.XRPL_WALLET_SEED && process.env.XRPL_DEFAULT_DESTINATION)

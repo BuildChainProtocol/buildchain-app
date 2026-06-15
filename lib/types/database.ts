@@ -2,6 +2,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json } | 
 
 export type UserRole = 'admin' | 'lender' | 'borrower'
 export type ProjectStage = 'application' | 'review' | 'approved' | 'active' | 'complete' | 'cancelled'
+export type PropertyType = 'single_family' | 'multi_family' | 'commercial' | 'mixed_use' | 'land' | 'industrial' | 'adu' | 'other'
 export type DrawStatus = 'draft' | 'submitted' | 'pending' | 'approved' | 'funded' | 'declined'
 export type DocStatus = 'required' | 'uploaded' | 'approved' | 'rejected' | 'overdue' | 'not_required'
 
@@ -51,6 +52,7 @@ export interface Database {
           license_state: string | null
           rating: string
           active: boolean
+          xrp_address: string | null
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['borrowers']['Row'], 'id' | 'created_at'>
@@ -64,7 +66,7 @@ export interface Database {
           city: string | null
           state: string | null
           zip: string | null
-          property_type: string | null
+          property_type: PropertyType | null
           borrower_id: string
           lender_id: string
           loan_amount: number
@@ -76,6 +78,9 @@ export interface Database {
           ltv: number | null
           appraised_value: number | null
           notes: string | null
+          loan_nft_token_id: string | null
+          loan_nft_mint_hash: string | null
+          loan_nft_burn_hash: string | null
           created_at: string
           updated_at: string
         }
@@ -106,6 +111,8 @@ export interface Database {
           escrow_txn_hash: string | null
           escrow_finish_hash: string | null
           escrow_finish_after: string | null
+          nft_token_id: string | null
+          nft_mint_hash: string | null
           created_at: string
           updated_at: string
         }

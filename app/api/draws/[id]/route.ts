@@ -19,7 +19,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // Fetch the draw before we mutate anything
   const { data: draw, error: fetchError } = await supabase
     .from('draw_requests')
-    .select('*, projects(borrower_id, borrowers(xrp_address))')
+    .select('*, projects(name, borrower_id, borrowers(xrp_address))')
     .eq('id', params.id)
     .single()
 
@@ -32,31 +32,31 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     reviewed_at: new Date().toISOString(),
   }
 
-  // ─── APPROVE: Create XRPL escrow (optional — draw approves even if XRPL fails) ─
+  // ─── APPROVE ──────────────────────────────────────────────────────────────
   if (body.status === 'approved') {
     updates.approved_by = user.id
 
+    // XRPL EscrowCreate (optional — non-fatal if ESM/connection fails)
     try {
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
-
       if (isXrplConfigured()) {
         const borrowerXrpAddress = (draw.projects as any)?.borrowers?.xrp_address ?? undefined
         const escrow = await createDrawEscrow({ destinationAddress: borrowerXrpAddress })
-
         updates.escrow_sequence     = escrow.escrowSequence
         updates.escrow_txn_hash     = escrow.txnHash
         updates.escrow_finish_after = escrow.finishAfter.toISOString()
-
         console.log(`[XRPL] EscrowCreate OK — seq ${escrow.escrowSequence} hash ${escrow.txnHash}`)
       } else {
         console.log('[XRPL] Not configured — approving draw without escrow')
       }
     } catch (xrplError) {
-      // XRPL is optional: ESM compatibility issues or connection failures
-      // must never block a legitimate draw approval. Log and continue.
       const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
       console.warn('[XRPL] Escrow skipped (non-fatal):', message.slice(0, 200))
     }
+
+    // Draw-level XRPL record: the EscrowCreate TX hash above is the record.
+    // No separate NFT needed per draw — that would be redundant with the escrow.
+    // The loan-level NFT (minted at project origination) is the digital title.
   }
 
   // ─── FUND: Finish XRPL escrow + update project drawn amount ────────────────

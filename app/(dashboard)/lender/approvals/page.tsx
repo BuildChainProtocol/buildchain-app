@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { formatCurrency, timeAgo } from '@/lib/utils'
 
+type TabKey = 'submitted' | 'approved' | 'declined'
+
 interface Draw {
   id: string
   request_number: string
@@ -13,24 +15,40 @@ interface Draw {
   inspection_done: boolean
   lien_waiver: boolean
   submitted_at: string
+  reviewed_at: string | null
+  funded_at: string | null
   status: string
+  escrow_txn_hash: string | null
+  escrow_finish_hash: string | null
+  nft_token_id: string | null
+  nft_mint_hash: string | null
   projects: { name: string; loan_number: string; loan_amount: number; amount_drawn: number }
 }
 
+const XRPL_EXPLORER = 'https://testnet.xrpl.org'
+
 export default function LenderApprovalsPage() {
-  const [draws, setDraws] = useState<Draw[]>([])
+  const [tab, setTab] = useState<TabKey>('submitted')
+  const [draws, setDraws] = useState<Record<TabKey, Draw[]>>({ submitted: [], approved: [], declined: [] })
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
-  useEffect(() => { fetchDraws() }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  async function fetchDraws() {
+  async function fetchAll() {
     setLoading(true)
-    const res = await fetch('/api/draws?status=submitted')
-    const json = await res.json()
-    setDraws(json.data || [])
+    const [sub, app, dec] = await Promise.all([
+      fetch('/api/draws?status=submitted').then(r => r.json()),
+      fetch('/api/draws?status=approved').then(r => r.json()),
+      fetch('/api/draws?status=declined').then(r => r.json()),
+    ])
+    setDraws({
+      submitted: sub.data || [],
+      approved: app.data || [],
+      declined: dec.data || [],
+    })
     setLoading(false)
   }
 
@@ -44,14 +62,23 @@ export default function LenderApprovalsPage() {
     })
     const json = await res.json()
     if (res.ok) {
-      setToast({ msg: status === 'approved' ? 'Escrow created on XRPL ⬡' : `Draw ${status}`, ok: true })
+      setToast({ msg: status === 'approved' ? '⬡ Draw approved — XRPL record created' : `Draw ${status}`, ok: true })
       setTimeout(() => setToast(null), 4000)
-      fetchDraws()
+      fetchAll()
     } else {
       setErrorMsg(json.error || `Request failed (${res.status})`)
     }
     setActionLoading(null)
   }
+
+  const tabs: { key: TabKey; label: string; emptyIcon: string; emptyMsg: string }[] = [
+    { key: 'submitted', label: 'Pending Review', emptyIcon: '✅', emptyMsg: 'No pending draw requests.' },
+    { key: 'approved', label: 'Approved', emptyIcon: '⬡', emptyMsg: 'Approved draws will appear here with their XRPL records.' },
+    { key: 'declined', label: 'Declined', emptyIcon: '—', emptyMsg: 'No declined draws.' },
+  ]
+
+  const current = draws[tab]
+  const activeTab = tabs.find(t => t.key === tab)!
 
   return (
     <div>
@@ -61,42 +88,90 @@ export default function LenderApprovalsPage() {
           {toast.ok ? '✓' : '✗'} {toast.msg}
         </div>
       )}
+
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">Draw Requests</h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--bc-muted)' }}>
+          Review pending draws and track your full approval history
+        </p>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--bc-border)', width: 'fit-content' }}>
+        {tabs.map(t => {
+          const count = draws[t.key].length
+          const isActive = tab === t.key
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2"
+              style={{
+                background: isActive ? 'rgba(243,156,18,0.12)' : 'transparent',
+                color: isActive ? 'var(--bc-gold)' : 'var(--bc-muted)',
+                border: isActive ? '1px solid rgba(243,156,18,0.25)' : '1px solid transparent',
+              }}>
+              {t.label}
+              {count > 0 && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
+                  style={{
+                    background: t.key === 'submitted' ? 'rgba(243,156,18,0.25)' : 'rgba(255,255,255,0.08)',
+                    color: t.key === 'submitted' ? 'var(--bc-gold)' : 'var(--bc-muted)',
+                  }}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
       {errorMsg && (
         <div className="mb-4 p-4 rounded-xl border text-sm" style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#e74c3c' }}>
           <strong>Error:</strong> {errorMsg}
         </div>
       )}
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Pending Approvals</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--bc-muted)' }}>Draw requests awaiting your review and funding decision</p>
-      </div>
-
       {loading ? (
         <div className="p-8 text-center" style={{ color: 'var(--bc-muted)' }}>Loading…</div>
-      ) : draws.length === 0 ? (
+      ) : current.length === 0 ? (
         <div className="rounded-xl border p-12 text-center" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
-          <div className="text-4xl mb-3">✅</div>
-          <p className="font-semibold mb-1">All caught up!</p>
-          <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>No pending draw requests.</p>
+          <div className="text-4xl mb-3">{activeTab.emptyIcon}</div>
+          <p className="font-semibold mb-1">
+            {tab === 'submitted' ? 'All caught up!' : tab === 'approved' ? 'No approved draws yet' : 'No declined draws'}
+          </p>
+          <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>{activeTab.emptyMsg}</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {draws.map(draw => {
-            const ltv = draw.projects ? Math.round((draw.projects.amount_drawn + draw.amount) / draw.projects.loan_amount * 100) : 0
+          {current.map(draw => {
+            const ltv = draw.projects
+              ? Math.round((draw.projects.amount_drawn + draw.amount) / draw.projects.loan_amount * 100)
+              : 0
+            const hasXrplRecords = draw.escrow_txn_hash || draw.nft_token_id
+
             return (
               <div key={draw.id} className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
+
+                {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
                   <div>
-                    <div className="font-bold text-base">{draw.request_number} — <span style={{ color: 'var(--bc-gold)' }}>{formatCurrency(draw.amount)}</span></div>
+                    <div className="font-bold text-base">
+                      {draw.request_number} — <span style={{ color: 'var(--bc-gold)' }}>{formatCurrency(draw.amount)}</span>
+                    </div>
                     <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>
-                      {draw.projects?.name} · {draw.projects?.loan_number} · Submitted {draw.submitted_at ? timeAgo(draw.submitted_at) : 'recently'}
+                      {draw.projects?.name} · {draw.projects?.loan_number} ·{' '}
+                      {tab === 'submitted'
+                        ? `Submitted ${draw.submitted_at ? timeAgo(draw.submitted_at) : 'recently'}`
+                        : `Reviewed ${draw.reviewed_at ? timeAgo(draw.reviewed_at) : 'recently'}`
+                      }
                     </div>
                   </div>
-                  <span className="badge badge-yellow">Awaiting Review</span>
+                  <span className={`badge ${tab === 'submitted' ? 'badge-yellow' : tab === 'approved' ? 'badge-green' : 'badge-red'}`}>
+                    {tab === 'submitted' ? 'Awaiting Review' : tab === 'approved' ? 'Approved' : 'Declined'}
+                  </span>
                 </div>
 
                 <div className="px-5 py-4">
+                  {/* Draw details grid */}
                   <div className="grid grid-cols-2 gap-6 mb-4">
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
@@ -104,12 +179,12 @@ export default function LenderApprovalsPage() {
                         <span className="font-semibold">{draw.phase || draw.purpose}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span style={{ color: 'var(--bc-muted)' }}>Amount Requested</span>
+                        <span style={{ color: 'var(--bc-muted)' }}>Amount</span>
                         <span className="font-bold" style={{ color: 'var(--bc-gold)' }}>{formatCurrency(draw.amount)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span style={{ color: 'var(--bc-muted)' }}>Inspection Done</span>
-                        <span>{draw.inspection_done ? '✅ Yes' : '⏳ Pending'}</span>
+                        <span style={{ color: 'var(--bc-muted)' }}>Inspection</span>
+                        <span>{draw.inspection_done ? '✅ Done' : '⏳ Pending'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>Lien Waiver</span>
@@ -127,32 +202,105 @@ export default function LenderApprovalsPage() {
                           {draw.projects ? formatCurrency(draw.projects.loan_amount - draw.projects.amount_drawn - draw.amount) : '—'}
                         </span>
                       </div>
+                      {tab === 'approved' && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--bc-muted)' }}>Status</span>
+                          <span className="text-yellow-400 font-semibold">
+                            {draw.funded_at ? '✅ Funded' : '⏳ Pending release'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
+                  {/* XRPL Records — shown on Approved tab */}
+                  {tab === 'approved' && hasXrplRecords && (
+                    <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(243,156,18,0.05)', border: '1px solid rgba(243,156,18,0.15)' }}>
+                      <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--bc-gold)' }}>
+                        ⬡ On-chain records
+                      </p>
+                      <div className="space-y-1.5">
+                        {draw.escrow_txn_hash && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span style={{ color: 'var(--bc-muted)' }}>Escrow transaction</span>
+                            <a href={`${XRPL_EXPLORER}/transactions/${draw.escrow_txn_hash}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="font-mono hover:underline" style={{ color: 'var(--bc-gold)' }}>
+                              {draw.escrow_txn_hash.slice(0, 10)}…{draw.escrow_txn_hash.slice(-6)} ↗
+                            </a>
+                          </div>
+                        )}
+                        {draw.nft_token_id && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span style={{ color: 'var(--bc-muted)' }}>Approval NFT</span>
+                            <a href={`${XRPL_EXPLORER}/nft/${draw.nft_token_id}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="font-mono hover:underline" style={{ color: 'var(--bc-gold)' }}>
+                              {draw.nft_token_id.slice(0, 10)}…{draw.nft_token_id.slice(-6)} ↗
+                            </a>
+                          </div>
+                        )}
+                        {draw.escrow_finish_hash && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span style={{ color: 'var(--bc-muted)' }}>Release transaction</span>
+                            <a href={`${XRPL_EXPLORER}/transactions/${draw.escrow_finish_hash}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="font-mono hover:underline" style={{ color: '#4ade80' }}>
+                              {draw.escrow_finish_hash.slice(0, 10)}…{draw.escrow_finish_hash.slice(-6)} ↗
+                            </a>
+                          </div>
+                        )}
+                        {!draw.escrow_txn_hash && !draw.nft_token_id && (
+                          <p className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                            XRPL integration pending configuration
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Description */}
                   {draw.description && (
                     <div className="text-sm p-3 rounded-lg mb-4" style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--bc-muted)' }}>
                       &ldquo;{draw.description}&rdquo;
                     </div>
                   )}
 
-                  <div className="flex gap-3 items-center">
-                    <button onClick={() => act(draw.id, 'approved')}
-                      disabled={actionLoading === draw.id + 'approved'}
-                      className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
-                      style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
-                      {actionLoading === draw.id + 'approved' ? 'Creating escrow…' : '⬡ Approve & Lock Escrow'}
-                    </button>
-                    <button onClick={() => act(draw.id, 'declined')}
-                      disabled={actionLoading === draw.id + 'declined'}
-                      className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
-                      style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>
-                      ✗ Decline
-                    </button>
-                    <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
-                      Admin releases funds after escrow review
-                    </span>
-                  </div>
+                  {/* Pending action buttons */}
+                  {tab === 'submitted' && (
+                    <div className="flex gap-3 items-center">
+                      <button onClick={() => act(draw.id, 'approved')}
+                        disabled={actionLoading === draw.id + 'approved'}
+                        className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
+                        style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
+                        {actionLoading === draw.id + 'approved' ? '⬡ Creating XRPL record…' : '⬡ Approve & Create XRPL Record'}
+                      </button>
+                      <button onClick={() => act(draw.id, 'declined')}
+                        disabled={!!actionLoading}
+                        className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
+                        style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>
+                        ✗ Decline
+                      </button>
+                      <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                        Admin releases funds after escrow review
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Approved status footer */}
+                  {tab === 'approved' && !draw.funded_at && (
+                    <div className="flex items-center gap-2 text-xs pt-1" style={{ color: 'var(--bc-muted)' }}>
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--bc-gold)' }}></span>
+                      Approved — admin release pending in Draws dashboard
+                    </div>
+                  )}
+
+                  {tab === 'approved' && draw.funded_at && (
+                    <div className="flex items-center gap-2 text-xs pt-1" style={{ color: '#4ade80' }}>
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#4ade80' }}></span>
+                      Funded {timeAgo(draw.funded_at)}
+                    </div>
+                  )}
                 </div>
               </div>
             )
