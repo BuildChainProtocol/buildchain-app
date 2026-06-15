@@ -13,6 +13,8 @@ const nextConfig = {
       '@noble/curves',
       '@scure/base',
     ],
+    // Allow ESM packages to be loaded as ESM (not CJS require) by the Node runtime
+    esmExternals: 'loose',
   },
   typescript: {
     // Type errors are annotation issues, not runtime bugs — safe to ignore for MVP build
