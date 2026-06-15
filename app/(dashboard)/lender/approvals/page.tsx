@@ -21,7 +21,8 @@ export default function LenderApprovalsPage() {
   const [draws, setDraws] = useState<Draw[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => { fetchDraws() }, [])
 
@@ -35,15 +36,19 @@ export default function LenderApprovalsPage() {
 
   async function act(id: string, status: string) {
     setActionLoading(id + status)
+    setErrorMsg('')
     const res = await fetch(`/api/draws/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     })
+    const json = await res.json()
     if (res.ok) {
-      setToast(`Draw request ${status} successfully`)
-      setTimeout(() => setToast(''), 3000)
+      setToast({ msg: status === 'approved' ? 'Escrow created on XRPL ⬡' : `Draw ${status}`, ok: true })
+      setTimeout(() => setToast(null), 4000)
       fetchDraws()
+    } else {
+      setErrorMsg(json.error || `Request failed (${res.status})`)
     }
     setActionLoading(null)
   }
@@ -52,7 +57,14 @@ export default function LenderApprovalsPage() {
     <div>
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
-          style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>✓ {toast}</div>
+          style={{ background: toast.ok ? 'var(--bc-gold)' : '#e74c3c', color: '#fff' }}>
+          {toast.ok ? '✓' : '✗'} {toast.msg}
+        </div>
+      )}
+      {errorMsg && (
+        <div className="mb-4 p-4 rounded-xl border text-sm" style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#e74c3c' }}>
+          <strong>Error:</strong> {errorMsg}
+        </div>
       )}
 
       <div className="mb-6">
