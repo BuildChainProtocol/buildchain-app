@@ -123,8 +123,8 @@ export default async function LenderLoansPage() {
                       <td className="px-4 py-3">
                         <div>{borrower?.company_name || '—'}</div>
                         {borrower?.rating && (
-                          <div className="text-xs mt-0.5 font-bold" style={{ color: borrower.rating === 'A' ? '#2ecc71' : borrower.rating === 'B' ? 'var(--bc-blue)' : borrower.rating === 'C' ? 'var(--bc-gold)' : '#e74c3c' }}>
-                            Rating {borrower.rating}
+                          <div className="text-xs mt-0.5 font-bold" style={{ color: borrower.rating === 'preferred' ? '#2ecc71' : borrower.rating === 'standard' ? 'var(--bc-blue)' : borrower.rating === 'new' ? 'var(--bc-gold)' : '#e74c3c' }}>
+                            {{ preferred: 'A', standard: 'B', new: 'C', probation: 'D' }[borrower.rating] || borrower.rating}
                           </div>
                         )}
                       </td>

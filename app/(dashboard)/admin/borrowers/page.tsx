@@ -11,10 +11,21 @@ interface Borrower {
 
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']
 
-const ratingColor: Record<string, string> = { A: '#2ecc71', B: 'var(--bc-blue)', C: 'var(--bc-gold)', D: '#e74c3c' }
+const RATINGS = [
+  { value: 'preferred', label: 'A', color: '#2ecc71' },
+  { value: 'standard',  label: 'B', color: 'var(--bc-blue)' },
+  { value: 'new',       label: 'C', color: 'var(--bc-gold)' },
+  { value: 'probation', label: 'D', color: '#e74c3c' },
+]
+const ratingColor: Record<string, string> = {
+  preferred: '#2ecc71', standard: 'var(--bc-blue)', new: 'var(--bc-gold)', probation: '#e74c3c'
+}
+const ratingLabel: Record<string, string> = {
+  preferred: 'A', standard: 'B', new: 'C', probation: 'D'
+}
 
 function AddBorrowerModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ company_name: '', contact_name: '', email: '', phone: '', license_number: '', license_state: 'TX', rating: 'B' })
+  const [form, setForm] = useState({ company_name: '', contact_name: '', email: '', phone: '', license_number: '', license_state: 'TX', rating: 'standard' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -67,14 +78,14 @@ function AddBorrowerModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>Credit Rating</label>
               <div className="flex gap-2">
-                {['A', 'B', 'C', 'D'].map(r => (
-                  <button type="button" key={r} onClick={() => set('rating', r)}
+                {RATINGS.map(r => (
+                  <button type="button" key={r.value} onClick={() => set('rating', r.value)}
                     className="flex-1 py-1.5 rounded-lg text-sm font-black transition-all border"
                     style={{
-                      background: form.rating === r ? ratingColor[r] : 'transparent',
-                      color: form.rating === r ? '#fff' : ratingColor[r],
-                      borderColor: ratingColor[r],
-                    }}>{r}</button>
+                      background: form.rating === r.value ? r.color : 'transparent',
+                      color: form.rating === r.value ? '#fff' : r.color,
+                      borderColor: r.color,
+                    }}>{r.label}</button>
                 ))}
               </div>
             </div>
@@ -148,7 +159,7 @@ export default function AdminBorrowersPage() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Borrowers', value: borrowers.length, sub: `${activeBorrowers.length} active` },
-          { label: 'A-Rated', value: borrowers.filter(b => b.rating === 'A').length, sub: 'top credit quality', color: '#2ecc71' },
+          { label: 'Preferred', value: borrowers.filter(b => b.rating === 'preferred').length, sub: 'top credit quality', color: '#2ecc71' },
           { label: 'Avg Rating', value: borrowers.length ? (['A','B','C','D'].includes(borrowers[0]?.rating) ? borrowers[0].rating : '—') : '—', sub: 'most recent borrower' },
         ].map(s => (
           <div key={s.label} className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
@@ -203,7 +214,9 @@ export default function AdminBorrowersPage() {
                         : <span style={{ color: 'var(--bc-muted)' }}>—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-lg font-black" style={{ color: ratingColor[b.rating] || 'var(--bc-muted)' }}>{b.rating || '—'}</span>
+                      <span className="text-lg font-black" style={{ color: ratingColor[b.rating] || 'var(--bc-muted)' }}>
+                        {ratingLabel[b.rating] || b.rating || '—'}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`badge ${b.active ? 'badge-green' : 'badge-gray'}`}>{b.active ? 'Active' : 'Inactive'}</span>
