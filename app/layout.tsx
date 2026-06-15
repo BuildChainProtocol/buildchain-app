@@ -4,7 +4,12 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'BuildChain Protocol',
   description: 'Construction loan management platform — powered by blockchain verification',
-  icons: { icon: '/favicon.ico' },
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

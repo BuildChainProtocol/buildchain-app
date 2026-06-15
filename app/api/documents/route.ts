@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { sendEmail } from '@/lib/email/send'
+import { documentUploadedEmail } from '@/lib/email/templates'
 
 export async function GET(request: NextRequest) {
   const supabase = createClient()
@@ -79,6 +81,33 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    // ── Email admin: new document needs review ──────────────────────────────
+    try {
+      const { data: project } = await supabase
+        .from('projects').select('name').eq('id', projectId).single()
+      const { data: uploader } = await supabase
+        .from('profiles').select('full_name, company_name').eq('id', user.id).single()
+
+      // Get admin emails from profiles table
+      const { data: admins } = await supabase
+        .from('profiles').select('email').eq('role', 'admin')
+
+      const adminEmails = (admins ?? []).map((a: any) => a.email).filter(Boolean)
+
+      if (adminEmails.length > 0 && project) {
+        const { subject, html } = documentUploadedEmail({
+          projectName: project.name,
+          uploaderName: uploader?.full_name ?? uploader?.company_name ?? 'A user',
+          docTitle: data?.name ?? file.name,
+          projectId,
+        })
+        await sendEmail({ to: adminEmails, subject, html })
+      }
+    } catch (emailErr) {
+      console.warn('[Email] document_uploaded notification skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
+    }
+
     return NextResponse.json({ data }, { status: 201 })
   }
 }

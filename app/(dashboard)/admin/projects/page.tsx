@@ -7,6 +7,7 @@ export default async function AdminProjectsPage() {
   const { data: projects } = await supabase
     .from('projects')
     .select('*, borrowers(company_name), lenders(company_name)')
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
 
   const stages = ['application', 'review', 'approved', 'active', 'complete', 'cancelled']

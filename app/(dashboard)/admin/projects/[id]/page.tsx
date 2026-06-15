@@ -29,6 +29,7 @@ export default function ProjectDetailPage() {
   const [tab, setTab] = useState<'overview' | 'draws' | 'documents' | 'activity'>('overview')
   const [stageUpdating, setStageUpdating] = useState(false)
   const [drawActionId, setDrawActionId] = useState<string | null>(null)
+  const [docActionId, setDocActionId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
 
   const load = useCallback(async () => {
@@ -63,6 +64,41 @@ export default function ProjectDetailPage() {
     await load()
     setDrawActionId(null)
     setToast(`Draw ${status}`)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  async function updateDoc(docId: string, status: 'approved' | 'rejected') {
+    setDocActionId(docId + status)
+    await fetch(`/api/documents/${docId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    await load()
+    setDocActionId(null)
+    setToast(`Document ${status}`)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  async function archiveProject() {
+    const confirmed = window.confirm('Archive this project? It will be hidden from the active list but all data is preserved.')
+    if (!confirmed) return
+    await fetch(`/api/projects/${params.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived_at: new Date().toISOString() }),
+    })
+    router.push('/admin/projects')
+  }
+
+  async function unarchiveProject() {
+    await fetch(`/api/projects/${params.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived_at: null }),
+    })
+    await load()
+    setToast('Project restored to active')
     setTimeout(() => setToast(''), 3000)
   }
 
@@ -128,6 +164,19 @@ export default function ProjectDetailPage() {
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--bc-border)', color: '#e8edf2' }}>
                 {STAGES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1).replace('_', ' ')}</option>)}
               </select>
+              {project.archived_at ? (
+                <button onClick={unarchiveProject}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-white/5"
+                  style={{ borderColor: 'var(--bc-border)', color: '#2ecc71' }}>
+                  ↩ Restore
+                </button>
+              ) : (
+                <button onClick={archiveProject}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-white/5"
+                  style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
+                  Archive
+                </button>
+              )}
             </div>
           </div>
 
@@ -411,13 +460,43 @@ export default function ProjectDetailPage() {
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--bc-muted)' }}>{doc.uploaded_at ? timeAgo(doc.uploaded_at) : '—'}</td>
                     <td className="px-4 py-3"><span className={`badge ${docStatusBadge[doc.status] || 'badge-gray'}`}>{doc.status}</span></td>
                     <td className="px-4 py-3">
-                      {doc.storage_path && (
-                        <a href={`/api/documents/${doc.id}/view`} target="_blank" rel="noopener noreferrer"
-                          className="text-xs font-medium hover:underline"
-                          style={{ color: 'var(--bc-blue)' }}>
-                          View ↗
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {doc.storage_path && (
+                          <a href={`/api/documents/${doc.id}/view`} target="_blank" rel="noopener noreferrer"
+                            className="text-xs font-medium hover:underline"
+                            style={{ color: 'var(--bc-blue)' }}>
+                            View ↗
+                          </a>
+                        )}
+                        {/* Approve / Reject — only show when status is uploaded or pending_review */}
+                        {(doc.status === 'uploaded' || doc.status === 'pending_review') && (
+                          <>
+                            <button
+                              onClick={() => updateDoc(doc.id, 'approved')}
+                              disabled={docActionId === doc.id + 'approved'}
+                              className="text-xs font-bold px-2 py-0.5 rounded transition-all"
+                              style={{ background: 'rgba(39,174,96,0.15)', color: '#27ae60' }}>
+                              {docActionId === doc.id + 'approved' ? '…' : '✓ Approve'}
+                            </button>
+                            <button
+                              onClick={() => updateDoc(doc.id, 'rejected')}
+                              disabled={docActionId === doc.id + 'rejected'}
+                              className="text-xs font-bold px-2 py-0.5 rounded transition-all"
+                              style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c' }}>
+                              {docActionId === doc.id + 'rejected' ? '…' : '✗ Reject'}
+                            </button>
+                          </>
+                        )}
+                        {doc.status === 'rejected' && (
+                          <button
+                            onClick={() => updateDoc(doc.id, 'approved')}
+                            disabled={docActionId === doc.id + 'approved'}
+                            className="text-xs font-bold px-2 py-0.5 rounded transition-all"
+                            style={{ background: 'rgba(39,174,96,0.1)', color: '#27ae60' }}>
+                            {docActionId === doc.id + 'approved' ? '…' : '↩ Re-approve'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

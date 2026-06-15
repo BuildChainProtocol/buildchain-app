@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/utils'
 interface Borrower {
   id: string; company_name: string; contact_name: string | null; email: string | null
   phone: string | null; license_number: string | null; license_state: string | null
-  rating: string; active: boolean
+  rating: string; active: boolean; profile_id: string | null
 }
 
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']
@@ -127,6 +127,26 @@ export default function AdminBorrowersPage() {
   const [borrowers, setBorrowers] = useState<Borrower[]>([])
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [inviting, setInviting] = useState<string | null>(null)
+  const [toast, setToast] = useState('')
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 4000) }
+
+  async function sendInvite(b: Borrower) {
+    if (!b.email) { showToast('No email on this borrower record — add one first'); return }
+    setInviting(b.id)
+    const res = await fetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: b.email, role: 'borrower', name: b.contact_name, company: b.company_name }),
+    })
+    const json = await res.json()
+    setInviting(null)
+    if (json.warning) showToast('⚠️ ' + json.warning)
+    else if (json.error) showToast('Error: ' + json.error)
+    else showToast(`✓ Invite sent to ${b.email}`)
+    await load()
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -142,6 +162,12 @@ export default function AdminBorrowersPage() {
 
   return (
     <div>
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
+          style={{ background: toast.startsWith('Error') ? '#e74c3c' : 'var(--bc-gold)', color: toast.startsWith('Error') ? '#fff' : 'var(--bc-dark)' }}>
+          {toast}
+        </div>
+      )}
       {showModal && <AddBorrowerModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}
 
       <div className="flex items-center justify-between mb-6">
@@ -192,7 +218,7 @@ export default function AdminBorrowersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--bc-border)' }}>
-                  {['Borrower', 'Contact', 'License', 'Rating', 'Status'].map(h => (
+                  {['Borrower', 'Contact', 'License', 'Rating', 'Status', 'Portal Access'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--bc-muted)' }}>{h}</th>
                   ))}
                 </tr>
@@ -220,6 +246,19 @@ export default function AdminBorrowersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`badge ${b.active ? 'badge-green' : 'badge-gray'}`}>{b.active ? 'Active' : 'Inactive'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {b.profile_id ? (
+                        <span className="text-xs font-semibold" style={{ color: '#2ecc71' }}>✓ Linked</span>
+                      ) : (
+                        <button
+                          onClick={() => sendInvite(b)}
+                          disabled={inviting === b.id}
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+                          style={{ background: 'rgba(243,156,18,0.15)', color: 'var(--bc-gold)' }}>
+                          {inviting === b.id ? 'Sending…' : '✉ Send Invite'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

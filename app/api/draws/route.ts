@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { sendEmail } from '@/lib/email/send'
+import { drawSubmittedEmail } from '@/lib/email/templates'
 
 export async function GET(request: NextRequest) {
   const supabase = createClient()
@@ -53,6 +55,45 @@ export async function POST(request: NextRequest) {
     entity_id: data.id,
     details: { amount: body.amount, purpose: body.purpose },
   })
+
+  // ── Email lender: new draw needs review ──────────────────────────────────
+  try {
+    // Two-step: get project + lender row, then get lender's auth email from profiles
+    const { data: project } = await supabase
+      .from('projects')
+      .select('name, lenders(id, email, company_name, profile_id)')
+      .eq('id', body.project_id)
+      .single()
+
+    const { data: borrowerProfile } = await supabase
+      .from('profiles').select('full_name, company_name').eq('id', user.id).single()
+
+    const lenderRow = (project?.lenders as any)
+    let lenderEmail: string | null = lenderRow?.email ?? null
+    let lenderName: string = lenderRow?.company_name ?? 'Lender'
+
+    // Prefer auth email from profiles (more reliable than lenders.email)
+    if (lenderRow?.profile_id) {
+      const { data: lp } = await supabase
+        .from('profiles').select('email, full_name').eq('id', lenderRow.profile_id).single()
+      if (lp?.email) { lenderEmail = lp.email; lenderName = lp.full_name ?? lenderName }
+    }
+
+    if (lenderEmail && project) {
+      const { subject, html } = drawSubmittedEmail({
+        lenderName,
+        borrowerName: borrowerProfile?.full_name ?? borrowerProfile?.company_name ?? 'Borrower',
+        projectName: project.name,
+        drawAmount: body.amount,
+        drawPurpose: body.purpose || 'Construction draw',
+        projectId: body.project_id,
+        drawId: data.id,
+      })
+      await sendEmail({ to: lenderEmail, subject, html })
+    }
+  } catch (emailErr) {
+    console.warn('[Email] draw_submitted notification skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
+  }
 
   return NextResponse.json({ data }, { status: 201 })
 }

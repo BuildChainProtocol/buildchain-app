@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { sendEmail } from '@/lib/email/send'
+import { drawApprovedEmail, drawDeclinedEmail, drawFundedEmail } from '@/lib/email/templates'
 
 // Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
 export const runtime = 'nodejs'
@@ -116,6 +118,72 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         : {}),
     },
   })
+
+  // ── Transactional emails ─────────────────────────────────────────────────
+  try {
+    // Fetch borrower email + name, lender name, and project details
+    const { data: project } = await supabase
+      .from('projects')
+      .select(`
+        name, loan_amount, amount_drawn,
+        borrowers(email, company_name, profile_id),
+        lenders(company_name, profile_id)
+      `)
+      .eq('id', updated.project_id)
+      .single()
+
+    const borrowerRow = project?.borrowers as any
+    const lenderRow   = project?.lenders as any
+
+    // Get borrower auth email from profiles (more reliable than borrowers.email)
+    let borrowerEmail: string | null = null
+    let borrowerName  = 'Borrower'
+    if (borrowerRow?.profile_id) {
+      const { data: bp } = await supabase
+        .from('profiles').select('email, full_name, company_name').eq('id', borrowerRow.profile_id).single()
+      borrowerEmail = bp?.email ?? borrowerRow.email ?? null
+      borrowerName  = bp?.full_name ?? bp?.company_name ?? borrowerRow.company_name ?? 'Borrower'
+    }
+
+    const lenderName = lenderRow?.company_name ?? 'your lender'
+
+    if (borrowerEmail && project) {
+      if (body.status === 'approved') {
+        const { subject, html } = drawApprovedEmail({
+          borrowerName,
+          lenderName,
+          projectName: project.name,
+          drawAmount: draw.amount,
+          escrowTxnHash: updated.escrow_txn_hash ?? null,
+        })
+        await sendEmail({ to: borrowerEmail, subject, html })
+
+      } else if (body.status === 'declined') {
+        const { subject, html } = drawDeclinedEmail({
+          borrowerName,
+          lenderName,
+          projectName: project.name,
+          drawAmount: draw.amount,
+          declineNotes: body.notes ?? null,
+        })
+        await sendEmail({ to: borrowerEmail, subject, html })
+
+      } else if (body.status === 'funded') {
+        // project.amount_drawn already reflects the increment (RPC ran before this email block)
+        const { subject, html } = drawFundedEmail({
+          borrowerName,
+          projectName: project.name,
+          drawAmount: draw.amount,
+          totalDrawn: project.amount_drawn ?? draw.amount,
+          loanAmount: project.loan_amount,
+          escrowFinishHash: updated.escrow_finish_hash ?? null,
+        })
+        await sendEmail({ to: borrowerEmail, subject, html })
+      }
+    }
+  } catch (emailErr) {
+    console.warn('[Email] draw status email skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
+  }
 
   return NextResponse.json({ data: updated })
 }
