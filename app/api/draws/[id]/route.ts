@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { createDrawEscrow, finishDrawEscrow, isXrplConfigured } from '@/lib/xrpl/escrow'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
@@ -37,15 +36,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (body.status === 'approved') {
     updates.approved_by = user.id
 
+    // Lazy-load xrpl via dynamic import to avoid ERR_REQUIRE_ESM at module load time
+    const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
+
     if (isXrplConfigured()) {
       try {
-        // Use per-borrower XRP address if set, otherwise fall back to env default
         const borrowerXrpAddress = (draw.projects as any)?.borrowers?.xrp_address ?? undefined
-
         const escrow = await createDrawEscrow({ destinationAddress: borrowerXrpAddress })
 
-        updates.escrow_sequence    = escrow.escrowSequence
-        updates.escrow_txn_hash    = escrow.txnHash
+        updates.escrow_sequence     = escrow.escrowSequence
+        updates.escrow_txn_hash     = escrow.txnHash
         updates.escrow_finish_after = escrow.finishAfter.toISOString()
 
         console.log(`[XRPL] EscrowCreate OK — seq ${escrow.escrowSequence} hash ${escrow.txnHash}`)
@@ -58,13 +58,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         )
       }
     } else {
-      console.warn('[XRPL] Not configured — skipping escrow creation (set XRPL_WALLET_SEED + XRPL_DEFAULT_DESTINATION)')
+      console.warn('[XRPL] Not configured — skipping escrow creation')
     }
   }
 
   // ─── FUND: Finish XRPL escrow + update project drawn amount ────────────────
   if (body.status === 'funded') {
     updates.funded_at = new Date().toISOString()
+
+    // Lazy-load xrpl via dynamic import
+    const { isXrplConfigured, finishDrawEscrow } = await import('@/lib/xrpl/escrow')
 
     if (isXrplConfigured() && draw.escrow_sequence != null) {
       try {
