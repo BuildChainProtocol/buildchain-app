@@ -32,12 +32,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     reviewed_at: new Date().toISOString(),
   }
 
-  // ─── APPROVE: Create XRPL escrow ───────────────────────────────────────────
+  // ─── APPROVE: Create XRPL escrow (optional — draw approves even if XRPL fails) ─
   if (body.status === 'approved') {
     updates.approved_by = user.id
 
     try {
-      // Lazy-load xrpl via dynamic import — avoids loading at module init time
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
 
       if (isXrplConfigured()) {
@@ -50,15 +49,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
         console.log(`[XRPL] EscrowCreate OK — seq ${escrow.escrowSequence} hash ${escrow.txnHash}`)
       } else {
-        console.warn('[XRPL] Not configured — skipping escrow creation')
+        console.log('[XRPL] Not configured — approving draw without escrow')
       }
     } catch (xrplError) {
+      // XRPL is optional: ESM compatibility issues or connection failures
+      // must never block a legitimate draw approval. Log and continue.
       const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
-      console.error('[XRPL] EscrowCreate failed:', message)
-      return NextResponse.json(
-        { error: `XRPL escrow failed: ${message}` },
-        { status: 502 }
-      )
+      console.warn('[XRPL] Escrow skipped (non-fatal):', message.slice(0, 200))
     }
   }
 
@@ -67,7 +64,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     updates.funded_at = new Date().toISOString()
 
     try {
-      // Lazy-load xrpl via dynamic import
       const { isXrplConfigured, finishDrawEscrow } = await import('@/lib/xrpl/escrow')
 
       if (isXrplConfigured() && draw.escrow_sequence != null) {
@@ -76,12 +72,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         console.log(`[XRPL] EscrowFinish OK — hash ${finish.txnHash}`)
       }
     } catch (xrplError) {
+      // Non-fatal: log and continue with status update
       const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
-      console.error('[XRPL] EscrowFinish failed:', message)
-      return NextResponse.json(
-        { error: `XRPL escrow release failed: ${message}` },
-        { status: 502 }
-      )
+      console.warn('[XRPL] EscrowFinish skipped (non-fatal):', message.slice(0, 200))
     }
 
     // Always increment project amount_drawn, regardless of XRPL
