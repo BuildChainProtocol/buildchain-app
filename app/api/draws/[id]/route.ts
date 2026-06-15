@@ -36,11 +36,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (body.status === 'approved') {
     updates.approved_by = user.id
 
-    // Lazy-load xrpl via dynamic import to avoid ERR_REQUIRE_ESM at module load time
-    const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
+    try {
+      // Lazy-load xrpl via dynamic import — avoids loading at module init time
+      const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
 
-    if (isXrplConfigured()) {
-      try {
+      if (isXrplConfigured()) {
         const borrowerXrpAddress = (draw.projects as any)?.borrowers?.xrp_address ?? undefined
         const escrow = await createDrawEscrow({ destinationAddress: borrowerXrpAddress })
 
@@ -49,16 +49,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         updates.escrow_finish_after = escrow.finishAfter.toISOString()
 
         console.log(`[XRPL] EscrowCreate OK — seq ${escrow.escrowSequence} hash ${escrow.txnHash}`)
-      } catch (xrplError) {
-        const message = xrplError instanceof Error ? xrplError.message : 'XRPL error'
-        console.error('[XRPL] EscrowCreate failed:', message)
-        return NextResponse.json(
-          { error: `XRPL escrow creation failed: ${message}` },
-          { status: 502 }
-        )
+      } else {
+        console.warn('[XRPL] Not configured — skipping escrow creation')
       }
-    } else {
-      console.warn('[XRPL] Not configured — skipping escrow creation')
+    } catch (xrplError) {
+      const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
+      console.error('[XRPL] EscrowCreate failed:', message)
+      return NextResponse.json(
+        { error: `XRPL escrow failed: ${message}` },
+        { status: 502 }
+      )
     }
   }
 
@@ -66,22 +66,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (body.status === 'funded') {
     updates.funded_at = new Date().toISOString()
 
-    // Lazy-load xrpl via dynamic import
-    const { isXrplConfigured, finishDrawEscrow } = await import('@/lib/xrpl/escrow')
+    try {
+      // Lazy-load xrpl via dynamic import
+      const { isXrplConfigured, finishDrawEscrow } = await import('@/lib/xrpl/escrow')
 
-    if (isXrplConfigured() && draw.escrow_sequence != null) {
-      try {
+      if (isXrplConfigured() && draw.escrow_sequence != null) {
         const finish = await finishDrawEscrow({ escrowSequence: draw.escrow_sequence })
         updates.escrow_finish_hash = finish.txnHash
         console.log(`[XRPL] EscrowFinish OK — hash ${finish.txnHash}`)
-      } catch (xrplError) {
-        const message = xrplError instanceof Error ? xrplError.message : 'XRPL error'
-        console.error('[XRPL] EscrowFinish failed:', message)
-        return NextResponse.json(
-          { error: `XRPL escrow release failed: ${message}. The escrow FinishAfter time may not have passed yet.` },
-          { status: 502 }
-        )
       }
+    } catch (xrplError) {
+      const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
+      console.error('[XRPL] EscrowFinish failed:', message)
+      return NextResponse.json(
+        { error: `XRPL escrow release failed: ${message}` },
+        { status: 502 }
+      )
     }
 
     // Always increment project amount_drawn, regardless of XRPL
