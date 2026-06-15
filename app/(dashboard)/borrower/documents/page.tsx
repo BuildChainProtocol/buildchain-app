@@ -65,10 +65,11 @@ export default async function BorrowerDocumentsPage() {
                       <DocumentUploadButton projectId={project.id} documentId={doc.id} />
                     )}
                     {doc.storage_path && (
-                      <button className="text-xs px-3 py-1 rounded-lg border transition-all hover:border-[var(--bc-gold)]"
+                      <a href={`/api/documents/${doc.id}/view`} target="_blank" rel="noopener noreferrer"
+                        className="text-xs px-3 py-1 rounded-lg border transition-all hover:border-[var(--bc-gold)]"
                         style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
                         📥 View
-                      </button>
+                      </a>
                     )}
                   </div>
                 </div>
