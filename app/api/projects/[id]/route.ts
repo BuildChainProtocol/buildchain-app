@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Node.js runtime required for XRPL dynamic imports
+export const runtime = 'nodejs'
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -41,6 +44,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  // Fetch current project state so we can detect stage transitions
+  const { data: current } = await supabase
+    .from('projects')
+    .select('stage, loan_nft_token_id')
+    .eq('id', params.id)
+    .single()
+
   const { data, error } = await supabase
     .from('projects')
     .update({ ...body, updated_at: new Date().toISOString() })
@@ -58,6 +68,35 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     entity_id: params.id,
     details: body,
   })
+
+  // ─── XRPL: Burn loan NFT when loan completes (proof of settlement) ─────────
+  const isCompletingNow = body.stage === 'complete' && current?.stage !== 'complete'
+  if (isCompletingNow && current?.loan_nft_token_id) {
+    try {
+      const { isXrplConfigured, completeLoanNFT } = await import('@/lib/xrpl/nft')
+      if (isXrplConfigured()) {
+        const result = await completeLoanNFT({ nftTokenId: current.loan_nft_token_id })
+
+        await supabase.from('projects').update({
+          loan_nft_burn_hash: result.txnHash,
+        }).eq('id', params.id)
+
+        await supabase.from('activity_log').insert({
+          project_id: params.id,
+          user_id: user.id,
+          action: 'loan_nft_burned',
+          entity_type: 'project',
+          entity_id: params.id,
+          details: { burn_hash: result.txnHash, nft_token_id: current.loan_nft_token_id },
+        })
+
+        console.log(`[XRPL] Loan NFT burned (loan complete) — hash ${result.txnHash}`)
+      }
+    } catch (nftError) {
+      const message = nftError instanceof Error ? nftError.message : String(nftError)
+      console.warn('[XRPL] Loan NFT burn skipped (non-fatal):', message.slice(0, 200))
+    }
+  }
 
   return NextResponse.json({ data })
 }

@@ -19,6 +19,7 @@ const docStatusBadge: Record<string, string> = {
 }
 
 const TESTNET_EXPLORER = 'https://testnet.xrpl.org/transactions'
+const TESTNET_NFT = 'https://testnet.xrpl.org/nft'
 
 export default function ProjectDetailPage() {
   const params = useParams()
@@ -229,6 +230,72 @@ export default function ProjectDetailPage() {
               </div>
             </div>
           ))}
+
+          {/* XRPL Digital Title — full width below the grid */}
+          <div className="col-span-2 rounded-xl border p-5" style={{
+            background: project.loan_nft_token_id
+              ? 'rgba(243,156,18,0.04)'
+              : 'var(--bc-card)',
+            borderColor: project.loan_nft_token_id
+              ? 'rgba(243,156,18,0.2)'
+              : 'var(--bc-border)',
+          }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--bc-gold)' }}>
+                ⬡ XRPL Digital Title
+              </h3>
+              {project.loan_nft_token_id && (
+                <span className={`badge ${project.loan_nft_burn_hash ? 'badge-gray' : 'badge-green'} text-xs`}>
+                  {project.loan_nft_burn_hash ? 'Burned (Loan Complete)' : 'Active'}
+                </span>
+              )}
+            </div>
+
+            {project.loan_nft_token_id ? (
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center gap-4">
+                  <span style={{ color: 'var(--bc-muted)' }}>NFT Token ID</span>
+                  <a href={`${TESTNET_NFT}/${project.loan_nft_token_id}`}
+                    target="_blank" rel="noreferrer"
+                    className="font-mono text-xs hover:underline" style={{ color: 'var(--bc-gold)' }}>
+                    {project.loan_nft_token_id.slice(0, 14)}…{project.loan_nft_token_id.slice(-8)} ↗
+                  </a>
+                </div>
+                {project.loan_nft_mint_hash && (
+                  <div className="flex justify-between items-center gap-4">
+                    <span style={{ color: 'var(--bc-muted)' }}>Mint TX</span>
+                    <a href={`${TESTNET_EXPLORER}/${project.loan_nft_mint_hash}`}
+                      target="_blank" rel="noreferrer"
+                      className="font-mono text-xs hover:underline" style={{ color: 'var(--bc-muted)' }}>
+                      {project.loan_nft_mint_hash.slice(0, 14)}…{project.loan_nft_mint_hash.slice(-8)} ↗
+                    </a>
+                  </div>
+                )}
+                {project.loan_nft_burn_hash && (
+                  <div className="flex justify-between items-center gap-4">
+                    <span style={{ color: 'var(--bc-muted)' }}>Settlement TX</span>
+                    <a href={`${TESTNET_EXPLORER}/${project.loan_nft_burn_hash}`}
+                      target="_blank" rel="noreferrer"
+                      className="font-mono text-xs hover:underline" style={{ color: '#4ade80' }}>
+                      {project.loan_nft_burn_hash.slice(0, 14)}…{project.loan_nft_burn_hash.slice(-8)} ↗
+                    </a>
+                  </div>
+                )}
+                <p className="text-xs pt-1" style={{ color: 'var(--bc-muted)' }}>
+                  One token per loan — minted at origination, burned at payoff.
+                  {!project.loan_nft_burn_hash && ' Escrow TX hashes on each draw serve as the per-draw record.'}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>
+                  No digital title minted. Set <code className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)' }}>XRPL_WALLET_SEED</code> and{' '}
+                  <code className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)' }}>XRPL_DEFAULT_DESTINATION</code>{' '}
+                  in Vercel environment variables, then new projects will mint a loan NFT at origination.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
