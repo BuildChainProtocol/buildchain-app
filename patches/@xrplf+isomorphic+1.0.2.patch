@@ -1,15 +1,14 @@
 diff --git a/node_modules/@xrplf/isomorphic/dist/utils/shared.js b/node_modules/@xrplf/isomorphic/dist/utils/shared.js
-index 1a2b3c4..5d6e7f8 100644
+index 46f25df..e6cd6f8 100644
 --- a/node_modules/@xrplf/isomorphic/dist/utils/shared.js
 +++ b/node_modules/@xrplf/isomorphic/dist/utils/shared.js
-@@ -1,9 +1,19 @@
+@@ -1,7 +1,20 @@
  "use strict";
  Object.defineProperty(exports, "__esModule", { value: true });
  exports.equal = exports.concat = exports.HEX_REGEX = void 0;
 -const utils_js_1 = require("@noble/hashes/utils.js");
 +// PATCH: @noble/hashes v2.x is pure ESM and cannot be require()'d.
-+// Inline the two functions we need (concatBytes, utf8ToBytes) to avoid
-+// the "require() of ES Module" error on Vercel / Next.js serverless.
++// Inline concatBytes to avoid the "require() of ES Module" error on Vercel.
 +function _concatBytes(...arrays) {
 +    let total = 0;
 +    for (const arr of arrays) total += arr.length;
@@ -25,3 +24,10 @@ index 1a2b3c4..5d6e7f8 100644
  exports.HEX_REGEX = /^[A-F0-9]*$/iu;
  function concat(views) {
      return (0, utils_js_1.concatBytes)(...views);
+@@ -21,4 +34,4 @@ function equal(buf1, buf2) {
+     return true;
+ }
+ exports.equal = equal;
+-//# sourceMappingURL=shared.js.map
+\ No newline at end of file
++//# sourceMappingURL=shared.js.map
