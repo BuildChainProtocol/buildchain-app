@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { formatCurrency, timeAgo } from '@/lib/utils'
+import BudgetTab from '@/components/shared/BudgetTab'
 
 const STAGES = ['application', 'review', 'approved', 'active', 'complete', 'cancelled']
 const stageBadge: Record<string, string> = {
@@ -26,7 +27,7 @@ export default function ProjectDetailPage() {
   const router = useRouter()
   const [project, setProject] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'overview' | 'draws' | 'documents' | 'activity'>('overview')
+  const [tab, setTab] = useState<'overview' | 'draws' | 'documents' | 'budget' | 'activity'>('overview')
   const [stageUpdating, setStageUpdating] = useState(false)
   const [drawActionId, setDrawActionId] = useState<string | null>(null)
   const [docActionId, setDocActionId] = useState<string | null>(null)
@@ -210,7 +211,7 @@ export default function ProjectDetailPage() {
 
         {/* Tabs */}
         <div className="flex border-t" style={{ borderColor: 'var(--bc-border)' }}>
-          {(['overview', 'draws', 'documents', 'activity'] as const).map(t => (
+          {(['overview', 'draws', 'documents', 'budget', 'activity'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className="px-5 py-3 text-sm font-semibold capitalize transition-all border-b-2"
               style={{
@@ -507,6 +508,13 @@ export default function ProjectDetailPage() {
             </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Budget / SOV */}
+      {tab === 'budget' && (
+        <div className="rounded-xl border p-6" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
+          <BudgetTab projectId={project.id} readOnly={false} />
         </div>
       )}
 

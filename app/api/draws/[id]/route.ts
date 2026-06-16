@@ -185,5 +185,40 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     console.warn('[Email] draw status email skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
   }
 
+  // ── Step 5: Webhook back to Building Block ───────────────
+  // Fires on approved, declined, and funded — lets the GC see status in real time
+  try {
+    const webhookUrl = process.env.BUILDINGBLOCK_WEBHOOK_URL
+    if (webhookUrl && ['approved', 'declined', 'funded'].includes(body.status)) {
+      const webhookKey = process.env.BUILDINGBLOCK_API_KEY || ''
+      const payload = {
+        event: `draw.${body.status}`,
+        draw_id: params.id,
+        request_number: draw.request_number,
+        project_id: draw.project_id,
+        status: body.status,
+        amount: draw.amount,
+        net_amount: updated.net_amount ?? draw.amount,
+        retainage_held: updated.retainage_held ?? 0,
+        escrow_txn_hash: updated.escrow_txn_hash ?? null,
+        reviewed_at: updated.reviewed_at ?? null,
+        funded_at: updated.funded_at ?? null,
+        timestamp: new Date().toISOString(),
+      }
+      // Fire and forget — don't await, don't block the response
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${webhookKey}`,
+          'X-BuildChain-Event': `draw.${body.status}`,
+        },
+        body: JSON.stringify(payload),
+      }).catch(err => console.warn('[Webhook] Building Block webhook failed:', err?.message))
+    }
+  } catch (webhookErr) {
+    console.warn('[Webhook] Building Block webhook error:', webhookErr instanceof Error ? webhookErr.message : webhookErr)
+  }
+
   return NextResponse.json({ data: updated })
 }

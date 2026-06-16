@@ -1,9 +1,30 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { formatCurrency, timeAgo } from '@/lib/utils'
 
 type TabKey = 'submitted' | 'approved' | 'declined'
+
+interface DrawLineItem {
+  id: string
+  work_completed_period: number
+  materials_stored: number
+  total_completed_stored: number
+  percent_complete: number
+  retainage_amount: number
+  current_payment_due: number
+  budget_line_items: { line_no: string; description: string; scheduled_value: number; trade: string | null }
+}
+
+interface LienWaiver {
+  id: string
+  sub_name: string
+  sub_code: string | null
+  waiver_type: string
+  through_amount: number
+  status: string
+  signed_by: string | null
+}
 
 interface Draw {
   id: string
@@ -34,6 +55,10 @@ export default function LenderApprovalsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null)
+  const [drawLines, setDrawLines] = useState<Record<string, DrawLineItem[]>>({})
+  const [drawWaivers, setDrawWaivers] = useState<Record<string, LienWaiver[]>>({})
+  const [detailLoading, setDetailLoading] = useState<string | null>(null)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -50,6 +75,20 @@ export default function LenderApprovalsPage() {
       declined: dec.data || [],
     })
     setLoading(false)
+  }
+
+  async function toggleDrawDetail(drawId: string) {
+    if (expandedDrawId === drawId) { setExpandedDrawId(null); return }
+    setExpandedDrawId(drawId)
+    if (drawLines[drawId]) return  // already loaded
+    setDetailLoading(drawId)
+    const [linesRes, waiversRes] = await Promise.all([
+      fetch(`/api/draw-lines?draw_request_id=${drawId}`).then(r => r.json()),
+      fetch(`/api/lien-waivers?draw_request_id=${drawId}`).then(r => r.json()),
+    ])
+    setDrawLines(prev => ({ ...prev, [drawId]: linesRes.data || [] }))
+    setDrawWaivers(prev => ({ ...prev, [drawId]: waiversRes.data || [] }))
+    setDetailLoading(null)
   }
 
   async function act(id: string, status: string) {
@@ -266,26 +305,131 @@ export default function LenderApprovalsPage() {
                     </div>
                   )}
 
+                  {/* G703 / Lien Waiver detail toggle */}
+                  <div className="mb-4">
+                    <button onClick={() => toggleDrawDetail(draw.id)}
+                      className="text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
+                      style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--bc-muted)', border: '1px solid var(--bc-border)' }}>
+                      {expandedDrawId === draw.id ? '▲' : '▼'} G703 Line Items &amp; Lien Waivers
+                    </button>
+
+                    {expandedDrawId === draw.id && (
+                      <div className="mt-3 rounded-xl border overflow-hidden" style={{ borderColor: 'var(--bc-border)' }}>
+                        {detailLoading === draw.id ? (
+                          <div className="p-4 text-xs text-center" style={{ color: 'var(--bc-muted)' }}>Loading…</div>
+                        ) : (
+                          <>
+                            {/* G703 Line Items */}
+                            {drawLines[draw.id]?.length > 0 ? (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                    <tr style={{ borderBottom: '1px solid var(--bc-border)', color: 'var(--bc-muted)' }}>
+                                      <th className="text-left px-4 py-2 font-semibold">#</th>
+                                      <th className="text-left px-2 py-2 font-semibold">Description</th>
+                                      <th className="text-right px-2 py-2 font-semibold">Scheduled</th>
+                                      <th className="text-right px-2 py-2 font-semibold">This Period</th>
+                                      <th className="text-right px-2 py-2 font-semibold">% Done</th>
+                                      <th className="text-right px-4 py-2 font-semibold">Net Due</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {drawLines[draw.id].map(dl => (
+                                      <tr key={dl.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                        <td className="px-4 py-2 font-mono" style={{ color: 'var(--bc-muted)' }}>{dl.budget_line_items.line_no}</td>
+                                        <td className="px-2 py-2">{dl.budget_line_items.description}</td>
+                                        <td className="px-2 py-2 text-right" style={{ color: 'var(--bc-muted)' }}>{formatCurrency(dl.budget_line_items.scheduled_value)}</td>
+                                        <td className="px-2 py-2 text-right font-semibold" style={{ color: 'var(--bc-gold)' }}>{formatCurrency(dl.work_completed_period)}</td>
+                                        <td className="px-2 py-2 text-right" style={{ color: dl.percent_complete >= 100 ? '#2ecc71' : 'var(--bc-muted)' }}>{dl.percent_complete.toFixed(1)}%</td>
+                                        <td className="px-4 py-2 text-right font-bold">{formatCurrency(dl.current_payment_due)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot style={{ background: 'rgba(255,255,255,0.03)', borderTop: '1px solid var(--bc-border)' }}>
+                                    <tr>
+                                      <td colSpan={3} className="px-4 py-2 font-bold" style={{ color: 'var(--bc-muted)' }}>TOTALS</td>
+                                      <td className="px-2 py-2 text-right font-bold" style={{ color: 'var(--bc-gold)' }}>
+                                        {formatCurrency(drawLines[draw.id].reduce((s, l) => s + l.work_completed_period, 0))}
+                                      </td>
+                                      <td />
+                                      <td className="px-4 py-2 text-right font-bold" style={{ color: '#e8edf2' }}>
+                                        {formatCurrency(drawLines[draw.id].reduce((s, l) => s + l.current_payment_due, 0))}
+                                      </td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="px-4 py-3 text-xs" style={{ color: 'var(--bc-muted)' }}>No G703 line items — single-amount draw.</div>
+                            )}
+
+                            {/* Lien Waivers */}
+                            <div className="border-t px-4 py-3" style={{ borderColor: 'var(--bc-border)' }}>
+                              <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--bc-muted)' }}>Lien Waivers</p>
+                              {drawWaivers[draw.id]?.length > 0 ? (
+                                <div className="space-y-1.5">
+                                  {drawWaivers[draw.id].map(wv => (
+                                    <div key={wv.id} className="flex items-center justify-between text-xs py-1">
+                                      <div>
+                                        <span className="font-semibold">{wv.sub_name}</span>
+                                        {wv.sub_code && <span className="ml-1.5" style={{ color: 'var(--bc-muted)' }}>{wv.sub_code}</span>}
+                                        <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--bc-muted)' }}>
+                                          {wv.waiver_type.replace(/_/g, ' ')}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        <span style={{ color: 'var(--bc-muted)' }}>{formatCurrency(wv.through_amount)}</span>
+                                        <span style={{ color: wv.status === 'signed' || wv.status === 'issued' ? '#2ecc71' : '#e74c3c' }}>
+                                          {wv.status === 'signed' || wv.status === 'issued' ? '✅ Signed' : '⏳ Pending'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs" style={{ color: '#e74c3c' }}>⚠️ No lien waivers on file — required before approval.</p>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Pending action buttons */}
-                  {tab === 'submitted' && (
-                    <div className="flex gap-3 items-center">
-                      <button onClick={() => act(draw.id, 'approved')}
-                        disabled={actionLoading === draw.id + 'approved'}
-                        className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
-                        style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
-                        {actionLoading === draw.id + 'approved' ? '⬡ Creating XRPL record…' : '⬡ Approve & Create XRPL Record'}
-                      </button>
-                      <button onClick={() => act(draw.id, 'declined')}
-                        disabled={!!actionLoading}
-                        className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
-                        style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>
-                        ✗ Decline
-                      </button>
-                      <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
-                        Admin releases funds after escrow review
-                      </span>
+                  {tab === 'submitted' && (() => {
+                    const waivers = drawWaivers[draw.id] || []
+                    const allWaiversSigned = waivers.length > 0 && waivers.every(w => w.status === 'signed' || w.status === 'issued')
+                    const blockApprove = !draw.inspection_done || !draw.lien_waiver
+                    return (
+                    <div className="space-y-3">
+                      {blockApprove && (
+                        <div className="flex gap-3 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.2)' }}>
+                          {!draw.inspection_done && <span style={{ color: '#e74c3c' }}>⚠️ Inspection not confirmed</span>}
+                          {!draw.lien_waiver && <span style={{ color: '#e74c3c' }}>⚠️ Lien waiver missing</span>}
+                          <span style={{ color: 'var(--bc-muted)' }}>— You can still approve with override</span>
+                        </div>
+                      )}
+                      <div className="flex gap-3 items-center">
+                        <button onClick={() => act(draw.id, 'approved')}
+                          disabled={actionLoading === draw.id + 'approved'}
+                          className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
+                          style={{ background: blockApprove ? 'rgba(201,168,76,0.4)' : 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
+                          {actionLoading === draw.id + 'approved' ? '⬡ Creating XRPL record…' : '⬡ Approve & Create XRPL Record'}
+                        </button>
+                        <button onClick={() => act(draw.id, 'declined')}
+                          disabled={!!actionLoading}
+                          className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
+                          style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>
+                          ✗ Decline
+                        </button>
+                        <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                          Admin releases funds after escrow review
+                        </span>
+                      </div>
                     </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Approved status footer */}
                   {tab === 'approved' && !draw.funded_at && (
