@@ -13,14 +13,25 @@ interface NavItem {
 
 interface SidebarProps {
   items: NavItem[]
+  isOpen?: boolean
 }
 
-export default function Sidebar({ items }: SidebarProps) {
+export default function Sidebar({ items, isOpen = false }: SidebarProps) {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed top-14 left-0 bottom-0 w-[220px] border-r flex flex-col overflow-y-auto"
-      style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
+    <aside
+      className={cn(
+        // Base: fixed sidebar, always present in the DOM
+        'fixed top-14 left-0 bottom-0 w-[220px] border-r flex flex-col overflow-y-auto z-40',
+        // Slide transition
+        'transition-transform duration-300 ease-in-out',
+        // Mobile: hidden by default, visible when isOpen
+        // Desktop (md+): always visible via md:translate-x-0 override
+        isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      )}
+      style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}
+    >
       <nav className="flex-1 py-4">
         {items.map(item => {
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/'))

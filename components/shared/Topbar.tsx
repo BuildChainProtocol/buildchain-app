@@ -8,6 +8,7 @@ import type { Profile } from '@/lib/types/database'
 interface TopbarProps {
   profile: Profile
   unreadCount?: number
+  onMenuToggle?: () => void
 }
 
 interface Notification {
@@ -30,7 +31,7 @@ function timeAgo(iso: string): string {
   return `${days}d ago`
 }
 
-export default function Topbar({ profile, unreadCount: initialUnread = 0 }: TopbarProps) {
+export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenuToggle }: TopbarProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -94,11 +95,24 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0 }: Topb
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-6 border-b"
       style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
-      {/* Logo */}
+      {/* Logo + hamburger */}
       <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm"
+        {/* Hamburger — mobile only */}
+        {onMenuToggle && (
+          <button
+            onClick={onMenuToggle}
+            className="md:hidden -ml-1 p-2 rounded-lg hover:bg-white/5 transition-colors"
+            aria-label="Toggle navigation"
+          >
+            <svg className="w-5 h-5" style={{ color: 'var(--bc-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        )}
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0"
           style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>BC</div>
-        <span className="text-base font-bold">
+        {/* Hide brand text on small screens to avoid crowding */}
+        <span className="hidden sm:inline text-base font-bold">
           Build<span style={{ color: 'var(--bc-gold)' }}>Chain</span>
           <span className="text-xs font-normal ml-1.5" style={{ color: 'var(--bc-muted)' }}>{roleLabel}</span>
         </span>
@@ -202,7 +216,7 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0 }: Topb
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/5">
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
               style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>{initials}</div>
-            <span className="text-sm font-medium">{profile.full_name || profile.email}</span>
+            <span className="hidden sm:inline text-sm font-medium">{profile.full_name || profile.email}</span>
             <svg className="w-4 h-4" style={{ color: 'var(--bc-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>

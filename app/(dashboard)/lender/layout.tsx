@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import Topbar from '@/components/shared/Topbar'
-import Sidebar from '@/components/shared/Sidebar'
+import DashboardShell from '@/components/shared/DashboardShell'
 
 const lenderNav = [
   { href: '/lender', label: 'Portfolio', icon: '▦' },
@@ -34,12 +33,8 @@ export default async function LenderLayout({ children }: { children: React.React
   const { count: notifCount } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false)
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bc-dark)' }}>
-      <Topbar profile={profile} unreadCount={notifCount || 0} />
-      <div className="flex pt-14">
-        <Sidebar items={navWithBadge} />
-        <main className="ml-[220px] flex-1 p-7 min-h-[calc(100vh-56px)]">{children}</main>
-      </div>
-    </div>
+    <DashboardShell profile={profile} items={navWithBadge} unreadCount={notifCount || 0}>
+      {children}
+    </DashboardShell>
   )
 }

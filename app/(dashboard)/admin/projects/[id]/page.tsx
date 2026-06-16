@@ -362,6 +362,7 @@ export default function ProjectDetailPage() {
               <div className="text-sm" style={{ color: 'var(--bc-muted)' }}>Draw requests will appear here once the borrower submits them.</div>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--bc-border)' }}>
@@ -419,6 +420,7 @@ export default function ProjectDetailPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
@@ -435,6 +437,7 @@ export default function ProjectDetailPage() {
               <div className="font-semibold mb-1">No documents yet</div>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--bc-border)' }}>
@@ -502,6 +505,7 @@ export default function ProjectDetailPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
