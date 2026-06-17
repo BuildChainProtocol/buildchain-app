@@ -46,7 +46,7 @@ export default async function LenderDashboard() {
         <p className="text-sm mt-1" style={{ color: 'var(--bc-muted)' }}>Construction loan portfolio · BuildChain Protocol</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Active Loans" value={projects.filter(p => p.stage === 'active').length} icon="🏦" sub={`${projects.length} total`} />
         <StatCard label="Total Committed" value={formatCurrency(totalCommitted)} icon="💵" iconBg="rgba(201,168,76,0.15)" sub={`${formatCurrency(totalDrawn)} drawn`} />
         <StatCard label="Pending Approvals" value={pendingDraws.length} icon="⏳" iconBg="rgba(243,156,18,0.15)" sub={pendingAmount > 0 ? `${formatCurrency(pendingAmount)} awaiting` : 'None'} subColor={pendingAmount > 0 ? 'orange' : 'default'} />
@@ -68,7 +68,7 @@ export default async function LenderDashboard() {
                 <span className={`badge ${stageBadge[project.stage] || 'badge-gray'}`}>{project.stage}</span>
               </div>
 
-              <div className="grid grid-cols-4 gap-4 text-sm mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                 <div>
                   <div className="text-xs mb-0.5" style={{ color: 'var(--bc-muted)' }}>Loan Amount</div>
                   <div className="font-bold">{formatCurrency(project.loan_amount)}</div>

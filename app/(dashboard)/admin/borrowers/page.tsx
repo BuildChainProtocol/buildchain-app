@@ -182,7 +182,7 @@ export default function AdminBorrowersPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Borrowers', value: borrowers.length, sub: `${activeBorrowers.length} active` },
           { label: 'Preferred', value: borrowers.filter(b => b.rating === 'preferred').length, sub: 'top credit quality', color: '#2ecc71' },

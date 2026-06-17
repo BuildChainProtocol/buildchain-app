@@ -162,7 +162,7 @@ export default function AdminLendersPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Lenders', value: lenders.length, sub: `${activeLenders.length} active` },
           { label: 'Platform Status', value: 'Live', sub: 'XRPL escrow enabled', color: '#2ecc71' },

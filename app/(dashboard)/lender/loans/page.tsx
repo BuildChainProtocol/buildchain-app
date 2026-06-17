@@ -46,7 +46,7 @@ export default async function LenderLoansPage() {
       </div>
 
       {/* Portfolio summary cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Loans', value: total, sub: `${active} active builds` },
           { label: 'Portfolio Value', value: formatCurrency(totalLoan), sub: 'total commitments' },

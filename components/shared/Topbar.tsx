@@ -143,7 +143,7 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
               style={{
                 background: 'var(--bc-navy)',
                 borderColor: 'var(--bc-border)',
-                width: '340px',
+                width: 'min(340px, calc(100vw - 1.5rem))',
                 maxHeight: '420px',
               }}>
               {/* Header */}

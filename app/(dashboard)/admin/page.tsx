@@ -38,14 +38,14 @@ export default async function AdminDashboard() {
         <p style={{ color: 'var(--bc-muted)' }} className="text-sm mt-1">BuildChain Protocol — Admin Console</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Active Projects" value={projects?.filter(p => p.stage === 'active').length || 0} icon="🏗" sub={`${projects?.length || 0} total`} />
         <StatCard label="Total Portfolio" value={formatCurrency(totalPortfolio)} icon="💰" iconBg="rgba(45,125,210,0.15)" sub={`across ${projects?.length || 0} projects`} />
         <StatCard label="Pending Draws" value={pendingDraws?.length || 0} icon="📋" iconBg="rgba(243,156,18,0.15)" sub={pendingDraws && pendingDraws.length > 0 ? '⚠ Needs review' : 'All clear'} subColor={pendingDraws && pendingDraws.length > 0 ? 'orange' : 'default'} />
         <StatCard label="Funds Disbursed" value={formatCurrency(totalFunded)} icon="✅" iconBg="rgba(46,204,113,0.15)" sub="YTD funded draws" subColor="green" />
       </div>
 
-      <div className="grid grid-cols-2 gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         {/* Portfolio draw progress */}
         <div className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
           <div className="flex items-center justify-between mb-4">

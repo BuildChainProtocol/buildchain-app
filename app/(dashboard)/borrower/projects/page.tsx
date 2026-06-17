@@ -35,7 +35,7 @@ export default async function BorrowerProjectsPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Projects', value: projects?.length || 0, sub: `${activeProjects.length} active` },
           { label: 'Total Loan Value', value: formatCurrency(totalLoan), sub: 'across all projects' },
@@ -91,7 +91,7 @@ export default async function BorrowerProjectsPage() {
                 </div>
 
                 <div className="px-5 pb-4">
-                  <div className="grid grid-cols-3 gap-4 mb-3 text-sm">
+                  <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-3 text-sm">
                     <div>
                       <div className="text-xs uppercase tracking-wide mb-1" style={{ color: 'var(--bc-muted)' }}>Loan Amount</div>
                       <div className="font-bold">{formatCurrency(p.loan_amount)}</div>

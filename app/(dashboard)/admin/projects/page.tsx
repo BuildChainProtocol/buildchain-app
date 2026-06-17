@@ -31,7 +31,7 @@ export default async function AdminProjectsPage() {
       </div>
 
       {/* Kanban-style stage columns */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {['review', 'approved', 'active', 'complete'].map(stage => {
           const stageProjects = projects?.filter(p => p.stage === stage) || []
           return (

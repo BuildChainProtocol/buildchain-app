@@ -137,7 +137,7 @@ export default function NewProjectPage() {
                 placeholder="123 Main Street"
                 className={inputClass} style={inputStyle} />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="col-span-1">
                 <label className={labelClass} style={labelStyle}>City *</label>
                 <input required value={form.city} onChange={e => set('city', e.target.value)}
@@ -170,7 +170,7 @@ export default function NewProjectPage() {
         {/* Parties */}
         <div className="rounded-xl border p-6" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
           <h2 className="text-sm font-bold uppercase tracking-wide mb-4" style={{ color: 'var(--bc-muted)' }}>Parties</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass} style={labelStyle}>Borrower *</label>
               <select required value={form.borrower_id} onChange={e => set('borrower_id', e.target.value)}
@@ -203,7 +203,7 @@ export default function NewProjectPage() {
         {/* Loan Terms */}
         <div className="rounded-xl border p-6" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
           <h2 className="text-sm font-bold uppercase tracking-wide mb-4" style={{ color: 'var(--bc-muted)' }}>Loan Terms</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass} style={labelStyle}>Loan Amount (USD) *</label>
               <div className="relative">

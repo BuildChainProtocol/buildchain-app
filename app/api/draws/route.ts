@@ -17,6 +17,20 @@ export async function GET(request: NextRequest) {
     .select(`*, projects(name, loan_number, borrower_id, lender_id, loan_amount, amount_drawn)`)
     .order('created_at', { ascending: false })
 
+  // mine=true → filter to this user's borrower projects only
+  const mine = searchParams.get('mine') === 'true'
+  if (mine) {
+    const { data: borrower } = await supabase
+      .from('borrowers').select('id').eq('profile_id', user.id).single()
+    if (!borrower) return NextResponse.json({ data: [] })
+
+    const { data: myProjects } = await supabase
+      .from('projects').select('id').eq('borrower_id', borrower.id)
+    const ids = (myProjects ?? []).map(p => p.id)
+    if (ids.length === 0) return NextResponse.json({ data: [] })
+    query = query.in('project_id', ids)
+  }
+
   if (projectId) query = query.eq('project_id', projectId)
   if (status) query = query.eq('status', status)
 

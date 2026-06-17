@@ -1,6 +1,7 @@
 import { Wallet, xrpToDrops } from 'xrpl'
 import type { EscrowCreate, EscrowFinish } from 'xrpl'
 import { getConnectedClient } from './client'
+import { usdToXrpDrops } from './price-oracle'
 
 // Ripple epoch offset: Jan 1 2000 00:00:00 UTC = Unix 946684800
 const RIPPLE_EPOCH = 946684800
@@ -24,7 +25,10 @@ function getDestinationAddress(): string {
 /**
  * Creates a time-locked XRPL escrow for a draw request.
  *
- * On testnet we lock 1 XRP per draw as a proof-of-concept.
+ * On testnet we lock 1 XRP per draw (detected via XRPL_NETWORK env var).
+ * On mainnet, the draw's USD amount is converted to XRP via a live
+ * CoinGecko price feed (see lib/xrpl/price-oracle.ts).
+ *
  * The escrow can only be finished by calling finishDrawEscrow()
  * after the FinishAfter time has passed.
  *
@@ -33,9 +37,12 @@ function getDestinationAddress(): string {
 export async function createDrawEscrow({
   destinationAddress,
   finishAfterSeconds,
+  drawAmountUsd,
 }: {
   destinationAddress?: string
   finishAfterSeconds?: number
+  /** USD value of the draw — used to compute XRP amount on mainnet */
+  drawAmountUsd?: number
 }): Promise<{ escrowSequence: number; txnHash: string; finishAfter: Date }> {
   const wallet = getPlatformWallet()
   const destination = destinationAddress ?? getDestinationAddress()
@@ -45,9 +52,14 @@ export async function createDrawEscrow({
   const finishAfterMs = Date.now() + delaySeconds * 1000
   const finishAfterRipple = toRippleTime(finishAfterMs)
 
-  // Testnet demo: 1 XRP per escrow regardless of USD draw amount.
-  // Production: replace with oracle-derived XRP equivalent of draw.amount.
-  const amountDrops = xrpToDrops('1')
+  // Determine whether we're on testnet
+  const network = process.env.XRPL_NETWORK ?? ''
+  const isTestnet = !network || network.includes('altnet') || network.includes('testnet')
+
+  // Convert USD draw amount → XRP drops via oracle (or 1 XRP on testnet)
+  const amountDrops = drawAmountUsd
+    ? await usdToXrpDrops(drawAmountUsd, isTestnet)
+    : xrpToDrops('1')
 
   const client = await getConnectedClient()
   try {

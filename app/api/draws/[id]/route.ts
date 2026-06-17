@@ -43,7 +43,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
       if (isXrplConfigured()) {
         const borrowerXrpAddress = (draw.projects as any)?.borrowers?.xrp_address ?? undefined
-        const escrow = await createDrawEscrow({ destinationAddress: borrowerXrpAddress })
+        const escrow = await createDrawEscrow({
+          destinationAddress: borrowerXrpAddress,
+          drawAmountUsd: draw.amount,
+        })
         updates.escrow_sequence     = escrow.escrowSequence
         updates.escrow_txn_hash     = escrow.txnHash
         updates.escrow_finish_after = escrow.finishAfter.toISOString()

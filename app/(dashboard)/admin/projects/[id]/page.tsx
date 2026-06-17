@@ -182,7 +182,7 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             {[
               { label: 'Loan Amount', value: formatCurrency(project.loan_amount), color: '#e8edf2' },
               { label: 'Amount Drawn', value: formatCurrency(drawn), color: 'var(--bc-gold)' },
@@ -209,11 +209,11 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-t" style={{ borderColor: 'var(--bc-border)' }}>
+        {/* Tabs — scrollable on mobile */}
+        <div className="flex overflow-x-auto border-t scrollbar-none" style={{ borderColor: 'var(--bc-border)' }}>
           {(['overview', 'draws', 'documents', 'budget', 'activity'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className="px-5 py-3 text-sm font-semibold capitalize transition-all border-b-2"
+              className="flex-shrink-0 px-4 sm:px-5 py-3 text-sm font-semibold capitalize transition-all border-b-2"
               style={{
                 borderColor: tab === t ? 'var(--bc-gold)' : 'transparent',
                 color: tab === t ? 'var(--bc-gold)' : 'var(--bc-muted)',
@@ -228,7 +228,7 @@ export default function ProjectDetailPage() {
 
       {/* Overview */}
       {tab === 'overview' && (
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {[
             {
               title: 'Property Details',

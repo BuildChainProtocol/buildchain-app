@@ -195,7 +195,7 @@ export default function ProfilePage() {
             Profile Information
           </h2>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass} style={labelStyle}>Full Name</label>
               <input value={form.full_name} onChange={e => set('full_name', e.target.value)}

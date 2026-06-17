@@ -340,7 +340,7 @@ export default function SubmitDrawPage() {
             <p className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: 'rgba(201,168,76,0.08)', color: 'var(--bc-gold)' }}>
               ℹ️ No Schedule of Values set up for this project yet. Enter a draw amount below. Ask your lender to set up the SOV for line-item tracking.
             </p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>Draw Amount ($)</label>
                 <input type="number" min="1" max={available} required={!hasSov} value={form.amount}

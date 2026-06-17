@@ -34,6 +34,13 @@ body {
   .bg-card { background-color: var(--bc-card); }
   .border-bc { border-color: var(--bc-border); }
 
+  /* Hide scrollbar visually but keep functionality (tab overflow on mobile) */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+
   .badge {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide;
   }

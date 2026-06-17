@@ -52,7 +52,7 @@ export default async function AdminDocumentsPage() {
       </div>
 
       {/* Status summary */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
         {[
           { label: 'Required', count: byStatus.required.length, color: 'rgba(243,156,18,0.15)', text: 'var(--bc-gold)' },
           { label: 'Uploaded', count: byStatus.uploaded.length, color: 'rgba(45,125,210,0.15)', text: 'var(--bc-blue)' },

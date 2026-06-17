@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import StatCard from '@/components/ui/StatCard'
 import { formatCurrency, getDrawProgress } from '@/lib/utils'
 import Link from 'next/link'
+import BorrowerDrawsSection from '@/components/borrower/DrawsSection'
 
 export default async function BorrowerDashboard() {
   const supabase = createClient()
@@ -50,14 +51,14 @@ export default async function BorrowerDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Active Projects" value={projects.filter(p => ['active', 'approved'].includes(p.stage)).length} icon="🏗" />
         <StatCard label="Total Loan Value" value={formatCurrency(totalLoan)} icon="💰" iconBg="rgba(45,125,210,0.15)" />
         <StatCard label="Available to Draw" value={formatCurrency(available)} icon="✅" iconBg="rgba(46,204,113,0.15)" subColor="green" sub="Ready to request" />
         <StatCard label="Pending Draws" value={pendingDraws.length} icon="⏳" iconBg="rgba(243,156,18,0.15)" sub={pendingAmount > 0 ? `${formatCurrency(pendingAmount)} in review` : 'None pending'} subColor={pendingAmount > 0 ? 'orange' : 'default'} />
       </div>
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {projects.map(project => {
           const pct = getDrawProgress(project.amount_drawn, project.loan_amount)
           return (
@@ -116,6 +117,9 @@ export default async function BorrowerDashboard() {
           </div>
         )}
       </div>
+
+      {/* Live draw requests tracker */}
+      <BorrowerDrawsSection />
     </div>
   )
 }

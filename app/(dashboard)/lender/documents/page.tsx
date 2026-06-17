@@ -59,7 +59,7 @@ export default async function LenderDocumentsPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Documents', value: total, sub: 'across all projects' },
           { label: 'Pending Review', value: pending, sub: 'need action', color: pending > 0 ? 'var(--bc-gold)' : undefined },

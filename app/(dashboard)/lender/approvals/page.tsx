@@ -136,7 +136,7 @@ export default function LenderApprovalsPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--bc-border)', width: 'fit-content' }}>
+      <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--bc-border)' }}>
         {tabs.map(t => {
           const count = draws[t.key].length
           const isActive = tab === t.key
@@ -191,7 +191,7 @@ export default function LenderApprovalsPage() {
               <div key={draw.id} className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-5 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
                   <div>
                     <div className="font-bold text-base">
                       {draw.request_number} — <span style={{ color: 'var(--bc-gold)' }}>{formatCurrency(draw.amount)}</span>
@@ -204,14 +204,14 @@ export default function LenderApprovalsPage() {
                       }
                     </div>
                   </div>
-                  <span className={`badge ${tab === 'submitted' ? 'badge-yellow' : tab === 'approved' ? 'badge-green' : 'badge-red'}`}>
+                  <span className={`badge self-start sm:self-auto ${tab === 'submitted' ? 'badge-yellow' : tab === 'approved' ? 'badge-green' : 'badge-red'}`}>
                     {tab === 'submitted' ? 'Awaiting Review' : tab === 'approved' ? 'Approved' : 'Declined'}
                   </span>
                 </div>
 
                 <div className="px-5 py-4">
                   {/* Draw details grid */}
-                  <div className="grid grid-cols-2 gap-6 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>Phase</span>
@@ -410,7 +410,7 @@ export default function LenderApprovalsPage() {
                           <span style={{ color: 'var(--bc-muted)' }}>— You can still approve with override</span>
                         </div>
                       )}
-                      <div className="flex gap-3 items-center">
+                      <div className="flex flex-wrap gap-3 items-center">
                         <button onClick={() => act(draw.id, 'approved')}
                           disabled={actionLoading === draw.id + 'approved'}
                           className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
