@@ -31,3 +31,16 @@ index 46f25df..e6cd6f8 100644
 -//# sourceMappingURL=shared.js.map
 \ No newline at end of file
 +//# sourceMappingURL=shared.js.map
+diff --git a/node_modules/@xrplf/isomorphic/dist/internal/normalizeInput.js b/node_modules/@xrplf/isomorphic/dist/internal/normalizeInput.js
+index 8d94e16..dc05600 100644
+--- a/node_modules/@xrplf/isomorphic/dist/internal/normalizeInput.js
++++ b/node_modules/@xrplf/isomorphic/dist/internal/normalizeInput.js
+@@ -1,6 +1,7 @@
+ "use strict";
+ Object.defineProperty(exports, "__esModule", { value: true });
+-const utils_js_1 = require("@noble/hashes/utils.js");
++// PATCH: @noble/hashes v2.x is pure ESM. Inline utf8ToBytes using TextEncoder.
++const utils_js_1 = { utf8ToBytes: (str) => new TextEncoder().encode(str) };
+ /**
+  * Normalize a string, number array, or Uint8Array to a Uint8Array.
+  * Strings are converted to Uint8Array using UTF-8 encoding.
