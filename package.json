@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && node scripts/fix-esm.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.4.2",
