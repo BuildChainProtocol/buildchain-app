@@ -1,0 +1,55 @@
+diff --git a/node_modules/ripple-address-codec/dist/xrp-codec.js b/node_modules/ripple-address-codec/dist/xrp-codec.js
+index 1234567..abcdefg 100644
+--- a/node_modules/ripple-address-codec/dist/xrp-codec.js
++++ b/node_modules/ripple-address-codec/dist/xrp-codec.js
+@@ -4,7 +4,43 @@
+  */
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.isValidClassicAddress = exports.decodeAccountPublic = exports.encodeAccountPublic = exports.encodeNodePublic = exports.decodeNodePublic = exports.decodeAddress = exports.decodeAccountID = exports.encodeAddress = exports.encodeAccountID = exports.decodeSeed = exports.encodeSeed = exports.codec = void 0;
+-const base_1 = require("@scure/base");
++// patch-package: inline base58xrp to avoid require() of ESM @scure/base
++const base_1 = (() => {
++  const ALPHABET = 'rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz';
++  const BASE = 58;
++  const ALPHABET_MAP = {};
++  for (let i = 0; i < ALPHABET.length; i++) ALPHABET_MAP[ALPHABET[i]] = i;
++  const base58xrp = {
++    encode(bytes) {
++      if (!(bytes instanceof Uint8Array)) bytes = Uint8Array.from(bytes);
++      let leadingZeros = 0;
++      for (const b of bytes) { if (b !== 0) break; leadingZeros++; }
++      const digits = [0];
++      for (let i = 0; i < bytes.length; i++) {
++        let carry = bytes[i];
++        for (let j = 0; j < digits.length; j++) {
++          carry += digits[j] << 8;
++          digits[j] = carry % BASE;
++          carry = (carry / BASE) | 0;
++        }
++        while (carry > 0) { digits.push(carry % BASE); carry = (carry / BASE) | 0; }
++      }
++      return ALPHABET[0].repeat(leadingZeros) + digits.reverse().map(d => ALPHABET[d]).join('');
++    },
++    decode(str) {
++      let leadingZeros = 0;
++      for (const c of str) { if (c !== ALPHABET[0]) break; leadingZeros++; }
++      const bytes = [0];
++      for (let i = 0; i < str.length; i++) {
++        const val = ALPHABET_MAP[str[i]];
++        if (val === undefined) throw new Error('Non-base58 character: ' + str[i]);
++        let carry = val;
++        for (let j = 0; j < bytes.length; j++) {
++          carry += bytes[j] * BASE;
++          bytes[j] = carry & 0xff;
++          carry >>= 8;
++        }
++        while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8; }
++      }
++      for (let i = 0; i < leadingZeros; i++) bytes.push(0);
++      return new Uint8Array(bytes.reverse());
++    }
++  };
++  return { base58xrp };
++})();
+ const sha256_1 = require("@xrplf/isomorphic/sha256");
+ const utils_1 = require("./utils");
