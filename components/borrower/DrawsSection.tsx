@@ -15,6 +15,7 @@ interface Draw {
   purpose: string | null
   description: string | null
   status: string
+  decline_reason: string | null
   submitted_at: string | null
   inspection_done: boolean
   lien_waiver: boolean
@@ -24,17 +25,21 @@ interface Draw {
   } | null
 }
 
+// Status values must match the draw_requests.status CHECK constraint in the DB:
+// ('draft','submitted','pending','approved','funded','declined')
+// 'pending' and 'submitted' are both shown as "Submitted" to the borrower.
 const STATUS: Record<string, { label: string; color: string; bg: string; step: number }> = {
-  pending:      { label: 'Pending',      color: '#6b8198',  bg: 'rgba(107,129,152,0.15)', step: 0 },
-  submitted:    { label: 'Submitted',    color: '#f39c12',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
-  under_review: { label: 'Under Review', color: '#2d7dd2',  bg: 'rgba(45,125,210,0.12)',  step: 2 },
-  approved:     { label: 'Approved',     color: '#2ecc71',  bg: 'rgba(46,204,113,0.12)',  step: 3 },
-  funded:       { label: 'Funded',       color: '#27ae60',  bg: 'rgba(39,174,96,0.18)',   step: 4 },
-  rejected:     { label: 'Rejected',     color: '#e74c3c',  bg: 'rgba(231,76,60,0.12)',   step: -1 },
+  draft:     { label: 'Draft',      color: '#6b8198',  bg: 'rgba(107,129,152,0.12)', step: 0 },
+  pending:   { label: 'Submitted',  color: '#f39c12',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
+  submitted: { label: 'Submitted',  color: '#f39c12',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
+  approved:  { label: 'Approved',   color: '#2ecc71',  bg: 'rgba(46,204,113,0.12)',  step: 2 },
+  funded:    { label: 'Funded',     color: '#27ae60',  bg: 'rgba(39,174,96,0.18)',   step: 3 },
+  declined:  { label: 'Declined',   color: '#e74c3c',  bg: 'rgba(231,76,60,0.12)',   step: -1 },
 }
 
-const PIPELINE = ['Submitted', 'Under Review', 'Approved', 'Funded']
-const FILTERS  = ['All', 'Submitted', 'Under Review', 'Approved', 'Funded', 'Rejected']
+// 3-step real pipeline: Submitted (step 1) → Approved (step 2) → Funded (step 3)
+const PIPELINE = ['Submitted', 'Approved', 'Funded']
+const FILTERS  = ['All', 'Submitted', 'Approved', 'Funded', 'Declined']
 const POLL_MS  = 30_000
 
 export default function BorrowerDrawsSection() {
@@ -150,10 +155,12 @@ export default function BorrowerDrawsSection() {
       ) : (
         <div className="space-y-3">
           {filtered.map(draw => {
-            const cfg        = STATUS[draw.status] ?? STATUS.submitted
-            const step       = cfg.step
-            const isRejected = draw.status === 'rejected'
-            const displayAmt = draw.net_amount ?? draw.amount
+            const cfg         = STATUS[draw.status] ?? STATUS.submitted
+            const step        = cfg.step
+            const isDeclined  = draw.status === 'declined'
+            const isDraft     = draw.status === 'draft'
+            const showPipeline = !isDeclined && !isDraft && step > 0
+            const displayAmt  = draw.net_amount ?? draw.amount
 
             return (
               <div key={draw.id}
@@ -188,7 +195,7 @@ export default function BorrowerDrawsSection() {
                 </div>
 
                 {/* Status pipeline */}
-                {!isRejected && (
+                {showPipeline && (
                   <div className="flex items-start mb-3">
                     {PIPELINE.map((label, i) => {
                       const isDone   = step > i + 1
@@ -222,11 +229,23 @@ export default function BorrowerDrawsSection() {
                   </div>
                 )}
 
-                {/* Rejected banner */}
-                {isRejected && (
+                {/* Draft banner */}
+                {isDraft && (
+                  <div className="mb-3 px-3 py-2 rounded-lg text-xs font-medium"
+                    style={{ background: 'rgba(107,129,152,0.08)', color: '#6b8198', border: '1px solid rgba(107,129,152,0.2)' }}>
+                    📝 Saved as draft — not yet submitted to your lender.
+                  </div>
+                )}
+
+                {/* Declined banner */}
+                {isDeclined && (
                   <div className="mb-3 px-3 py-2 rounded-lg text-xs font-medium"
                     style={{ background: 'rgba(231,76,60,0.08)', color: '#e74c3c', border: '1px solid rgba(231,76,60,0.2)' }}>
-                    ❌ This draw request was not approved. Contact your lender for details.
+                    ❌{' '}
+                    {draw.decline_reason
+                      ? <><span className="opacity-70">Not approved — </span>{draw.decline_reason}</>
+                      : 'This draw request was not approved. Contact your lender for details.'
+                    }
                   </div>
                 )}
 

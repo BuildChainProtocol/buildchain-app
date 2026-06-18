@@ -167,7 +167,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           lenderName,
           projectName: project.name,
           drawAmount: draw.amount,
-          declineNotes: body.notes ?? null,
+          // body.decline_reason is the authoritative field; body.notes is a fallback
+          declineNotes: body.decline_reason ?? body.notes ?? null,
         })
         await sendEmail({ to: borrowerEmail, subject, html })
 
@@ -184,8 +185,43 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         await sendEmail({ to: borrowerEmail, subject, html })
       }
     }
+
+    // ── In-app notifications for borrower ───────────────────────────────────
+    const borrowerProfileId = borrowerRow?.profile_id
+    if (borrowerProfileId) {
+      const fmt = (n: number) =>
+        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
+
+      const notifMap: Record<string, { type: string; title: string; body: string }> = {
+        approved: {
+          type: 'draw_approved',
+          title: 'Draw Request Approved ✓',
+          body: `Draw ${updated.request_number} for ${fmt(draw.amount)} has been approved by ${lenderName}.`,
+        },
+        declined: {
+          type: 'draw_declined',
+          title: 'Draw Request Not Approved',
+          body: body.decline_reason
+            ? `Draw ${updated.request_number} was not approved. Reason: ${body.decline_reason}`
+            : `Draw ${updated.request_number} was not approved. Contact ${lenderName} for details.`,
+        },
+        funded: {
+          type: 'draw_funded',
+          title: 'Funds Released!',
+          body: `Draw ${updated.request_number} for ${fmt(draw.amount)} has been funded. Funds are on the way.`,
+        },
+      }
+      const notif = notifMap[body.status]
+      if (notif) {
+        await supabase.from('notifications').insert({
+          user_id: borrowerProfileId,
+          ...notif,
+          link: '/borrower',
+        })
+      }
+    }
   } catch (emailErr) {
-    console.warn('[Email] draw status email skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
+    console.warn('[Email] draw status email/notification skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
   }
 
   // ── Step 5: Webhook back to Building Block ───────────────

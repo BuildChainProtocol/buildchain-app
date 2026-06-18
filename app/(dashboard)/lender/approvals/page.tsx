@@ -59,6 +59,8 @@ export default function LenderApprovalsPage() {
   const [drawLines, setDrawLines] = useState<Record<string, DrawLineItem[]>>({})
   const [drawWaivers, setDrawWaivers] = useState<Record<string, LienWaiver[]>>({})
   const [detailLoading, setDetailLoading] = useState<string | null>(null)
+  const [declineModal, setDeclineModal] = useState<Draw | null>(null)
+  const [declineReason, setDeclineReason] = useState('')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -91,13 +93,13 @@ export default function LenderApprovalsPage() {
     setDetailLoading(null)
   }
 
-  async function act(id: string, status: string) {
+  async function act(id: string, status: string, decline_reason?: string) {
     setActionLoading(id + status)
     setErrorMsg('')
     const res = await fetch(`/api/draws/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...(decline_reason ? { decline_reason } : {}) }),
     })
     const json = await res.json()
     if (res.ok) {
@@ -125,6 +127,63 @@ export default function LenderApprovalsPage() {
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
           style={{ background: toast.ok ? 'var(--bc-gold)' : '#e74c3c', color: '#fff' }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
+        </div>
+      )}
+
+      {/* Decline reason modal */}
+      {declineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => { setDeclineModal(null); setDeclineReason('') }}>
+          <div className="rounded-xl border w-full max-w-md" onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
+              <div>
+                <div className="font-bold">Decline Draw Request</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>
+                  {declineModal.request_number} · {formatCurrency(declineModal.amount)}
+                </div>
+              </div>
+              <button onClick={() => { setDeclineModal(null); setDeclineReason('') }}
+                className="text-lg" style={{ color: 'var(--bc-muted)' }}>✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>
+                The borrower will receive an email with this reason. Be specific — they need to know what to correct.
+              </p>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>
+                  Decline Reason *
+                </label>
+                <textarea
+                  value={declineReason}
+                  onChange={e => setDeclineReason(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Inspection not yet completed. Please schedule and submit inspector report before resubmitting."
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={async () => {
+                    const reason = declineReason.trim() || 'Draw request did not meet approval requirements.'
+                    setDeclineModal(null)
+                    setDeclineReason('')
+                    await act(declineModal.id, 'declined', reason)
+                  }}
+                  disabled={actionLoading === declineModal.id + 'declined'}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-bold"
+                  style={{ background: 'rgba(231,76,60,0.15)', color: '#e74c3c', border: '1px solid rgba(231,76,60,0.3)' }}>
+                  {actionLoading === declineModal.id + 'declined' ? 'Declining…' : '✗ Confirm Decline'}
+                </button>
+                <button onClick={() => { setDeclineModal(null); setDeclineReason('') }}
+                  className="px-4 py-2.5 rounded-lg text-sm font-semibold border"
+                  style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -417,7 +476,7 @@ export default function LenderApprovalsPage() {
                           style={{ background: blockApprove ? 'rgba(201,168,76,0.4)' : 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
                           {actionLoading === draw.id + 'approved' ? '⬡ Creating XRPL record…' : '⬡ Approve & Create XRPL Record'}
                         </button>
-                        <button onClick={() => act(draw.id, 'declined')}
+                        <button onClick={() => { setDeclineModal(draw); setDeclineReason('') }}
                           disabled={!!actionLoading}
                           className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
                           style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>

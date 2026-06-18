@@ -2,7 +2,15 @@
 -- BuildChain — Inspection Workflow
 -- Migration 011: inspections table + RLS
 -- Run this in the Supabase SQL Editor
+--
+-- NOTE: Migration 010 created an earlier inspections table with
+-- a different schema (outcome/inspection_date columns, no token).
+-- This migration drops that table and replaces it with the
+-- token-based inspector portal schema used by the application.
 -- ============================================================
+
+-- Drop the old inspections table from migration 010 (no data yet)
+drop table if exists public.inspections cascade;
 
 create table if not exists public.inspections (
   id                uuid default gen_random_uuid() primary key,
