@@ -9,6 +9,17 @@ type XrplDraw = DrawRequest & {
   escrow_txn_hash: string | null
   escrow_finish_hash: string | null
   escrow_finish_after: string | null
+  // Migration 012 — on-ledger NFT evidence (Patent §IV + §V)
+  lien_waiver_nft_id: string | null
+  lien_waiver_nft_minted_at: string | null
+  verification_receipt: {
+    verified_at: string
+    inspector_credential_nft: string | null
+    lien_waiver_nft: string | null
+    escrow_finish_hash: string | null
+    trigger: string
+    patent_ref: string
+  } | null
 }
 
 type DrawWithProject = XrplDraw & {
@@ -34,6 +45,7 @@ export default function AdminDrawsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('submitted')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [lienWaiverLoading, setLienWaiverLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [errorModal, setErrorModal] = useState<string | null>(null)
 
@@ -65,6 +77,25 @@ export default function AdminDrawsPage() {
         setInspections(prev => ({ ...prev, [drawId]: json.data }))
       }
     } catch { /* silent */ }
+  }
+
+  // Confirm lien waiver — mints XLS-20 NFT (taxon 2) and runs Verification Orchestrator (Patent §IV + §V)
+  async function confirmLienWaiver(id: string) {
+    setLienWaiverLoading(id)
+    const res = await fetch(`/api/draws/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lien_waiver: true }),
+    })
+    if (res.ok) {
+      setToast({ msg: '⬡ Lien waiver confirmed — NFT minting on XRPL…', ok: true })
+      setTimeout(() => setToast(null), 5000)
+      fetchDraws()
+    } else {
+      const json = await res.json().catch(() => ({}))
+      setErrorModal(json.error ?? 'Lien waiver confirmation failed')
+    }
+    setLienWaiverLoading(null)
   }
 
   async function updateDraw(id: string, status: string, reason?: string) {
@@ -321,7 +352,13 @@ export default function AdminDrawsPage() {
                         )}
                       </td>
 
-                      <td className="px-4 py-3 text-center">{draw.lien_waiver ? '✅' : '❌'}</td>
+                      <td className="px-4 py-3 text-center text-xs">
+                        {draw.lien_waiver_nft_id
+                          ? <span className="font-bold" style={{ color: '#4ade80' }}>⬡ NFT</span>
+                          : draw.lien_waiver
+                          ? <span>✅</span>
+                          : <span style={{ color: '#e74c3c' }}>❌</span>}
+                      </td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--bc-muted)' }}>
                         {draw.submitted_at ? timeAgo(draw.submitted_at) : '—'}
                       </td>
@@ -329,25 +366,34 @@ export default function AdminDrawsPage() {
                         <span className={`badge ${statusBadge[draw.status] || 'badge-gray'}`}>{draw.status}</span>
                       </td>
 
-                      {/* XRPL escrow info */}
+                      {/* XRPL escrow + NFT info */}
                       <td className="px-4 py-3">
-                        {draw.escrow_txn_hash ? (
+                        {draw.escrow_txn_hash || draw.lien_waiver_nft_id || draw.verification_receipt ? (
                           <div className="text-xs space-y-0.5">
-                            <a href={`${TESTNET_EXPLORER}/${draw.escrow_txn_hash}`} target="_blank" rel="noreferrer"
-                              className="block font-mono hover:underline" style={{ color: 'var(--bc-blue)' }}>
-                              {draw.escrow_txn_hash.slice(0, 8)}…
-                            </a>
-                            {draw.escrow_finish_after && (
+                            {draw.escrow_txn_hash && (
+                              <a href={`${TESTNET_EXPLORER}/${draw.escrow_txn_hash}`} target="_blank" rel="noreferrer"
+                                className="block font-mono hover:underline" style={{ color: 'var(--bc-blue)' }}>
+                                {draw.escrow_txn_hash.slice(0, 8)}…
+                              </a>
+                            )}
+                            {draw.escrow_finish_after && !draw.escrow_finish_hash && (
                               <div style={{ color: 'var(--bc-muted)' }}>
                                 Unlocks {timeAgo(draw.escrow_finish_after)}
                               </div>
                             )}
-                            {draw.escrow_finish_hash && (
+                            {draw.lien_waiver_nft_id && (
+                              <div className="font-mono" style={{ color: '#4ade80' }}>
+                                LW⬡ {draw.lien_waiver_nft_id.slice(0, 6)}…
+                              </div>
+                            )}
+                            {draw.verification_receipt ? (
+                              <div className="font-bold" style={{ color: '#4ade80' }}>⬡ Auto-released</div>
+                            ) : draw.escrow_finish_hash ? (
                               <a href={`${TESTNET_EXPLORER}/${draw.escrow_finish_hash}`} target="_blank" rel="noreferrer"
                                 className="block font-mono hover:underline" style={{ color: '#2ecc71' }}>
                                 Released ↗
                               </a>
-                            )}
+                            ) : null}
                           </div>
                         ) : <span style={{ color: 'var(--bc-muted)' }}>—</span>}
                       </td>
@@ -375,22 +421,39 @@ export default function AdminDrawsPage() {
                           </div>
                         )}
 
-                        {/* Approved: release escrow */}
+                        {/* Approved: confirm lien waiver + manual release */}
                         {draw.status === 'approved' && (
-                          <button
-                            onClick={() => updateDraw(draw.id, 'funded')}
-                            disabled={actionLoading === draw.id + 'funded'}
-                            title="Finish XRPL escrow and release funds to borrower"
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
-                            style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
-                            {actionLoading === draw.id + 'funded' ? '…' : '↑ Release'}
-                          </button>
+                          <div className="space-y-1.5">
+                            {!draw.lien_waiver && (
+                              <button
+                                onClick={() => confirmLienWaiver(draw.id)}
+                                disabled={lienWaiverLoading === draw.id}
+                                title="Confirm lien waiver received — mints XLS-20 NFT + runs dual-condition check"
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all w-full"
+                                style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)' }}>
+                                {lienWaiverLoading === draw.id ? '⬡ …' : '✓ Lien Waiver'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => updateDraw(draw.id, 'funded')}
+                              disabled={actionLoading === draw.id + 'funded'}
+                              title="Manually release XRPL escrow — bypasses dual-condition check"
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all w-full"
+                              style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
+                              {actionLoading === draw.id + 'funded' ? '…' : '↑ Release'}
+                            </button>
+                          </div>
                         )}
 
                         {draw.status === 'funded' && draw.funded_at && (
-                          <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
-                            Funded {timeAgo(draw.funded_at)}
-                          </span>
+                          <div className="text-xs space-y-0.5">
+                            {draw.verification_receipt ? (
+                              <div className="font-semibold" style={{ color: '#4ade80' }}>⬡ Auto-released</div>
+                            ) : (
+                              <div style={{ color: 'var(--bc-muted)' }}>↑ Manual release</div>
+                            )}
+                            <div style={{ color: 'var(--bc-muted)' }}>{timeAgo(draw.funded_at)}</div>
+                          </div>
                         )}
                       </td>
                     </tr>
