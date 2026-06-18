@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
         user_id: lenderProfileId,
         type: 'draw_submitted',
         title: 'New draw submitted via Building Block',
-        message: `${proj.name} — Draw #${draw_number || draw.request_number} for ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(netAmount)} (net) is ready for review.`,
+        body: `${proj.name} — Draw #${draw_number || draw.request_number} for ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(netAmount)} (net) is ready for review.`,
         link: `/lender/approvals`,
       })
     }

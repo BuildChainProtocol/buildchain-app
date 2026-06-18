@@ -89,7 +89,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       projects (
         name, loan_amount, amount_drawn,
         borrowers ( profile_id, email, company_name ),
-        lenders   ( company_name )
+        lenders   ( profile_id, company_name )
       )
     `)
     .eq('id', drawId)
@@ -254,10 +254,11 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       }
     }
 
-    // Step (f): In-app notification
+    // Step (f): In-app notifications — borrower + lender
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
+
     if (borrowerRow?.profile_id) {
-      const fmt = (n: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
       await supabase.from('notifications').insert({
         user_id: borrowerRow.profile_id,
         type: 'draw_funded',
@@ -265,6 +266,20 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         body: `Draw ${draw.request_number} for ${fmt(draw.amount)} was automatically released — ` +
               `inspection and lien waiver were both verified on the XRP Ledger.`,
         link: '/borrower',
+      })
+    }
+
+    // Notify lender that the dual-condition auto-release fired — they need to know
+    // funds left escrow even though they didn't manually trigger it.
+    // lenderRow already has profile_id from the lenders(profile_id, company_name) sub-select above.
+    if (lenderRow?.profile_id) {
+      await supabase.from('notifications').insert({
+        user_id: lenderRow.profile_id,
+        type: 'draw_auto_funded',
+        title: '⬡ Draw Auto-Released',
+        body: `Draw ${draw.request_number} for ${fmt(draw.amount)} on ${project?.name ?? 'a project'} was automatically released — ` +
+              `inspector credential and lien waiver NFTs both verified on the XRP Ledger (Patent BLDCHN-001-P §V).`,
+        link: '/lender/approvals',
       })
     }
 

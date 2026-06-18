@@ -105,6 +105,21 @@ export async function POST(request: NextRequest) {
       })
       await sendEmail({ to: lenderEmail, subject, html })
     }
+
+    // ── In-app notification for lender ─────────────────────────────────────
+    const lenderProfileId = lenderRow?.profile_id
+    if (lenderProfileId) {
+      const fmt = (n: number) =>
+        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('notifications').insert({
+        user_id: lenderProfileId,
+        type: 'draw_submitted',
+        title: 'New Draw Request Submitted',
+        body: `${(borrowerProfile as any)?.full_name ?? (borrowerProfile as any)?.company_name ?? 'Borrower'} submitted draw ${(data as any).request_number} for ${fmt(body.amount)} on ${(project as any)?.name ?? 'their project'}.`,
+        link: '/lender/approvals',
+      })
+    }
   } catch (emailErr) {
     console.warn('[Email] draw_submitted notification skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
   }
