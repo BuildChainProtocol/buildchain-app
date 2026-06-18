@@ -75,13 +75,17 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
   const supabase = createClient(supabaseUrl, serviceKey)
 
   // ── Fetch draw with all verification fields ──────────────────────────────────
+  // NOTE: credential_nft_id lives on the inspections table (minted when inspection passes).
+  // We join inspections here and extract the credential NFT from the passed inspection.
+  // lien_waiver_nft_id lives directly on draw_requests (minted when lender confirms waiver).
   const { data: draw, error } = await supabase
     .from('draw_requests')
     .select(`
       id, status, amount, request_number, project_id,
       inspection_done, lien_waiver,
-      credential_nft_id, lien_waiver_nft_id,
+      lien_waiver_nft_id,
       escrow_sequence, escrow_txn_hash,
+      inspections!draw_request_id ( id, status, credential_nft_id ),
       projects (
         name, loan_amount, amount_drawn,
         borrowers ( profile_id, email, company_name ),
@@ -109,14 +113,23 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
   }
 
   // ── Evaluate both conditions (Patent §V) ─────────────────────────────────────
+  // credential_nft_id lives on inspections (minted when inspector passes).
+  // Find the passed inspection that has an on-ledger credential NFT.
+  const inspectionRows = (draw as any).inspections ?? []
+  const passedInspection = inspectionRows.find(
+    (i: { status: string; credential_nft_id: string | null }) =>
+      i.status === 'passed' && !!i.credential_nft_id
+  )
+  const credentialNftId: string | null = passedInspection?.credential_nft_id ?? null
+
   // Condition 1: inspector passed AND credential NFT is on-ledger
-  const inspectionCondition = draw.inspection_done === true && !!draw.credential_nft_id
+  const inspectionCondition = draw.inspection_done === true && !!credentialNftId
   // Condition 2: lien waiver confirmed AND lien waiver NFT is on-ledger
   const lienWaiverCondition = draw.lien_waiver === true && !!draw.lien_waiver_nft_id
 
   console.log(
     `[Orchestrator] Draw ${drawId}: ` +
-    `inspection=${inspectionCondition} (done=${draw.inspection_done}, nft=${draw.credential_nft_id ?? 'none'}) | ` +
+    `inspection=${inspectionCondition} (done=${draw.inspection_done}, nft=${credentialNftId ?? 'none'}) | ` +
     `lien_waiver=${lienWaiverCondition} (flag=${draw.lien_waiver}, nft=${draw.lien_waiver_nft_id ?? 'none'})`
   )
 
@@ -173,8 +186,8 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     // Step (a): Generate Verification Receipt (Patent §V)
     const verificationReceipt = {
       verified_at: new Date().toISOString(),
-      inspector_credential_nft: draw.credential_nft_id,
-      lien_waiver_nft: draw.lien_waiver_nft_id,
+      inspector_credential_nft: credentialNftId,   // from inspections table
+      lien_waiver_nft: draw.lien_waiver_nft_id,    // from draw_requests table
       escrow_finish_hash: escrowFinishHash,
       trigger: 'dual_condition_satisfied',
       patent_ref: 'BLDCHN-001-P §V',

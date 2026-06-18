@@ -26,6 +26,15 @@ interface LienWaiver {
   signed_by: string | null
 }
 
+interface VerificationReceipt {
+  verified_at: string
+  inspector_credential_nft: string | null
+  lien_waiver_nft: string | null
+  escrow_finish_hash: string | null
+  trigger: string
+  patent_ref: string
+}
+
 interface Draw {
   id: string
   request_number: string
@@ -43,6 +52,11 @@ interface Draw {
   escrow_finish_hash: string | null
   nft_token_id: string | null
   nft_mint_hash: string | null
+  // XRPL NFT columns from Migration 012 (Patent §IV + §III)
+  lien_waiver_nft_id: string | null
+  lien_waiver_nft_minted_at: string | null
+  // Verification Receipt — written by orchestrator when dual-condition satisfied (Patent §V)
+  verification_receipt: VerificationReceipt | null
   projects: { name: string; loan_number: string; loan_amount: number; amount_drawn: number }
 }
 
@@ -61,6 +75,7 @@ export default function LenderApprovalsPage() {
   const [detailLoading, setDetailLoading] = useState<string | null>(null)
   const [declineModal, setDeclineModal] = useState<Draw | null>(null)
   const [declineReason, setDeclineReason] = useState('')
+  const [lienWaiverLoading, setLienWaiverLoading] = useState<string | null>(null)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -91,6 +106,26 @@ export default function LenderApprovalsPage() {
     setDrawLines(prev => ({ ...prev, [drawId]: linesRes.data || [] }))
     setDrawWaivers(prev => ({ ...prev, [drawId]: waiversRes.data || [] }))
     setDetailLoading(null)
+  }
+
+  // Confirm lien waiver received — triggers NFT mint (taxon 2) + orchestrator (Patent §IV + §V)
+  async function confirmLienWaiver(id: string) {
+    setLienWaiverLoading(id)
+    setErrorMsg('')
+    const res = await fetch(`/api/draws/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lien_waiver: true }),
+    })
+    const json = await res.json()
+    if (res.ok) {
+      setToast({ msg: '⬡ Lien waiver confirmed — minting on-ledger NFT…', ok: true })
+      setTimeout(() => setToast(null), 5000)
+      fetchAll()
+    } else {
+      setErrorMsg(json.error || `Lien waiver confirmation failed (${res.status})`)
+    }
+    setLienWaiverLoading(null)
   }
 
   async function act(id: string, status: string, decline_reason?: string) {
@@ -244,7 +279,7 @@ export default function LenderApprovalsPage() {
             const ltv = draw.projects
               ? Math.round((draw.projects.amount_drawn + draw.amount) / draw.projects.loan_amount * 100)
               : 0
-            const hasXrplRecords = draw.escrow_txn_hash || draw.nft_token_id
+            const hasXrplRecords = draw.escrow_txn_hash || draw.nft_token_id || draw.lien_waiver_nft_id
 
             return (
               <div key={draw.id} className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
@@ -348,7 +383,17 @@ export default function LenderApprovalsPage() {
                             </a>
                           </div>
                         )}
-                        {!draw.escrow_txn_hash && !draw.nft_token_id && (
+                        {draw.lien_waiver_nft_id && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span style={{ color: 'var(--bc-muted)' }}>Lien Waiver NFT (§IV)</span>
+                            <a href={`${XRPL_EXPLORER}/nft/${draw.lien_waiver_nft_id}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="font-mono hover:underline" style={{ color: '#4ade80' }}>
+                              {draw.lien_waiver_nft_id.slice(0, 10)}…{draw.lien_waiver_nft_id.slice(-6)} ↗
+                            </a>
+                          </div>
+                        )}
+                        {!draw.escrow_txn_hash && !draw.nft_token_id && !draw.lien_waiver_nft_id && (
                           <p className="text-xs" style={{ color: 'var(--bc-muted)' }}>
                             XRPL integration pending configuration
                           </p>
@@ -490,15 +535,71 @@ export default function LenderApprovalsPage() {
                     )
                   })()}
 
-                  {/* Approved status footer */}
+                  {/* ── Dual-Condition Verification Panel (Patent §V) ──────────────── */}
                   {tab === 'approved' && !draw.funded_at && (
-                    <div className="flex items-center gap-2 text-xs pt-1" style={{ color: 'var(--bc-muted)' }}>
-                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'var(--bc-gold)' }}></span>
-                      Approved — admin release pending in Draws dashboard
+                    <div className="rounded-lg p-3 mt-1" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--bc-border)' }}>
+                      <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: 'var(--bc-muted)' }}>
+                        ⬡ Auto-Release Conditions (Patent §V)
+                      </p>
+                      <div className="space-y-2.5">
+                        {/* Condition 1 — Inspector Credential */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>① Inspector Credential</span>
+                          {draw.inspection_done ? (
+                            <span className="text-xs font-semibold" style={{ color: '#4ade80' }}>✅ Verified on-ledger</span>
+                          ) : (
+                            <span className="text-xs" style={{ color: '#e74c3c' }}>⏳ Awaiting inspection pass</span>
+                          )}
+                        </div>
+                        {/* Condition 2 — Lien Waiver NFT */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>② Lien Waiver NFT</span>
+                          {draw.lien_waiver ? (
+                            <span className="text-xs font-semibold" style={{ color: '#4ade80' }}>
+                              ✅ Confirmed{draw.lien_waiver_nft_id ? ' · on-ledger' : ''}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => confirmLienWaiver(draw.id)}
+                              disabled={lienWaiverLoading === draw.id}
+                              className="px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                              style={{
+                                background: lienWaiverLoading === draw.id ? 'rgba(243,156,18,0.4)' : 'var(--bc-gold)',
+                                color: 'var(--bc-dark)',
+                                opacity: lienWaiverLoading === draw.id ? 0.7 : 1,
+                              }}>
+                              {lienWaiverLoading === draw.id ? '⬡ Minting…' : '✓ Confirm Lien Waiver Received'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Status line */}
+                      {draw.inspection_done && draw.lien_waiver ? (
+                        <div className="mt-2.5 pt-2 border-t text-xs font-semibold" style={{ borderColor: 'var(--bc-border)', color: '#4ade80' }}>
+                          Both conditions met — orchestrator is processing auto-release…
+                        </div>
+                      ) : (
+                        <div className="mt-2.5 pt-2 border-t text-xs" style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
+                          Both conditions required simultaneously to trigger automatic escrow release
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {tab === 'approved' && draw.funded_at && (
+                  {tab === 'approved' && draw.funded_at && draw.verification_receipt && (
+                    <div className="rounded-lg px-3 py-2 mt-1" style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)' }}>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold" style={{ color: '#4ade80' }}>
+                          ⬡ Dual-condition auto-released
+                        </span>
+                        <span style={{ color: 'var(--bc-muted)' }}>
+                          {timeAgo(draw.verification_receipt.verified_at)} · {draw.verification_receipt.patent_ref}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {tab === 'approved' && draw.funded_at && !draw.verification_receipt && (
                     <div className="flex items-center gap-2 text-xs pt-1" style={{ color: '#4ade80' }}>
                       <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#4ade80' }}></span>
                       Funded {timeAgo(draw.funded_at)}
