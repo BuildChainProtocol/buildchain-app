@@ -38,7 +38,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (body.status === 'approved') {
     updates.approved_by = user.id
 
-    // XRPL EscrowCreate (optional — non-fatal if ESM/connection fails)
+    // XRPL EscrowCreate — now includes drawRequestId + projectId for on-ledger memo
     try {
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
       if (isXrplConfigured()) {
@@ -46,6 +46,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         const escrow = await createDrawEscrow({
           destinationAddress: borrowerXrpAddress,
           drawAmountUsd: draw.amount,
+          drawRequestId: params.id,
+          projectId: draw.project_id,
         })
         updates.escrow_sequence     = escrow.escrowSequence
         updates.escrow_txn_hash     = escrow.txnHash
@@ -64,15 +66,29 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // The loan-level NFT (minted at project origination) is the digital title.
   }
 
-  // ─── FUND: Finish XRPL escrow + update project drawn amount ────────────────
+  // ─── FUND: Manual lender-triggered fund ────────────────────────────────────
+  // NOTE: Draws with both on-ledger conditions met (inspection credential NFT +
+  // lien waiver NFT) are automatically funded by the Verification Orchestrator
+  // (lib/xrpl/orchestrator.ts) without requiring this manual path.
+  // This path remains as a fallback for draws without on-ledger NFTs.
   if (body.status === 'funded') {
+    // Guard: prevent double-funding if the orchestrator already auto-funded this draw
+    if (draw.status === 'funded') {
+      console.log(`[Draws] Draw ${params.id} is already funded — skipping duplicate fund request`)
+      return NextResponse.json({ data: draw })
+    }
+
     updates.funded_at = new Date().toISOString()
 
     try {
       const { isXrplConfigured, finishDrawEscrow } = await import('@/lib/xrpl/escrow')
 
       if (isXrplConfigured() && draw.escrow_sequence != null) {
-        const finish = await finishDrawEscrow({ escrowSequence: draw.escrow_sequence })
+        const finish = await finishDrawEscrow({
+          escrowSequence: draw.escrow_sequence,
+          drawRequestId: params.id,
+          trigger: 'manual',
+        })
         updates.escrow_finish_hash = finish.txnHash
         console.log(`[XRPL] EscrowFinish OK — hash ${finish.txnHash}`)
       }
@@ -108,7 +124,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   await supabase.from('activity_log').insert({
     project_id: updated.project_id,
     user_id: user.id,
-    action: `draw_${body.status}`,
+    action: `draw_${body.status ?? 'updated'}`,
     entity_type: 'draw_request',
     entity_id: params.id,
     details: {
@@ -119,6 +135,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       ...(body.status === 'funded' && updated.escrow_finish_hash
         ? { xrpl_finish_hash: updated.escrow_finish_hash }
         : {}),
+      ...(body.lien_waiver === true ? { lien_waiver_confirmed: true } : {}),
     },
   })
 
@@ -224,7 +241,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     console.warn('[Email] draw status email/notification skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
   }
 
-  // ── Step 5: Webhook back to Building Block ───────────────
+  // ── Webhook back to Building Block ───────────────────────────────────────
   // Fires on approved, declined, and funded — lets the GC see status in real time
   try {
     const webhookUrl = process.env.BUILDINGBLOCK_WEBHOOK_URL
@@ -257,6 +274,63 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
   } catch (webhookErr) {
     console.warn('[Webhook] Building Block webhook error:', webhookErr instanceof Error ? webhookErr.message : webhookErr)
+  }
+
+  // ── Lien Waiver NFT + Verification Orchestrator (Patent §IV + §V) ────────────
+  // When the lender confirms a lien waiver (lien_waiver=true), mint the XLS-20
+  // Lien Waiver NFT and run the orchestrator to check dual-condition release.
+  //
+  // This is fire-and-forget (async IIFE) — does not block the PATCH response.
+  // The inspector confirmation path is handled in app/api/inspections/[token]/route.ts.
+  if (body.lien_waiver === true && updated.status === 'approved') {
+    ;(async () => {
+      try {
+        const { isXrplConfigured, mintLienWaiverNFT } = await import('@/lib/xrpl/escrow')
+        const { runOrchestrator } = await import('@/lib/xrpl/orchestrator')
+
+        if (isXrplConfigured()) {
+          // Mint Lien Waiver NFT (XLS-20, taxon 2) — Patent §IV
+          const nft = await mintLienWaiverNFT({
+            drawRequestId: params.id,
+            drawNumber: updated.request_number,
+            projectId: updated.project_id,
+            projectName: (draw.projects as any)?.name ?? 'Unknown Project',
+            drawAmount: updated.amount,
+            waiverType: 'conditional',
+            // throughDate and gcSignatureHash will be populated when GC signs via BuildingBlock
+            // For now, the lender's confirmation triggers the NFT as proxy for GC waiver receipt
+          })
+
+          // Store NFT fields on draw record
+          await supabase
+            .from('draw_requests')
+            .update({
+              lien_waiver_nft_id:        nft.nftTokenId,
+              lien_waiver_nft_hash:      nft.txnHash,
+              lien_waiver_nft_minted_at: new Date().toISOString(),
+            })
+            .eq('id', params.id)
+
+          console.log(`[Draws] Lien Waiver NFT minted — ID ${nft.nftTokenId} hash ${nft.txnHash}`)
+        } else {
+          console.log('[Draws] XRPL not configured — skipping lien waiver NFT mint')
+        }
+
+        // Run Verification Orchestrator — checks if inspector credential NFT
+        // is also present and auto-releases escrow if dual-condition is satisfied
+        const orchResult = await runOrchestrator(params.id)
+        console.log(
+          `[Draws] Orchestrator result for draw ${params.id}:`,
+          `conditions=${orchResult.conditionsMet}`,
+          orchResult.escrowFinished ? `auto-funded! hash=${orchResult.finishHash}` : orchResult.reason
+        )
+      } catch (err) {
+        console.warn(
+          '[Draws] Lien waiver NFT/Orchestrator non-fatal error:',
+          err instanceof Error ? err.message : err
+        )
+      }
+    })()
   }
 
   return NextResponse.json({ data: updated })
