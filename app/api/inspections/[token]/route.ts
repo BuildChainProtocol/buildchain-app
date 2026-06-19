@@ -10,6 +10,8 @@
  */
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { sendEmail } from '@/lib/email/send'
+import { inspectionPassedEmail, inspectionFailedEmail } from '@/lib/email/templates'
 
 export const runtime = 'nodejs'
 
@@ -111,6 +113,105 @@ export async function PATCH(
       },
     })
   } catch { /* non-fatal */ }
+
+  // ── In-app + email notifications: borrower (pass/fail) + lender (pass only) ──
+  try {
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
+
+    // Fetch draw + project + borrower + lender profile data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: drawCtx } = await (supabase as any)
+      .from('draw_requests')
+      .select(`
+        request_number, amount, phase, purpose,
+        projects (
+          name,
+          borrowers ( profile_id, email, company_name ),
+          lenders   ( profile_id )
+        )
+      `)
+      .eq('id', (inspection as any).draw_request_id)
+      .single()
+
+    const project      = (drawCtx as any)?.projects
+    const borrowerRow  = project?.borrowers
+    const lenderRow    = project?.lenders
+    const drawNumber   = (drawCtx as any)?.request_number ?? '—'
+    const drawAmount   = (drawCtx as any)?.amount ?? 0
+    const phase        = (drawCtx as any)?.phase ?? (drawCtx as any)?.purpose ?? null
+    const projectName  = project?.name ?? 'your project'
+
+    // Get borrower email from profiles table
+    let borrowerEmail: string | null = null
+    let borrowerName = 'Borrower'
+    if (borrowerRow?.profile_id) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: bp } = await (supabase as any)
+        .from('profiles').select('email, full_name, company_name').eq('id', borrowerRow.profile_id).single()
+      borrowerEmail = (bp as any)?.email ?? borrowerRow.email ?? null
+      borrowerName  = (bp as any)?.full_name ?? (bp as any)?.company_name ?? borrowerRow.company_name ?? 'Borrower'
+    }
+
+    // In-app: notify borrower of inspection result
+    if (borrowerRow?.profile_id) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('notifications').insert({
+        user_id: borrowerRow.profile_id,
+        type: status === 'passed' ? 'inspection_passed' : 'inspection_failed',
+        title: status === 'passed'
+          ? '✓ Inspection Passed'
+          : 'Inspection Not Passed',
+        body: status === 'passed'
+          ? `Inspection for Draw #${drawNumber} on ${projectName} passed. Your lender will confirm the lien waiver to complete dual-condition release.`
+          : `Inspection for Draw #${drawNumber} on ${projectName} was not approved${notes ? `: ${notes.trim()}` : '. Contact your lender for next steps.'}`,
+        link: '/borrower',
+      })
+    }
+
+    // In-app: notify lender when inspection PASSES — they need to confirm lien waiver next
+    if (status === 'passed' && lenderRow?.profile_id) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('notifications').insert({
+        user_id: lenderRow.profile_id,
+        type: 'inspection_condition_met',
+        title: '⬡ Condition 1 Satisfied — Action Required',
+        body: `Inspector credential NFT minted for Draw #${drawNumber} (${fmt(drawAmount)}) on ${projectName}. Confirm the lien waiver to trigger dual-condition auto-release.`,
+        link: '/lender/approvals',
+      })
+    }
+
+    // Email borrower
+    if (borrowerEmail && drawCtx) {
+      try {
+        if (status === 'passed') {
+          const { subject, html } = inspectionPassedEmail({
+            borrowerName,
+            projectName,
+            drawNumber,
+            drawAmount,
+            inspectorName: (updated as any).inspector_name ?? null,
+            phase,
+          })
+          await sendEmail({ to: borrowerEmail, subject, html })
+        } else {
+          const { subject, html } = inspectionFailedEmail({
+            borrowerName,
+            projectName,
+            drawNumber,
+            drawAmount,
+            inspectorName: (updated as any).inspector_name ?? null,
+            notes: notes?.trim() ?? null,
+          })
+          await sendEmail({ to: borrowerEmail, subject, html })
+        }
+      } catch (emailErr) {
+        console.warn('[Inspections] Email send failed (non-fatal):', emailErr instanceof Error ? emailErr.message : emailErr)
+      }
+    }
+  } catch (notifErr) {
+    console.warn('[Inspections] Notification block failed (non-fatal):', notifErr instanceof Error ? notifErr.message : notifErr)
+  }
 
   // ── On-ledger credential NFT + Orchestrator (Patent §III + §V) ──────────────
   // Only runs when inspection passes — failed inspections do not trigger NFT mint

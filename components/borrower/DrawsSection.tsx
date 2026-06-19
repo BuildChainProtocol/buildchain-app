@@ -4,6 +4,15 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 
+interface VerificationReceipt {
+  verified_at: string
+  inspector_credential_nft: string | null
+  lien_waiver_nft: string | null
+  escrow_finish_hash: string | null
+  trigger: string
+  patent_ref: string
+}
+
 interface Draw {
   id: string
   request_number: string
@@ -17,12 +26,28 @@ interface Draw {
   status: string
   decline_reason: string | null
   submitted_at: string | null
+  funded_at: string | null
+  // Verification flags
   inspection_done: boolean
   lien_waiver: boolean
+  // XRPL on-ledger state (Migration 012)
+  lien_waiver_nft_id: string | null
+  lien_waiver_nft_minted_at: string | null
+  escrow_txn_hash: string | null
+  escrow_finish_hash: string | null
+  verification_receipt: VerificationReceipt | null
   projects: {
     name: string
     loan_number: string | null
   } | null
+}
+
+function timeAgo(iso: string): string {
+  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (secs < 60)   return 'just now'
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
+  return `${Math.floor(secs / 86400)}d ago`
 }
 
 // Status values must match the draw_requests.status CHECK constraint in the DB:
@@ -250,7 +275,7 @@ export default function BorrowerDrawsSection() {
                 )}
 
                 {/* Meta row */}
-                <div className="flex items-center gap-3 flex-wrap" style={{ color: 'var(--bc-muted)', fontSize: 11 }}>
+                <div className="flex items-center gap-3 flex-wrap mb-3" style={{ color: 'var(--bc-muted)', fontSize: 11 }}>
                   {draw.phase && <span>📍 {draw.phase}</span>}
                   {draw.submitted_at && (
                     <span>
@@ -259,16 +284,75 @@ export default function BorrowerDrawsSection() {
                       })}
                     </span>
                   )}
-                  {draw.inspection_done && (
-                    <span style={{ color: '#2ecc71' }}>✓ Inspection</span>
-                  )}
-                  {draw.lien_waiver && (
-                    <span style={{ color: '#2ecc71' }}>✓ Lien waivers</span>
-                  )}
                   {draw.retainage_rate != null && (
                     <span>{Math.round(draw.retainage_rate * 100)}% retainage</span>
                   )}
                 </div>
+
+                {/* XRPL Dual-Condition Panel — shown on approved draws */}
+                {draw.status === 'approved' && (
+                  <div className="rounded-lg border p-3"
+                    style={{ background: 'rgba(45,125,210,0.04)', borderColor: 'rgba(45,125,210,0.2)' }}>
+                    <div className="text-xs font-bold mb-2" style={{ color: 'var(--bc-blue)' }}>
+                      ⬡ On-Chain Verification (Patent BLDCHN-001-P)
+                    </div>
+                    <div className="space-y-1.5">
+                      {/* Condition 1: Inspector Credential */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span style={{ color: 'var(--bc-muted)' }}>① Inspector Credential</span>
+                        {draw.inspection_done ? (
+                          <span style={{ color: '#2ecc71' }}>✅ Verified</span>
+                        ) : (
+                          <span style={{ color: 'var(--bc-muted)' }}>⏳ Awaiting inspection</span>
+                        )}
+                      </div>
+                      {/* Condition 2: Lien Waiver NFT */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span style={{ color: 'var(--bc-muted)' }}>② Lien Waiver NFT</span>
+                        {draw.lien_waiver_nft_id ? (
+                          <span style={{ color: '#2ecc71' }}>✅ On-ledger</span>
+                        ) : draw.lien_waiver ? (
+                          <span style={{ color: '#f39c12' }}>⏳ Confirmed — minting NFT…</span>
+                        ) : (
+                          <span style={{ color: 'var(--bc-muted)' }}>⏳ Awaiting lender confirmation</span>
+                        )}
+                      </div>
+                    </div>
+                    {draw.inspection_done && draw.lien_waiver && (
+                      <div className="mt-2 text-xs font-semibold" style={{ color: '#f39c12' }}>
+                        Both conditions met — orchestrator processing auto-release…
+                      </div>
+                    )}
+                    {draw.escrow_txn_hash && (
+                      <div className="mt-2 text-xs" style={{ color: 'var(--bc-muted)' }}>
+                        Escrow:{' '}
+                        <a
+                          href={`https://testnet.xrpl.org/transactions/${draw.escrow_txn_hash}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="font-mono" style={{ color: 'var(--bc-blue)' }}>
+                          {draw.escrow_txn_hash.slice(0, 10)}…
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Funded: show auto-release badge or plain funded line */}
+                {draw.status === 'funded' && (
+                  <div className="mt-1">
+                    {draw.verification_receipt ? (
+                      <div className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-semibold"
+                        style={{ background: 'rgba(46,204,113,0.12)', color: '#2ecc71', border: '1px solid rgba(46,204,113,0.25)' }}>
+                        ⬡ Dual-condition auto-released
+                        {draw.funded_at ? ` · ${timeAgo(draw.funded_at)}` : ''}
+                      </div>
+                    ) : (
+                      <div className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                        Funded{draw.funded_at ? ` · ${timeAgo(draw.funded_at)}` : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             )

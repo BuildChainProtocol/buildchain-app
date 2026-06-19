@@ -225,6 +225,90 @@ export function drawFundedEmail(o: DrawFundedOpts) {
   return { subject, html }
 }
 
+// ─── INSPECTION PASSED → borrower ───────────────────────────────────────────
+
+interface InspectionPassedOpts {
+  borrowerName: string
+  projectName: string
+  drawNumber: string
+  drawAmount: number
+  inspectorName: string | null
+  phase?: string | null
+}
+
+export function inspectionPassedEmail(o: InspectionPassedOpts) {
+  const subject = `Inspection passed — Draw #${o.drawNumber} on ${o.projectName}`
+  const html = base(`
+    <h2 style="color:#2ecc71;font-size:20px;font-weight:700;margin:0 0 8px;">✓ Inspection Passed</h2>
+    <p style="color:${MUTED};font-size:14px;margin:0 0 24px;">
+      The on-site inspection for Draw #${o.drawNumber} has been completed and approved.
+      An inspector credential has been recorded on the XRP Ledger.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${BORDER};">
+      ${keyval('Project', o.projectName)}
+      ${keyval('Draw', `#${o.drawNumber} · ${formatUSD(o.drawAmount)}`)}
+      ${o.phase ? keyval('Phase', o.phase) : ''}
+      ${o.inspectorName ? keyval('Inspector', o.inspectorName) : ''}
+    </table>
+
+    <div style="background:rgba(46,204,113,0.06);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:12px 16px;margin-top:16px;">
+      <p style="color:#2ecc71;font-size:13px;font-weight:700;margin:0 0 4px;">What happens next</p>
+      <p style="color:${MUTED};font-size:13px;margin:0;">
+        Your lender will review and confirm the lien waiver. Once both the inspector credential
+        and lien waiver are verified on-chain, funds will be released automatically.
+      </p>
+    </div>
+
+    ${btn('View Dashboard', `${APP_URL}/borrower`)}
+  `)
+  return { subject, html }
+}
+
+// ─── INSPECTION FAILED → borrower ────────────────────────────────────────────
+
+interface InspectionFailedOpts {
+  borrowerName: string
+  projectName: string
+  drawNumber: string
+  drawAmount: number
+  inspectorName: string | null
+  notes?: string | null
+}
+
+export function inspectionFailedEmail(o: InspectionFailedOpts) {
+  const subject = `Inspection not passed — Draw #${o.drawNumber} on ${o.projectName}`
+  const notesLine = o.notes
+    ? `<div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:8px;padding:12px 16px;margin-top:16px;">
+         <p style="color:${MUTED};font-size:12px;margin:0 0 4px;font-weight:600;">INSPECTOR NOTES</p>
+         <p style="color:${LIGHT};font-size:13px;margin:0;">${o.notes}</p>
+       </div>`
+    : ''
+
+  const html = base(`
+    <h2 style="color:#e74c3c;font-size:20px;font-weight:700;margin:0 0 8px;">Inspection Not Passed</h2>
+    <p style="color:${MUTED};font-size:14px;margin:0 0 24px;">
+      The on-site inspection for Draw #${o.drawNumber} was not approved.
+      This draw request cannot be funded until the inspection is cleared.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${BORDER};">
+      ${keyval('Project', o.projectName)}
+      ${keyval('Draw', `#${o.drawNumber} · ${formatUSD(o.drawAmount)}`)}
+      ${o.inspectorName ? keyval('Inspector', o.inspectorName) : ''}
+    </table>
+
+    ${notesLine}
+
+    <p style="color:${MUTED};font-size:13px;margin-top:16px;">
+      Please contact your lender to schedule a re-inspection or address the items noted above.
+    </p>
+
+    ${btn('View Dashboard', `${APP_URL}/borrower`)}
+  `)
+  return { subject, html }
+}
+
 // ─── DOCUMENT UPLOADED → admin ───────────────────────────────────────────────
 
 interface DocUploadedOpts {
