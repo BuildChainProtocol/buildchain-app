@@ -41,7 +41,7 @@ function base(body: string): string {
         <tr><td style="padding-top:20px;text-align:center;">
           <p style="color:${MUTED};font-size:12px;margin:0;">
             BuildChain Protocol · Construction Loan Management<br/>
-            <a href="${APP_URL}" style="color:${MUTED};">buildchain-app.vercel.app</a>
+            <a href="${APP_URL}" style="color:${MUTED};">buildchain.finance</a>
           </p>
         </td></tr>
 
