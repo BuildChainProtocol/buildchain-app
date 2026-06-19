@@ -196,7 +196,7 @@ export default async function Home() {
           {/* Right */}
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <Link href="/login" style={{ fontSize:13, color:'#4a6a86', textDecoration:'none', fontWeight:500 }}>Log in</Link>
-            <a href="mailto:jcaruso27@yahoo.com?subject=BuildChain Demo Request"
+            <a href="mailto:jason@buildchain.finance?subject=BuildChain Demo Request"
               style={{
                 background:'linear-gradient(135deg,#c9a84c 0%,#e8c97a 100%)',
                 color:'#080e16', fontWeight:800, fontSize:13,
@@ -223,7 +223,7 @@ export default async function Home() {
               <div style={{ width:7, height:7, borderRadius:'50%', background:'#c9a84c',
                 boxShadow:'0 0 8px rgba(201,168,76,.8)' }} />
               <span style={{ fontSize:12, fontWeight:700, color:'#c9a84c', letterSpacing:'.04em' }}>
-                Patent-Protected · BLDCHN-001-P · Powered by XRP Ledger
+                Patent Pending · BLDCHN-001-P · Powered by XRP Ledger · Arizona Construction Finance
               </span>
             </div>
 
@@ -240,10 +240,25 @@ export default async function Home() {
             </p>
 
             <div style={{ display:'flex', gap:14, justifyContent:'center', flexWrap:'wrap', marginBottom:88 }}>
-              <a href="mailto:jcaruso27@yahoo.com?subject=BuildChain Demo Request" className="btn-gold">
+              <a href="mailto:jason@buildchain.finance?subject=BuildChain Demo Request" className="btn-gold">
                 Get Early Access →
               </a>
               <a href="#how-it-works" className="btn-ghost">See how it works</a>
+            </div>
+
+            {/* Pilot CTA strip */}
+            <div style={{
+              display:'inline-flex', alignItems:'center', gap:12, flexWrap:'wrap',
+              justifyContent:'center', marginBottom:48,
+              background:'rgba(45,125,210,.05)', border:'1px solid rgba(45,125,210,.15)',
+              borderRadius:12, padding:'14px 24px',
+            }}>
+              <span style={{ fontSize:13, fontWeight:700, color:'#e8edf2' }}>🏗 90-Day Lender Pilot Program</span>
+              <span style={{ fontSize:12, color:'#4a6a86' }}>5 active loans · no cost · full ROI analysis at close</span>
+              <a href="mailto:jason@buildchain.finance?subject=BuildChain Pilot Program Inquiry"
+                style={{ fontSize:12, fontWeight:700, color:'#2d7dd2', textDecoration:'none' }}>
+                Apply now →
+              </a>
             </div>
 
             {/* ── PLATFORM PREVIEW MOCKUP ── */}
@@ -477,10 +492,10 @@ export default async function Home() {
               border:'1px solid rgba(255,255,255,.06)', borderRadius:16, overflow:'hidden',
             }}>
               {[
-                { v:'$0', l:'Manual intervention required', note:'for each draw release' },
-                { v:'3–5s', l:'XRPL settlement speed', note:'vs. 3–5 days legacy wire' },
-                { v:'2', l:'On-chain conditions required', note:'simultaneously — both, always' },
-                { v:'100%', l:'Immutable audit trail', note:'every draw, every release' },
+                { v:'89%', l:'Reduction in draw cycle time', note:'14 days → under 48 hours' },
+                { v:'$4.6M+', l:'Annual value per $200M portfolio', note:'fraud reduction + admin savings' },
+                { v:'100%', l:'Lien waiver compliance rate', note:'guaranteed — on-chain, immutable' },
+                { v:'3–5s', l:'XRPL settlement finality', note:'vs. 3–5 days by legacy wire' },
               ].map((s,i) => (
                 <div key={i} style={{ background:'rgba(8,14,22,.8)', padding:'28px 22px' }}>
                   <div className="grad-stat" style={{ fontSize:36, fontWeight:900, letterSpacing:'-1.5px' }}>{s.v}</div>
@@ -699,7 +714,7 @@ export default async function Home() {
               Whether you fund projects, develop them, or build them — BuildChain eliminates the friction between your world and capital.
             </p>
             <div style={{ display:'flex', gap:14, justifyContent:'center', flexWrap:'wrap' }}>
-              <a href="mailto:jcaruso27@yahoo.com?subject=BuildChain Early Access" className="btn-gold" style={{ fontSize:16, padding:'16px 36px' }}>
+              <a href="mailto:jason@buildchain.finance?subject=BuildChain Early Access" className="btn-gold" style={{ fontSize:16, padding:'16px 36px' }}>
                 Request Early Access →
               </a>
               <Link href="/login" className="btn-ghost" style={{ padding:'16px 28px' }}>

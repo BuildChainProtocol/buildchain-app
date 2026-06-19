@@ -4,7 +4,7 @@
  * Keep HTML inline-styled for maximum email client compatibility.
  */
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://buildchain-app.vercel.app'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://buildchain.finance'
 
 const DARK    = '#0d1b2a'
 const NAVY    = '#0f2133'
