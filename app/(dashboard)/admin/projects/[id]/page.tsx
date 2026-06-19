@@ -30,6 +30,7 @@ export default function ProjectDetailPage() {
   const [tab, setTab] = useState<'overview' | 'draws' | 'documents' | 'budget' | 'activity'>('overview')
   const [stageUpdating, setStageUpdating] = useState(false)
   const [drawActionId, setDrawActionId] = useState<string | null>(null)
+  const [lienWaiverLoading, setLienWaiverLoading] = useState<string | null>(null)
   const [docActionId, setDocActionId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
 
@@ -66,6 +67,23 @@ export default function ProjectDetailPage() {
     setDrawActionId(null)
     setToast(`Draw ${status}`)
     setTimeout(() => setToast(''), 3000)
+  }
+
+  async function confirmLienWaiver(drawId: string) {
+    setLienWaiverLoading(drawId)
+    const res = await fetch(`/api/draws/${drawId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lien_waiver: true }),
+    })
+    await load()
+    setLienWaiverLoading(null)
+    if (res.ok) {
+      setToast('⬡ Lien waiver confirmed — minting on-ledger NFT…')
+    } else {
+      setToast('Lien waiver confirmation failed')
+    }
+    setTimeout(() => setToast(''), 5000)
   }
 
   async function updateDoc(docId: string, status: 'approved' | 'rejected') {
@@ -367,8 +385,8 @@ export default function ProjectDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--bc-border)' }}>
-                  {['Request #', 'Amount', 'Phase', 'Submitted', 'Status', 'XRPL', 'Actions'].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--bc-muted)' }}>{h}</th>
+                  {['Request #', 'Amount', 'Phase', 'Submitted', 'Status', 'Verification', 'Actions'].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--bc-muted)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -376,18 +394,59 @@ export default function ProjectDetailPage() {
                 {draws.map((d: any) => (
                   <tr key={d.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
                     <td className="px-4 py-3 font-bold" style={{ color: 'var(--bc-gold)' }}>{d.request_number}</td>
-                    <td className="px-4 py-3 font-semibold">{formatCurrency(d.amount)}</td>
+                    <td className="px-4 py-3 font-semibold whitespace-nowrap">{formatCurrency(d.amount)}</td>
                     <td className="px-4 py-3 text-xs">{d.phase || d.purpose || '—'}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--bc-muted)' }}>{d.submitted_at ? timeAgo(d.submitted_at) : '—'}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--bc-muted)' }}>{d.submitted_at ? timeAgo(d.submitted_at) : '—'}</td>
                     <td className="px-4 py-3"><span className={`badge ${drawStatusBadge[d.status] || 'badge-gray'}`}>{d.status}</span></td>
+
+                    {/* Verification column — dual-condition NFT state (Patent BLDCHN-001-P §V) */}
                     <td className="px-4 py-3">
-                      {d.escrow_txn_hash ? (
+                      {d.verification_receipt ? (
+                        // Dual-condition auto-released
+                        <div className="text-xs font-semibold" style={{ color: '#2ecc71' }}>
+                          ⬡ Auto-released
+                          {d.funded_at && <div className="font-normal mt-0.5" style={{ color: 'var(--bc-muted)' }}>{timeAgo(d.funded_at)}</div>}
+                        </div>
+                      ) : d.status === 'funded' ? (
+                        // Manual release (no receipt)
+                        <div className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                          ↑ Manual{d.funded_at ? ` · ${timeAgo(d.funded_at)}` : ''}
+                        </div>
+                      ) : d.status === 'approved' ? (
+                        // Show dual-condition progress
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span style={{ color: d.inspection_done ? '#2ecc71' : 'var(--bc-muted)' }}>
+                              {d.inspection_done ? '✅' : '⏳'}
+                            </span>
+                            <span style={{ color: d.inspection_done ? '#2ecc71' : 'var(--bc-muted)' }}>Inspect</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span style={{ color: d.lien_waiver_nft_id ? '#2ecc71' : d.lien_waiver ? '#f39c12' : 'var(--bc-muted)' }}>
+                              {d.lien_waiver_nft_id ? '⬡' : d.lien_waiver ? '✓' : '⏳'}
+                            </span>
+                            <span style={{ color: d.lien_waiver_nft_id ? '#2ecc71' : d.lien_waiver ? '#f39c12' : 'var(--bc-muted)' }}>
+                              {d.lien_waiver_nft_id ? 'LW NFT' : d.lien_waiver ? 'LW conf.' : 'LW pending'}
+                            </span>
+                          </div>
+                          {d.escrow_txn_hash && (
+                            <a href={`${TESTNET_EXPLORER}/${d.escrow_txn_hash}`} target="_blank" rel="noreferrer"
+                              className="font-mono hover:underline block" style={{ color: 'var(--bc-blue)', fontSize: 10 }}>
+                              escrow {d.escrow_txn_hash.slice(0, 6)}…
+                            </a>
+                          )}
+                        </div>
+                      ) : d.escrow_txn_hash ? (
                         <a href={`${TESTNET_EXPLORER}/${d.escrow_txn_hash}`} target="_blank" rel="noreferrer"
                           className="text-xs font-mono hover:underline" style={{ color: 'var(--bc-blue)' }}>
                           {d.escrow_txn_hash.slice(0, 8)}…
                         </a>
-                      ) : <span style={{ color: 'var(--bc-muted)' }}>—</span>}
+                      ) : (
+                        <span style={{ color: 'var(--bc-muted)', fontSize: 12 }}>—</span>
+                      )}
                     </td>
+
+                    {/* Actions */}
                     <td className="px-4 py-3">
                       {['submitted', 'pending'].includes(d.status) && (
                         <div className="flex gap-1.5">
@@ -406,14 +465,27 @@ export default function ProjectDetailPage() {
                         </div>
                       )}
                       {d.status === 'approved' && (
-                        <button onClick={() => updateDraw(d.id, 'funded')}
-                          disabled={drawActionId === d.id + 'funded'}
-                          className="px-2 py-1 rounded text-xs font-bold"
-                          style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
-                          {drawActionId === d.id + 'funded' ? '…' : '↑ Release'}
-                        </button>
+                        <div className="flex flex-col gap-1">
+                          {/* Lien waiver confirm — triggers NFT mint + orchestrator */}
+                          {!d.lien_waiver && (
+                            <button
+                              onClick={() => confirmLienWaiver(d.id)}
+                              disabled={lienWaiverLoading === d.id}
+                              className="px-2 py-1 rounded text-xs font-bold whitespace-nowrap"
+                              style={{ background: 'rgba(46,204,113,0.15)', color: '#2ecc71' }}>
+                              {lienWaiverLoading === d.id ? '…' : '✓ Lien Waiver'}
+                            </button>
+                          )}
+                          {/* Manual release — fallback if dual-condition doesn't fire */}
+                          <button onClick={() => updateDraw(d.id, 'funded')}
+                            disabled={drawActionId === d.id + 'funded'}
+                            className="px-2 py-1 rounded text-xs font-bold whitespace-nowrap"
+                            style={{ background: 'rgba(243,156,18,0.15)', color: 'var(--bc-gold)' }}>
+                            {drawActionId === d.id + 'funded' ? '…' : '↑ Release'}
+                          </button>
+                        </div>
                       )}
-                      {d.status === 'funded' && (
+                      {d.status === 'funded' && !d.verification_receipt && (
                         <span className="text-xs" style={{ color: '#2ecc71' }}>Funded {d.funded_at ? timeAgo(d.funded_at) : ''}</span>
                       )}
                     </td>
