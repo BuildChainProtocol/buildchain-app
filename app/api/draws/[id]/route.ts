@@ -120,6 +120,43 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
+  // ─── BB webhook: draw approved (fire-and-forget, non-blocking) ────────
+  if (body.status === 'approved') {
+    try {
+      const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+      // Await so any log lines from the webhook show up before the response returns;
+      // sender is 10s timeout + swallows errors, so this can't block or throw.
+      await sendBuildingBlockWebhook({
+        event: 'draw_approved',
+        bc_draw_id: params.id,
+        escrow_txn_hash: updated.escrow_txn_hash ?? null,
+        xrpl_sequence:   updated.escrow_sequence ?? null,
+        escrow_finish_after: updated.escrow_finish_after ?? null,
+        approved_by:     user.id,
+        approved_at:     updates.reviewed_at,
+        amount:          updated.amount,
+        net_amount:      updated.net_amount,
+      })
+    } catch (webhookErr) {
+      console.warn('[BB webhook] draw_approved dispatch failed (non-fatal):', webhookErr)
+    }
+  }
+  if (body.status === 'funded') {
+    // Manual funded path (orchestrator fires escrow_released webhook separately).
+    try {
+      const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+      await sendBuildingBlockWebhook({
+        event: 'escrow_released',
+        bc_draw_id: params.id,
+        escrow_finish_hash: updated.escrow_finish_hash ?? null,
+        funded_at: updates.reviewed_at,
+        net_amount: updated.net_amount,
+      })
+    } catch (webhookErr) {
+      console.warn('[BB webhook] escrow_released dispatch failed (non-fatal):', webhookErr)
+    }
+  }
+
   // Activity log
   await supabase.from('activity_log').insert({
     project_id: updated.project_id,
@@ -312,6 +349,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             .eq('id', params.id)
 
           console.log(`[Draws] Lien Waiver NFT minted — ID ${nft.nftTokenId} hash ${nft.txnHash}`)
+
+          // BB webhook: waiver NFT minted
+          try {
+            const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+            await sendBuildingBlockWebhook({
+              event: 'waiver_nft_minted',
+              bc_draw_id: params.id,
+              nft_token_id: nft.nftTokenId,
+              nft_txn_hash: nft.txnHash,
+              minted_at:    new Date().toISOString(),
+              taxon:        2,
+            })
+          } catch (webhookErr) {
+            console.warn('[BB webhook] waiver_nft_minted dispatch failed:', webhookErr)
+          }
         } else {
           console.log('[Draws] XRPL not configured — skipping lien waiver NFT mint')
         }
@@ -324,6 +376,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           `conditions=${orchResult.conditionsMet}`,
           orchResult.escrowFinished ? `auto-funded! hash=${orchResult.finishHash}` : orchResult.reason
         )
+
+        // BB webhook: escrow released (only if orchestrator auto-funded)
+        if (orchResult.escrowFinished) {
+          try {
+            const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+            await sendBuildingBlockWebhook({
+              event: 'escrow_released',
+              bc_draw_id: params.id,
+              escrow_finish_hash: orchResult.finishHash ?? null,
+              funded_at:  new Date().toISOString(),
+              net_amount: updated.net_amount,
+              trigger:    'orchestrator',
+            })
+          } catch (webhookErr) {
+            console.warn('[BB webhook] escrow_released dispatch failed:', webhookErr)
+          }
+        }
       } catch (err) {
         console.warn(
           '[Draws] Lien waiver NFT/Orchestrator non-fatal error:',

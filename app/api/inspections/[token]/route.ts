@@ -261,6 +261,22 @@ export async function PATCH(
               credential_nft_minted_at: new Date().toISOString(),
             })
             .eq('id', inspection.id)
+
+          // BB webhook: inspector NFT minted
+          try {
+            const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+            await sendBuildingBlockWebhook({
+              event: 'inspector_nft_minted',
+              bc_draw_id: inspection.draw_request_id,
+              nft_token_id: credentialNftId,
+              nft_txn_hash: credentialNftHash,
+              minted_at:    new Date().toISOString(),
+              inspector_name: updated.inspector_name,
+              taxon:        3,
+            })
+          } catch (webhookErr) {
+            console.warn('[BB webhook] inspector_nft_minted dispatch failed:', webhookErr)
+          }
         } else if (!isXrplConfigured()) {
           console.log('[Inspections] XRPL not configured — skipping credential NFT mint')
         }
@@ -273,6 +289,22 @@ export async function PATCH(
           `conditions=${orchResult.conditionsMet}`,
           orchResult.escrowFinished ? `auto-funded! hash=${orchResult.finishHash}` : orchResult.reason
         )
+
+        // BB webhook: escrow released (only if orchestrator auto-funded via inspection path)
+        if (orchResult.escrowFinished) {
+          try {
+            const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+            await sendBuildingBlockWebhook({
+              event: 'escrow_released',
+              bc_draw_id: inspection.draw_request_id,
+              escrow_finish_hash: orchResult.finishHash ?? null,
+              funded_at:  new Date().toISOString(),
+              trigger:    'inspector_condition_completed',
+            })
+          } catch (webhookErr) {
+            console.warn('[BB webhook] escrow_released dispatch failed:', webhookErr)
+          }
+        }
       } catch (err) {
         console.warn(
           '[Inspections] NFT/Orchestrator non-fatal error:',
