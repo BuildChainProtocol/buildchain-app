@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email/send'
 import { drawApprovedEmail, drawDeclinedEmail, drawFundedEmail } from '@/lib/email/templates'
@@ -11,28 +12,34 @@ export const runtime = 'nodejs'
 //   - Supabase auth (browser session)
 //   - Bearer BUILDINGBLOCK_API_KEY (for Building Block sync polls)
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient()
-
-  // Try Building Block API key first
+  // Two auth paths:
+  //  - Bearer BUILDINGBLOCK_API_KEY → use service-role client (bypasses RLS)
+  //  - Supabase session → use session client (RLS applies)
   const auth = request.headers.get('authorization') || ''
   const bbKey = process.env.BUILDINGBLOCK_API_KEY
-  const isBB = bbKey && auth === `Bearer ${bbKey}`
+  const isBB = !!bbKey && auth === `Bearer ${bbKey}`
 
-  // Fall back to Supabase session if not BB
-  if (!isBB) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let supabase: any
+  if (isBB) {
+    supabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  } else {
+    supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('draw_requests')
     .select('*')
     .eq('id', params.id)
     .single()
 
   if (error || !data) {
-    return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Draw not found', detail: error?.message }, { status: 404 })
   }
   return NextResponse.json(data)
 }
