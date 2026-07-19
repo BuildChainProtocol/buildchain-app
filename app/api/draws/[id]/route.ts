@@ -6,6 +6,37 @@ import { drawApprovedEmail, drawDeclinedEmail, drawFundedEmail } from '@/lib/ema
 // Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
 export const runtime = 'nodejs'
 
+// GET /api/draws/[id]
+// Returns the current draw record. Accepts:
+//   - Supabase auth (browser session)
+//   - Bearer BUILDINGBLOCK_API_KEY (for Building Block sync polls)
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const supabase = createClient()
+
+  // Try Building Block API key first
+  const auth = request.headers.get('authorization') || ''
+  const bbKey = process.env.BUILDINGBLOCK_API_KEY
+  const isBB = bbKey && auth === `Bearer ${bbKey}`
+
+  // Fall back to Supabase session if not BB
+  if (!isBB) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('draw_requests')
+    .select('*')
+    .eq('id', params.id)
+    .single()
+
+  if (error || !data) {
+    return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+  }
+  return NextResponse.json(data)
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
   const body = await request.json()
