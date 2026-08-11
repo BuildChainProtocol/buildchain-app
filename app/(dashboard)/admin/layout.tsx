@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
   if (!profile || profile.role !== 'admin') redirect(`/${profile?.role || 'borrower'}`)
 
-  const { count } = await supabase.from('draw_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+  const { count } = await (supabase as any).from('draw_requests').select('*', { count: 'exact', head: true }).in('status', ['submitted', 'pending'])
   const navWithBadge = adminNav.map(n => n.href === '/admin/draws' ? { ...n, badge: count || 0 } : n)
 
   const { count: notifCount } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false)
