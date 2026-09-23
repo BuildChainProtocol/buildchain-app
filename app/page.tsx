@@ -239,6 +239,9 @@ export default async function Home() {
         .nav-link { transition: color .15s; }
         .nav-link:hover { color: #e8edf2 !important; }
 
+        .footer-link { color: #2a4a66; text-decoration: none; font-size: 13px; transition: color .15s; }
+        .footer-link:hover { color: #8fa8c4; }
+
         .scan-line {
           position: absolute; left: 0; right: 0; height: 1px;
           background: linear-gradient(90deg, transparent, rgba(201,168,76,.4), transparent);
@@ -1387,10 +1390,7 @@ export default async function Home() {
                       ['How it Works', '#how-it-works'],
                       ['Technology', '#technology'],
                     ].map(([label, href]) => (
-                      <a key={label} href={href}
-                        style={{ fontSize: 13, color: '#2a4a66', textDecoration: 'none', transition: 'color .15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.color = '#8fa8c4')}
-                        onMouseLeave={e => (e.currentTarget.style.color = '#2a4a66')}>
+                      <a key={label} href={href} className="footer-link">
                         {label}
                       </a>
                     ))}
