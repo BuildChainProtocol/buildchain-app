@@ -298,6 +298,20 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     const message = err instanceof Error ? err.message : String(err)
     console.error('[Orchestrator] Auto-fund failed:', message)
     result.reason = `Release failed: ${message}`
+
+    // Fire escrow_failed webhook — BB must know the auto-release failed
+    try {
+      const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+      await sendBuildingBlockWebhook({
+        event:      'escrow_failed',
+        bc_draw_id: drawId,
+        error:      message.slice(0, 500),
+        trigger:    'orchestrator',
+        failed_at:  new Date().toISOString(),
+      })
+    } catch (wErr) {
+      console.warn('[Orchestrator] escrow_failed webhook failed (non-fatal):', wErr)
+    }
   }
 
   return result

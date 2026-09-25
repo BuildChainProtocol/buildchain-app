@@ -80,7 +80,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     try {
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
       if (isXrplConfigured()) {
-        const borrowerXrpAddress = (draw.projects as any)?.borrowers?.xrp_address ?? undefined
+        // Prefer gc_wallet (set by BB on submit) over the borrower's registered XRP address
+        const gcWallet = (draw as any).gc_wallet ?? undefined
+        const borrowerXrpAddress = gcWallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? undefined)
         const escrow = await createDrawEscrow({
           destinationAddress: borrowerXrpAddress,
           drawAmountUsd: draw.amount,
@@ -131,9 +133,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         console.log(`[XRPL] EscrowFinish OK — hash ${finish.txnHash}`)
       }
     } catch (xrplError) {
-      // Non-fatal: log and continue with status update
+      // Non-fatal: log, fire escrow_failed webhook, continue with status update
       const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
-      console.warn('[XRPL] EscrowFinish skipped (non-fatal):', message.slice(0, 200))
+      console.warn('[XRPL] EscrowFinish failed (non-fatal):', message.slice(0, 200))
+      try {
+        const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+        await sendBuildingBlockWebhook({
+          event:      'escrow_failed',
+          bc_draw_id: params.id,
+          error:      message.slice(0, 500),
+          trigger:    'manual',
+          failed_at:  new Date().toISOString(),
+        })
+      } catch (wErr) {
+        console.warn('[BB webhook] escrow_failed dispatch failed:', wErr)
+      }
     }
 
     // Always increment project amount_drawn, regardless of XRPL
@@ -141,6 +155,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       p_project_id: draw.project_id,
       p_amount: draw.amount,
     })
+  }
+
+  // ─── HELD ──────────────────────────────────────────────────────────────────
+  if (body.status === 'held') {
+    updates.hold_reason = body.hold_reason ?? body.notes ?? null
   }
 
   // ─── DECLINE ───────────────────────────────────────────────────────────────
@@ -158,41 +177,95 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // ─── BB webhook: draw approved (fire-and-forget, non-blocking) ────────
-  if (body.status === 'approved') {
-    try {
-      const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
-      // Await so any log lines from the webhook show up before the response returns;
-      // sender is 10s timeout + swallows errors, so this can't block or throw.
+  // ─── BB webhooks — per §4 of the BB↔BC integration spec ──────────────
+  try {
+    const { sendBuildingBlockWebhook, buildPaymentsRows } = await import('@/lib/webhooks/building-block')
+
+    if (body.status === 'approved') {
       await sendBuildingBlockWebhook({
-        event: 'draw_approved',
-        bc_draw_id: params.id,
-        escrow_txn_hash: updated.escrow_txn_hash ?? null,
-        xrpl_sequence:   updated.escrow_sequence ?? null,
+        event:               'draw_approved',
+        bc_draw_id:          params.id,
+        // Amounts in USD — never XRP or drops
+        amount:              updated.amount,
+        net_amount:          updated.net_amount ?? updated.amount,
+        escrow_txn_hash:     updated.escrow_txn_hash     ?? null,
+        xrpl_sequence:       updated.escrow_sequence     ?? null,
         escrow_finish_after: updated.escrow_finish_after ?? null,
-        approved_by:     user.id,
-        approved_at:     updates.reviewed_at,
-        amount:          updated.amount,
-        net_amount:      updated.net_amount,
+        approved_by:         (profile?.role === 'lender' ? user.email : null) ?? user.id,
+        approved_at:         updates.reviewed_at,
       })
-    } catch (webhookErr) {
-      console.warn('[BB webhook] draw_approved dispatch failed (non-fatal):', webhookErr)
     }
-  }
-  if (body.status === 'funded') {
-    // Manual funded path (orchestrator fires escrow_released webhook separately).
-    try {
-      const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+
+    if (body.status === 'held') {
       await sendBuildingBlockWebhook({
-        event: 'escrow_released',
+        event:      'draw_held',
         bc_draw_id: params.id,
-        escrow_finish_hash: updated.escrow_finish_hash ?? null,
-        funded_at: updates.reviewed_at,
-        net_amount: updated.net_amount,
+        reason:     body.hold_reason ?? body.notes ?? null,
+        decided_by: user.id,
+        decided_at: updates.reviewed_at,
       })
-    } catch (webhookErr) {
-      console.warn('[BB webhook] escrow_released dispatch failed (non-fatal):', webhookErr)
     }
+
+    if (body.status === 'declined') {
+      await sendBuildingBlockWebhook({
+        event:      'draw_declined',
+        bc_draw_id: params.id,
+        reason:     body.decline_reason ?? body.notes ?? null,
+        decided_by: user.id,
+        decided_at: updates.reviewed_at,
+      })
+    }
+
+    // waiver_nft_minted is fired later (in the async IIFE below) after NFT minting
+
+    if (body.status === 'funded') {
+      // Manual funded path — build payments[] from stored payees / line items
+      const { data: lineItems } = await supabase
+        .from('draw_line_items')
+        .select('bb_pay_app_id, sub_code, current_payment_due')
+        .eq('draw_request_id', params.id)
+
+      const gcWallet = (updated as any).gc_wallet ?? null
+      const payments = buildPaymentsRows(
+        (updated as any).payees ?? null,
+        lineItems ?? [],
+        {
+          escrowFinishHash:  updated.escrow_finish_hash ?? null,
+          ledgerIndex:       null,
+          destinationWallet: gcWallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? null),
+        }
+      )
+
+      await sendBuildingBlockWebhook({
+        event:              'escrow_released',
+        bc_draw_id:         params.id,
+        escrow_finish_hash: updated.escrow_finish_hash ?? null,
+        funded_at:          updates.reviewed_at,
+        net_amount:         updated.net_amount ?? updated.amount,
+        payments,
+      })
+
+      // payment_confirmed — one event per payee for per-sub granularity
+      await Promise.allSettled(
+        payments.map(p =>
+          sendBuildingBlockWebhook({
+            event:          'payment_confirmed',
+            bc_draw_id:     params.id,
+            bb_pay_app_id:  p.bb_pay_app_id,
+            sub_code:       p.sub_code,
+            sub_name:       p.sub_name,
+            amount:         p.amount,
+            status:         p.status,
+            tx_hash:        p.tx_hash,
+            wallet:         p.wallet,
+            ledger_index:   p.ledger_index,
+            confirmed_at:   updates.reviewed_at,
+          })
+        )
+      )
+    }
+  } catch (webhookErr) {
+    console.warn('[BB webhook] dispatch failed (non-fatal):', webhookErr instanceof Error ? webhookErr.message : webhookErr)
   }
 
   // Activity log
@@ -290,6 +363,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           title: 'Draw Request Approved ✓',
           body: `Draw ${updated.request_number} for ${fmt(draw.amount)} has been approved by ${lenderName}.`,
         },
+        held: {
+          type: 'draw_held',
+          title: 'Draw Request On Hold',
+          body: body.hold_reason
+            ? `Draw ${updated.request_number} has been placed on hold. Reason: ${body.hold_reason}`
+            : `Draw ${updated.request_number} has been placed on hold by ${lenderName}. Contact them for details.`,
+        },
         declined: {
           type: 'draw_declined',
           title: 'Draw Request Not Approved',
@@ -314,41 +394,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
   } catch (emailErr) {
     console.warn('[Email] draw status email/notification skipped:', emailErr instanceof Error ? emailErr.message : emailErr)
-  }
-
-  // ── Webhook back to Building Block ───────────────────────────────────────
-  // Fires on approved, declined, and funded — lets the GC see status in real time
-  try {
-    const webhookUrl = process.env.BUILDINGBLOCK_WEBHOOK_URL
-    if (webhookUrl && ['approved', 'declined', 'funded'].includes(body.status)) {
-      const webhookKey = process.env.BUILDINGBLOCK_API_KEY || ''
-      const payload = {
-        event: `draw.${body.status}`,
-        draw_id: params.id,
-        request_number: draw.request_number,
-        project_id: draw.project_id,
-        status: body.status,
-        amount: draw.amount,
-        net_amount: updated.net_amount ?? draw.amount,
-        retainage_held: updated.retainage_held ?? 0,
-        escrow_txn_hash: updated.escrow_txn_hash ?? null,
-        reviewed_at: updated.reviewed_at ?? null,
-        funded_at: updated.funded_at ?? null,
-        timestamp: new Date().toISOString(),
-      }
-      // Fire and forget — don't await, don't block the response
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${webhookKey}`,
-          'X-BuildChain-Event': `draw.${body.status}`,
-        },
-        body: JSON.stringify(payload),
-      }).catch(err => console.warn('[Webhook] Building Block webhook failed:', err?.message))
-    }
-  } catch (webhookErr) {
-    console.warn('[Webhook] Building Block webhook error:', webhookErr instanceof Error ? webhookErr.message : webhookErr)
   }
 
   // ── Lien Waiver NFT + Verification Orchestrator (Patent §IV + §V) ────────────
@@ -418,15 +463,51 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         // BB webhook: escrow released (only if orchestrator auto-funded)
         if (orchResult.escrowFinished) {
           try {
-            const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+            const { sendBuildingBlockWebhook, buildPaymentsRows } = await import('@/lib/webhooks/building-block')
+            // Fetch line items to build payments[] — orchestrator doesn't return them
+            const { data: orchLineItems } = await supabase
+              .from('draw_line_items')
+              .select('bb_pay_app_id, sub_code, current_payment_due')
+              .eq('draw_request_id', params.id)
+            const orchGcWallet = (updated as any).gc_wallet ?? null
+            const orchPayments = buildPaymentsRows(
+              (updated as any).payees ?? null,
+              orchLineItems ?? [],
+              {
+                escrowFinishHash:  orchResult.finishHash ?? null,
+                ledgerIndex:       null,
+                destinationWallet: orchGcWallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? null),
+              }
+            )
             await sendBuildingBlockWebhook({
-              event: 'escrow_released',
-              bc_draw_id: params.id,
+              event:              'escrow_released',
+              bc_draw_id:         params.id,
               escrow_finish_hash: orchResult.finishHash ?? null,
-              funded_at:  new Date().toISOString(),
-              net_amount: updated.net_amount,
-              trigger:    'orchestrator',
+              funded_at:          new Date().toISOString(),
+              net_amount:         updated.net_amount,
+              trigger:            'orchestrator',
+              payments:           orchPayments,
             })
+
+            // payment_confirmed — one event per payee (per-sub granularity)
+            await Promise.allSettled(
+              orchPayments.map(p =>
+                sendBuildingBlockWebhook({
+                  event:         'payment_confirmed',
+                  bc_draw_id:    params.id,
+                  bb_pay_app_id: p.bb_pay_app_id,
+                  sub_code:      p.sub_code,
+                  sub_name:      p.sub_name,
+                  amount:        p.amount,
+                  status:        p.status,
+                  tx_hash:       p.tx_hash,
+                  wallet:        p.wallet,
+                  ledger_index:  p.ledger_index,
+                  confirmed_at:  new Date().toISOString(),
+                  trigger:       'orchestrator',
+                })
+              )
+            )
           } catch (webhookErr) {
             console.warn('[BB webhook] escrow_released dispatch failed:', webhookErr)
           }

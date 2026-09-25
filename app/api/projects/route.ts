@@ -4,7 +4,21 @@ import { NextRequest, NextResponse } from 'next/server'
 // Node.js runtime required for XRPL (WebSocket + dynamic import of xrpl)
 export const runtime = 'nodejs'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // ── BB API key auth path — used for health probes ─────────────────────────
+  // BB calls GET /api/projects?probe=1 with the same Bearer key used on all
+  // other /api/buildingblock/* routes to verify URL + key are valid.
+  const bbKey = process.env.BUILDINGBLOCK_API_KEY
+  if (bbKey) {
+    const authHeader = request.headers.get('authorization') ?? ''
+    const incomingKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+    if (incomingKey === bbKey) {
+      // Valid BB key — return a lightweight health response rather than all project data
+      return NextResponse.json({ ok: true, service: 'buildchain', authenticated: 'api_key' })
+    }
+  }
+
+  // ── Normal Supabase session auth path ────────────────────────────────────
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
