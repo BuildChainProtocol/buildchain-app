@@ -223,3 +223,92 @@ export function buildPaymentsRows(
   }
   return [...map.values()]
 }
+
+/**
+ * escrow_released (with payments[]) and then one payment_confirmed per payee.
+ *
+ * Every release path sends exactly this: the lender's manual Fund and the
+ * orchestrator, whichever condition (inspection or lien waiver) completed
+ * last. BB records sub payments only from these rows, and a release with no
+ * amount or no rows leaves its draw unsettled.
+ */
+export async function sendEscrowReleasedWebhooks(opts: {
+  bcDrawId:          string
+  escrowFinishHash:  string | null
+  /** USD — the draw's net (callers fall back to the gross for older draws) */
+  netAmount:         number | null
+  payees:            any[] | null
+  lineItems:         Array<{ bb_pay_app_id: number | null; sub_code: string | null; sub_name?: string | null; current_payment_due: number | null }>
+  destinationWallet: string | null
+  fundedAt:          string
+  trigger:           'manual' | 'orchestrator'
+}): Promise<void> {
+  const payments = buildPaymentsRows(opts.payees, opts.lineItems, {
+    escrowFinishHash:  opts.escrowFinishHash,
+    ledgerIndex:       null,
+    destinationWallet: opts.destinationWallet,
+  })
+
+  await sendBuildingBlockWebhook({
+    event:              'escrow_released',
+    bc_draw_id:         opts.bcDrawId,
+    escrow_finish_hash: opts.escrowFinishHash,
+    funded_at:          opts.fundedAt,
+    net_amount:         opts.netAmount,
+    trigger:            opts.trigger,
+    payments,
+  })
+
+  // payment_confirmed — one event per payee for per-sub granularity
+  await Promise.allSettled(
+    payments.map(p =>
+      sendBuildingBlockWebhook({
+        event:         'payment_confirmed',
+        bc_draw_id:    opts.bcDrawId,
+        bb_pay_app_id: p.bb_pay_app_id,
+        sub_code:      p.sub_code,
+        sub_name:      p.sub_name,
+        amount:        p.amount,
+        status:        p.status,
+        tx_hash:       p.tx_hash,
+        wallet:        p.wallet,
+        ledger_index:  p.ledger_index,
+        confirmed_at:  opts.fundedAt,
+        trigger:       opts.trigger,
+      })
+    )
+  )
+}
+
+/**
+ * waiver_nft_minted. The Lien Waiver NFT is minted once per draw, but BB
+ * marks each sub's waiver by its bb_waiver_id and ignores an event without
+ * one, so one event goes out per BB waiver stored on the draw at submit.
+ * A draw with no BB waivers gets the single draw-level event.
+ */
+export async function sendWaiverNftMintedWebhooks(opts: {
+  bcDrawId:   string
+  nftTokenId: string
+  nftTxnHash: string
+  mintedAt:   string
+  waivers:    Array<{ bb_waiver_id: number | null; bb_pay_app_id: number | null }>
+}): Promise<void> {
+  const base: BuildingBlockWebhookPayload = {
+    event:        'waiver_nft_minted',
+    bc_draw_id:   opts.bcDrawId,
+    nft_token_id: opts.nftTokenId,
+    nft_txn_hash: opts.nftTxnHash,
+    minted_at:    opts.mintedAt,
+    taxon:        2,
+  }
+  const bbWaivers = opts.waivers.filter(w => w.bb_waiver_id != null)
+  if (bbWaivers.length === 0) {
+    await sendBuildingBlockWebhook(base)
+    return
+  }
+  await Promise.allSettled(
+    bbWaivers.map(w =>
+      sendBuildingBlockWebhook({ ...base, bb_waiver_id: w.bb_waiver_id, bb_pay_app_id: w.bb_pay_app_id })
+    )
+  )
+}

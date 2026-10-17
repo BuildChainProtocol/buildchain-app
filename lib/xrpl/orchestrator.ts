@@ -23,6 +23,8 @@
  *   e) Sends funded email to borrower
  *   f) Sends in-app notification
  *   g) Logs all events to activity_log
+ *   h) Sends Building Block escrow_released (with payments[]) and one
+ *      payment_confirmed per payee — the same payload for every trigger
  *
  * Usage:
  *   import { runOrchestrator } from '@/lib/xrpl/orchestrator'
@@ -81,14 +83,15 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
   const { data: draw, error } = await supabase
     .from('draw_requests')
     .select(`
-      id, status, amount, request_number, project_id,
+      id, status, amount, net_amount, request_number, project_id,
       inspection_done, lien_waiver,
       lien_waiver_nft_id,
       escrow_sequence, escrow_txn_hash,
+      gc_wallet, payees,
       inspections!draw_request_id ( id, status, credential_nft_id ),
       projects (
         name, loan_amount, amount_drawn,
-        borrowers ( profile_id, email, company_name ),
+        borrowers ( profile_id, email, company_name, xrp_address ),
         lenders   ( profile_id, company_name )
       )
     `)
@@ -311,6 +314,32 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       })
     } catch (wErr) {
       console.warn('[Orchestrator] escrow_failed webhook failed (non-fatal):', wErr)
+    }
+  }
+
+  // ── BB webhooks: the release with payments[], whichever condition came last ──
+  // Outside the try above, so a failed notice never reads as a failed release.
+  if (result.escrowFinished) {
+    try {
+      const { data: lineItems } = await supabase
+        .from('draw_line_items')
+        .select('bb_pay_app_id, sub_code, current_payment_due')
+        .eq('draw_request_id', drawId)
+
+      const project = draw.projects as any
+      const { sendEscrowReleasedWebhooks } = await import('@/lib/webhooks/building-block')
+      await sendEscrowReleasedWebhooks({
+        bcDrawId:          drawId,
+        escrowFinishHash:  result.finishHash ?? null,
+        netAmount:         draw.net_amount ?? draw.amount,
+        payees:            draw.payees ?? null,
+        lineItems:         lineItems ?? [],
+        destinationWallet: draw.gc_wallet ?? project?.borrowers?.xrp_address ?? null,
+        fundedAt:          new Date().toISOString(),
+        trigger:           'orchestrator',
+      })
+    } catch (webhookErr) {
+      console.warn('[Orchestrator] escrow_released webhook failed (non-fatal):', webhookErr instanceof Error ? webhookErr.message : webhookErr)
     }
   }
 

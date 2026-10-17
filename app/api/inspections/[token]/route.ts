@@ -10,6 +10,7 @@
  */
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { sendEmail } from '@/lib/email/send'
 import { inspectionPassedEmail, inspectionFailedEmail } from '@/lib/email/templates'
 
@@ -216,9 +217,10 @@ export async function PATCH(
   // ── On-ledger credential NFT + Orchestrator (Patent §III + §V) ──────────────
   // Only runs when inspection passes — failed inspections do not trigger NFT mint
   if (status === 'passed') {
-    // Fire async — don't block the inspector's portal response
+    // After the response under waitUntil — doesn't block the inspector's portal,
+    // and Vercel keeps the function alive until the chain finishes.
     // Non-fatal: any failure is logged but does not fail the inspection submission
-    ;(async () => {
+    waitUntil((async () => {
       try {
         const { isXrplConfigured, mintInspectorCredentialNFT } = await import('@/lib/xrpl/escrow')
         const { runOrchestrator } = await import('@/lib/xrpl/orchestrator')
@@ -237,14 +239,7 @@ export async function PATCH(
           // Step 2: Mint Inspector Credential NFT (XLS-20, taxon 3)
           const nft = await mintInspectorCredentialNFT({
             drawRequestId: inspection.draw_request_id,
-            drawNumber: drawData.request_number,
-            projectId: drawData.project_id,
-            projectName: (drawData.projects as any)?.name ?? 'Unknown Project',
             inspectionId: inspection.id,
-            inspectorName: updated.inspector_name,
-            inspectorEmail: updated.inspector_email,
-            milestone: drawData.phase ?? drawData.purpose ?? undefined,
-            scheduledDate: updated.scheduled_date,
             passedAt: updated.submitted_at ?? new Date().toISOString(),
           })
 
@@ -282,36 +277,22 @@ export async function PATCH(
         }
 
         // Step 4: Run Verification Orchestrator — checks if lien waiver NFT
-        // is also present and auto-releases escrow if dual-condition is satisfied
+        // is also present and auto-releases escrow if dual-condition is satisfied.
+        // On release it sends BB escrow_released (with payments[]) and
+        // payment_confirmed itself — the same payload as the lien waiver path.
         const orchResult = await runOrchestrator(inspection.draw_request_id)
         console.log(
           `[Inspections] Orchestrator result for draw ${inspection.draw_request_id}:`,
           `conditions=${orchResult.conditionsMet}`,
           orchResult.escrowFinished ? `auto-funded! hash=${orchResult.finishHash}` : orchResult.reason
         )
-
-        // BB webhook: escrow released (only if orchestrator auto-funded via inspection path)
-        if (orchResult.escrowFinished) {
-          try {
-            const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
-            await sendBuildingBlockWebhook({
-              event: 'escrow_released',
-              bc_draw_id: inspection.draw_request_id,
-              escrow_finish_hash: orchResult.finishHash ?? null,
-              funded_at:  new Date().toISOString(),
-              trigger:    'inspector_condition_completed',
-            })
-          } catch (webhookErr) {
-            console.warn('[BB webhook] escrow_released dispatch failed:', webhookErr)
-          }
-        }
       } catch (err) {
         console.warn(
           '[Inspections] NFT/Orchestrator non-fatal error:',
           err instanceof Error ? err.message : err
         )
       }
-    })()
+    })())
   }
 
   return NextResponse.json({ data: updated })

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { sendEmail } from '@/lib/email/send'
 import { drawApprovedEmail, drawDeclinedEmail, drawFundedEmail } from '@/lib/email/templates'
 
@@ -179,7 +180,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   // ─── BB webhooks — per §4 of the BB↔BC integration spec ──────────────
   try {
-    const { sendBuildingBlockWebhook, buildPaymentsRows } = await import('@/lib/webhooks/building-block')
+    const { sendBuildingBlockWebhook, sendEscrowReleasedWebhooks } = await import('@/lib/webhooks/building-block')
 
     if (body.status === 'approved') {
       await sendBuildingBlockWebhook({
@@ -219,50 +220,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // waiver_nft_minted is fired later (in the async IIFE below) after NFT minting
 
     if (body.status === 'funded') {
-      // Manual funded path — build payments[] from stored payees / line items
+      // Manual funded path — the same release payload as the orchestrator's
       const { data: lineItems } = await supabase
         .from('draw_line_items')
         .select('bb_pay_app_id, sub_code, current_payment_due')
         .eq('draw_request_id', params.id)
 
-      const gcWallet = (updated as any).gc_wallet ?? null
-      const payments = buildPaymentsRows(
-        (updated as any).payees ?? null,
-        lineItems ?? [],
-        {
-          escrowFinishHash:  updated.escrow_finish_hash ?? null,
-          ledgerIndex:       null,
-          destinationWallet: gcWallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? null),
-        }
-      )
-
-      await sendBuildingBlockWebhook({
-        event:              'escrow_released',
-        bc_draw_id:         params.id,
-        escrow_finish_hash: updated.escrow_finish_hash ?? null,
-        funded_at:          updates.reviewed_at,
-        net_amount:         updated.net_amount ?? updated.amount,
-        payments,
+      await sendEscrowReleasedWebhooks({
+        bcDrawId:          params.id,
+        escrowFinishHash:  updated.escrow_finish_hash ?? null,
+        netAmount:         updated.net_amount ?? updated.amount,
+        payees:            (updated as any).payees ?? null,
+        lineItems:         lineItems ?? [],
+        destinationWallet: (updated as any).gc_wallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? null),
+        fundedAt:          String(updates.reviewed_at),
+        trigger:           'manual',
       })
-
-      // payment_confirmed — one event per payee for per-sub granularity
-      await Promise.allSettled(
-        payments.map(p =>
-          sendBuildingBlockWebhook({
-            event:          'payment_confirmed',
-            bc_draw_id:     params.id,
-            bb_pay_app_id:  p.bb_pay_app_id,
-            sub_code:       p.sub_code,
-            sub_name:       p.sub_name,
-            amount:         p.amount,
-            status:         p.status,
-            tx_hash:        p.tx_hash,
-            wallet:         p.wallet,
-            ledger_index:   p.ledger_index,
-            confirmed_at:   updates.reviewed_at,
-          })
-        )
-      )
     }
   } catch (webhookErr) {
     console.warn('[BB webhook] dispatch failed (non-fatal):', webhookErr instanceof Error ? webhookErr.message : webhookErr)
@@ -400,10 +373,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // When the lender confirms a lien waiver (lien_waiver=true), mint the XLS-20
   // Lien Waiver NFT and run the orchestrator to check dual-condition release.
   //
-  // This is fire-and-forget (async IIFE) — does not block the PATCH response.
+  // Runs after the response under waitUntil, so it doesn't block the PATCH
+  // and Vercel keeps the function alive until the chain finishes (an
+  // un-awaited promise can be frozen once the response is sent).
   // The inspector confirmation path is handled in app/api/inspections/[token]/route.ts.
   if (body.lien_waiver === true && updated.status === 'approved') {
-    ;(async () => {
+    waitUntil((async () => {
       try {
         const { isXrplConfigured, mintLienWaiverNFT } = await import('@/lib/xrpl/escrow')
         const { runOrchestrator } = await import('@/lib/xrpl/orchestrator')
@@ -413,8 +388,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           const nft = await mintLienWaiverNFT({
             drawRequestId: params.id,
             drawNumber: updated.request_number,
-            projectId: updated.project_id,
-            projectName: (draw.projects as any)?.name ?? 'Unknown Project',
             drawAmount: updated.amount,
             waiverType: 'conditional',
             // throughDate and gcSignatureHash will be populated when GC signs via BuildingBlock
@@ -433,16 +406,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
           console.log(`[Draws] Lien Waiver NFT minted — ID ${nft.nftTokenId} hash ${nft.txnHash}`)
 
-          // BB webhook: waiver NFT minted
+          // BB webhook: waiver NFT minted — one event per BB waiver on the draw
           try {
-            const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
-            await sendBuildingBlockWebhook({
-              event: 'waiver_nft_minted',
-              bc_draw_id: params.id,
-              nft_token_id: nft.nftTokenId,
-              nft_txn_hash: nft.txnHash,
-              minted_at:    new Date().toISOString(),
-              taxon:        2,
+            const { data: bbWaivers } = await (supabase as any)
+              .from('lien_waivers')
+              .select('bb_waiver_id, bb_pay_app_id')
+              .eq('draw_request_id', params.id)
+              .not('bb_waiver_id', 'is', null)
+            const { sendWaiverNftMintedWebhooks } = await import('@/lib/webhooks/building-block')
+            await sendWaiverNftMintedWebhooks({
+              bcDrawId:   params.id,
+              nftTokenId: nft.nftTokenId,
+              nftTxnHash: nft.txnHash,
+              mintedAt:   new Date().toISOString(),
+              waivers:    bbWaivers ?? [],
             })
           } catch (webhookErr) {
             console.warn('[BB webhook] waiver_nft_minted dispatch failed:', webhookErr)
@@ -452,73 +429,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
 
         // Run Verification Orchestrator — checks if inspector credential NFT
-        // is also present and auto-releases escrow if dual-condition is satisfied
+        // is also present and auto-releases escrow if dual-condition is satisfied.
+        // On release it sends BB escrow_released + payment_confirmed itself.
         const orchResult = await runOrchestrator(params.id)
         console.log(
           `[Draws] Orchestrator result for draw ${params.id}:`,
           `conditions=${orchResult.conditionsMet}`,
           orchResult.escrowFinished ? `auto-funded! hash=${orchResult.finishHash}` : orchResult.reason
         )
-
-        // BB webhook: escrow released (only if orchestrator auto-funded)
-        if (orchResult.escrowFinished) {
-          try {
-            const { sendBuildingBlockWebhook, buildPaymentsRows } = await import('@/lib/webhooks/building-block')
-            // Fetch line items to build payments[] — orchestrator doesn't return them
-            const { data: orchLineItems } = await supabase
-              .from('draw_line_items')
-              .select('bb_pay_app_id, sub_code, current_payment_due')
-              .eq('draw_request_id', params.id)
-            const orchGcWallet = (updated as any).gc_wallet ?? null
-            const orchPayments = buildPaymentsRows(
-              (updated as any).payees ?? null,
-              orchLineItems ?? [],
-              {
-                escrowFinishHash:  orchResult.finishHash ?? null,
-                ledgerIndex:       null,
-                destinationWallet: orchGcWallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? null),
-              }
-            )
-            await sendBuildingBlockWebhook({
-              event:              'escrow_released',
-              bc_draw_id:         params.id,
-              escrow_finish_hash: orchResult.finishHash ?? null,
-              funded_at:          new Date().toISOString(),
-              net_amount:         updated.net_amount,
-              trigger:            'orchestrator',
-              payments:           orchPayments,
-            })
-
-            // payment_confirmed — one event per payee (per-sub granularity)
-            await Promise.allSettled(
-              orchPayments.map(p =>
-                sendBuildingBlockWebhook({
-                  event:         'payment_confirmed',
-                  bc_draw_id:    params.id,
-                  bb_pay_app_id: p.bb_pay_app_id,
-                  sub_code:      p.sub_code,
-                  sub_name:      p.sub_name,
-                  amount:        p.amount,
-                  status:        p.status,
-                  tx_hash:       p.tx_hash,
-                  wallet:        p.wallet,
-                  ledger_index:  p.ledger_index,
-                  confirmed_at:  new Date().toISOString(),
-                  trigger:       'orchestrator',
-                })
-              )
-            )
-          } catch (webhookErr) {
-            console.warn('[BB webhook] escrow_released dispatch failed:', webhookErr)
-          }
-        }
       } catch (err) {
         console.warn(
           '[Draws] Lien waiver NFT/Orchestrator non-fatal error:',
           err instanceof Error ? err.message : err
         )
       }
-    })()
+    })())
   }
 
   return NextResponse.json({ data: updated })

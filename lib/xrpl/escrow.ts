@@ -36,6 +36,26 @@ function toHex(str: string): string {
   return Buffer.from(str, 'utf8').toString('hex').toUpperCase()
 }
 
+// XRPL caps an NFToken URI at 256 bytes (rippled maxTokenURILength); a longer
+// URI fails the whole NFTokenMint with temMALFORMED. So the URI carries a
+// compact record that ties the token to its draw, the full details stay in
+// BuildChain's database, and names and emails never go on the public ledger.
+const MAX_NFT_URI_BYTES = 256
+
+function nftUriHex(metadata: Record<string, unknown>): string {
+  const json = JSON.stringify(metadata)
+  const bytes = Buffer.byteLength(json, 'utf8')
+  if (bytes > MAX_NFT_URI_BYTES) {
+    throw new Error(`NFT metadata is ${bytes} bytes; XRPL allows at most ${MAX_NFT_URI_BYTES}`)
+  }
+  return toHex(json)
+}
+
+function networkLabel(): 'testnet' | 'mainnet' {
+  const network = process.env.XRPL_NETWORK ?? ''
+  return !network || network.includes('altnet') || network.includes('testnet') ? 'testnet' : 'mainnet'
+}
+
 function toRippleTime(unixMs: number): number {
   return Math.floor(unixMs / 1000) - RIPPLE_EPOCH
 }
@@ -227,8 +247,6 @@ export async function finishDrawEscrow({
 export async function mintLienWaiverNFT({
   drawRequestId,
   drawNumber,
-  projectId,
-  projectName,
   drawAmount,
   waiverType = 'conditional',
   throughDate,
@@ -237,8 +255,6 @@ export async function mintLienWaiverNFT({
 }: {
   drawRequestId: string
   drawNumber: string
-  projectId: string
-  projectName: string
   drawAmount: number
   /** 'conditional' at draw submission; 'unconditional' after payment confirmed */
   waiverType?: 'conditional' | 'unconditional'
@@ -251,43 +267,43 @@ export async function mintLienWaiverNFT({
 }): Promise<{ nftTokenId: string; txnHash: string }> {
   const wallet = getPlatformWallet()
 
-  // Patent §IV NFT metadata schema
+  // Patent §IV NFT metadata, compact enough for the 256-byte URI limit.
+  // The project is found through the draw (drid).
   const metadata = {
-    platform: 'BuildChain',
-    version: '1',
-    type: 'lien_waiver',
+    p: 'BuildChain',
+    t: 'lien_waiver',
     // Core DRID link — prevents reuse across draws (Patent §IV)
     drid: drawRequestId,
-    draw_number: drawNumber,
-    project_id: projectId,
-    project_name: projectName,
-    draw_amount_usd: drawAmount,
-    // Waiver classification
-    waiver_type: waiverType,
-    through_date: throughDate ?? null,
-    // GC authentication fields (populated when GC signs via BuildingBlock)
-    gc_signature_hash: gcSignatureHash ?? null,
-    ipfs_document_uri: ipfsDocumentUri ?? null,
-    // Provenance
-    mint_timestamp: new Date().toISOString(),
-    network: (process.env.XRPL_NETWORK ?? '').includes('altnet') ? 'testnet' : 'mainnet',
+    draw: String(drawNumber ?? '').slice(0, 24),
+    usd: drawAmount,
+    waiver: waiverType,
+    through: throughDate,  // omitted when unknown
+    ts: new Date().toISOString(),
+    net: networkLabel(),
   }
 
-  const uriHex = Buffer.from(JSON.stringify(metadata), 'utf8').toString('hex').toUpperCase()
+  // The signed instrument goes in the memo (memos allow 1 KB): its hash and,
+  // once Pinata is integrated, its IPFS location.
+  const memo = {
+    event: 'lien_waiver_nft_mint',
+    drid: drawRequestId,
+    ...(gcSignatureHash ? { gc_signature_hash: gcSignatureHash } : {}),
+    ...(ipfsDocumentUri ? { ipfs_document_uri: ipfsDocumentUri } : {}),
+  }
 
   const client = await getConnectedClient()
   try {
     const txTemplate = {
       TransactionType: 'NFTokenMint' as const,
       Account: wallet.address,
-      URI: uriHex,
+      URI: nftUriHex(metadata),
       Flags: 8,          // tfTransferable — can be transferred to verification account
       TransferFee: 0,
       NFTokenTaxon: 2,   // BuildChain Lien Waiver taxon
       Memos: [{
         Memo: {
           MemoType: toHex('application/json'),
-          MemoData: toHex(JSON.stringify({ event: 'lien_waiver_nft_mint', drid: drawRequestId })),
+          MemoData: toHex(JSON.stringify(memo)),
         },
       }],
     }
@@ -325,67 +341,40 @@ export async function mintLienWaiverNFT({
  */
 export async function mintInspectorCredentialNFT({
   drawRequestId,
-  drawNumber,
-  projectId,
-  projectName,
   inspectionId,
-  inspectorName,
-  inspectorEmail,
-  milestone,
-  scheduledDate,
+  bbInspectionResultId,
   passedAt,
 }: {
   drawRequestId: string
-  drawNumber: string
-  projectId: string
-  projectName: string
+  /** BuildChain inspections.id — holds the inspector's identity and notes */
   inspectionId: string
-  inspectorName: string
-  inspectorEmail: string
-  /** Construction milestone description being attested */
-  milestone?: string
-  scheduledDate?: string | null
+  /** Building Block's signed inspection result, when the attestation came from BB */
+  bbInspectionResultId?: number | null
   passedAt: string
 }): Promise<{ nftTokenId: string; txnHash: string }> {
   const wallet = getPlatformWallet()
 
-  // Patent §III credential metadata schema
+  // Patent §III credential metadata, compact enough for the 256-byte URI
+  // limit. The inspector, milestone and notes live on the inspection row.
   // Future XLS-0070 upgrade: map these fields to the VC subject/claims structure
+  // (issuer_did: 'did:xrpl:1:<wallet_address>').
   const metadata = {
-    platform: 'BuildChain',
-    version: '1',
-    type: 'inspector_credential',
+    p: 'BuildChain',
+    t: 'inspector_credential',
     // DRID link — ties credential to exact draw request (Patent §III)
     drid: drawRequestId,
-    draw_number: drawNumber,
-    project_id: projectId,
-    project_name: projectName,
-    // Inspection identity
-    inspection_id: inspectionId,
-    inspector_name: inspectorName,
-    inspector_email: inspectorEmail,
-    // Attestation
-    milestone: milestone ?? null,
-    scheduled_date: scheduledDate ?? null,
-    completion_attestation: 'passed',
-    passed_at: passedAt,
-    // Issuer: BuildChain Protocol (future: XLS-0070 credential issuer DID)
-    issuer: 'BuildChain Protocol',
-    // XLS-0070 upgrade note:
-    // issuer_did: 'did:xrpl:1:<wallet_address>'
-    // subject_did: 'did:xrpl:1:<inspector_xrpl_address>'
-    mint_timestamp: new Date().toISOString(),
-    network: (process.env.XRPL_NETWORK ?? '').includes('altnet') ? 'testnet' : 'mainnet',
+    inspection: inspectionId,
+    bb: bbInspectionResultId ?? undefined,  // omitted unless from Building Block
+    passed: passedAt,
+    net: networkLabel(),
   }
-
-  const uriHex = Buffer.from(JSON.stringify(metadata), 'utf8').toString('hex').toUpperCase()
 
   const client = await getConnectedClient()
   try {
     const txTemplate = {
       TransactionType: 'NFTokenMint' as const,
       Account: wallet.address,
-      URI: uriHex,
+      URI: nftUriHex(metadata),
       Flags: 8,          // tfTransferable
       TransferFee: 0,
       NFTokenTaxon: 3,   // BuildChain Inspector Credential taxon
