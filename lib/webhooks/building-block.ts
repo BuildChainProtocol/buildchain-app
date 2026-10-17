@@ -54,9 +54,10 @@ export interface BBPaymentRow {
   sub_name:       string | null
   /** USD — never XRP or drops */
   amount:         number
-  status:         'paid' | 'pending' | 'failed'
-  tx_hash:        string | null   // XRPL EscrowFinish hash
-  wallet:         string | null   // Destination XRP address (null when sub wallet unknown)
+  /** 'held' = no payee wallet, so nothing was paid to this payee (BB Round 4 #6) */
+  status:         'paid' | 'held' | 'pending' | 'failed'
+  tx_hash:        string | null   // XRPL EscrowFinish hash (null when held)
+  wallet:         string | null   // The payee's own XRP address as BB sent it — never a substitute
   ledger_index:   number | null   // XRPL ledger index of finish tx
 }
 
@@ -175,6 +176,11 @@ export async function sendBuildingBlockWebhook(
  *
  * payees is the JSONB array we stored from BB's submit call.
  * All amounts are USD — we do NOT send XRP or drops.
+ *
+ * A row reports the payee's own wallet as BB sent it. A payee without one is
+ * reported 'held' with no wallet and no transaction — never paid to the GC's
+ * or borrower's wallet in its place (BB Round 4 #6), since BB records a
+ * payment as going wherever the row says it went.
  */
 export function buildPaymentsRows(
   payees: any[] | null,
@@ -182,9 +188,12 @@ export function buildPaymentsRows(
   opts: {
     escrowFinishHash:  string | null
     ledgerIndex?:      number | null
-    destinationWallet: string | null
   },
 ): BBPaymentRow[] {
+  const paidOrHeld = (wallet: string | null) => wallet
+    ? { status: 'paid' as const, tx_hash: opts.escrowFinishHash, wallet, ledger_index: opts.ledgerIndex ?? null }
+    : { status: 'held' as const, tx_hash: null, wallet: null, ledger_index: null }
+
   // Prefer payees from the stored JSONB (richer — has bb_pay_app_id + sub_code + amount).
   // Fall back to draw_line_items current_payment_due if payees weren't stored.
   if (payees && payees.length > 0) {
@@ -193,14 +202,12 @@ export function buildPaymentsRows(
       sub_code:       p.sub_code      ?? null,
       sub_name:       p.sub_name      ?? null,
       amount:         Math.round(parseFloat(p.amount || 0) * 100) / 100,
-      status:         'paid' as const,
-      tx_hash:        opts.escrowFinishHash,
-      wallet:         p.wallet ?? opts.destinationWallet ?? null,
-      ledger_index:   opts.ledgerIndex ?? null,
+      ...paidOrHeld(typeof p.wallet === 'string' && p.wallet ? p.wallet : null),
     }))
   }
 
-  // Fallback: aggregate from draw_line_items grouped by bb_pay_app_id
+  // Fallback: aggregate from draw_line_items grouped by bb_pay_app_id. Line
+  // items carry no payee wallet, so these rows are held.
   const map = new Map<number | null, BBPaymentRow>()
   for (const li of drawLineItems) {
     const key = li.bb_pay_app_id ?? null
@@ -214,10 +221,7 @@ export function buildPaymentsRows(
         sub_code:       li.sub_code ?? null,
         sub_name:       (li as any).sub_name ?? null,
         amount:         Math.round(amt * 100) / 100,
-        status:         'paid',
-        tx_hash:        opts.escrowFinishHash,
-        wallet:         opts.destinationWallet,
-        ledger_index:   opts.ledgerIndex ?? null,
+        ...paidOrHeld(null),
       })
     }
   }
@@ -225,7 +229,8 @@ export function buildPaymentsRows(
 }
 
 /**
- * escrow_released (with payments[]) and then one payment_confirmed per payee.
+ * escrow_released (with payments[]) and then one payment_confirmed per paid
+ * payee (held payees get none — nothing was paid to them).
  *
  * Every release path sends exactly this: the lender's manual Fund and the
  * orchestrator, whichever condition (inspection or lien waiver) completed
@@ -239,14 +244,12 @@ export async function sendEscrowReleasedWebhooks(opts: {
   netAmount:         number | null
   payees:            any[] | null
   lineItems:         Array<{ bb_pay_app_id: number | null; sub_code: string | null; sub_name?: string | null; current_payment_due: number | null }>
-  destinationWallet: string | null
   fundedAt:          string
   trigger:           'manual' | 'orchestrator'
 }): Promise<void> {
   const payments = buildPaymentsRows(opts.payees, opts.lineItems, {
     escrowFinishHash:  opts.escrowFinishHash,
     ledgerIndex:       null,
-    destinationWallet: opts.destinationWallet,
   })
 
   await sendBuildingBlockWebhook({
@@ -259,9 +262,9 @@ export async function sendEscrowReleasedWebhooks(opts: {
     payments,
   })
 
-  // payment_confirmed — one event per payee for per-sub granularity
+  // payment_confirmed — one event per paid payee for per-sub granularity
   await Promise.allSettled(
-    payments.map(p =>
+    payments.filter(p => p.status === 'paid').map(p =>
       sendBuildingBlockWebhook({
         event:         'payment_confirmed',
         bc_draw_id:    opts.bcDrawId,

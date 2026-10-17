@@ -227,14 +227,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         .eq('draw_request_id', params.id)
 
       await sendEscrowReleasedWebhooks({
-        bcDrawId:          params.id,
-        escrowFinishHash:  updated.escrow_finish_hash ?? null,
-        netAmount:         updated.net_amount ?? updated.amount,
-        payees:            (updated as any).payees ?? null,
-        lineItems:         lineItems ?? [],
-        destinationWallet: (updated as any).gc_wallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? null),
-        fundedAt:          String(updates.reviewed_at),
-        trigger:           'manual',
+        bcDrawId:         params.id,
+        escrowFinishHash: updated.escrow_finish_hash ?? null,
+        netAmount:        updated.net_amount ?? updated.amount,
+        payees:           (updated as any).payees ?? null,
+        lineItems:        lineItems ?? [],
+        fundedAt:         String(updates.reviewed_at),
+        trigger:          'manual',
       })
     }
   } catch (webhookErr) {

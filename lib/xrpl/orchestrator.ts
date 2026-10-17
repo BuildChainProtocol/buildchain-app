@@ -87,11 +87,11 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       inspection_done, lien_waiver,
       lien_waiver_nft_id,
       escrow_sequence, escrow_txn_hash,
-      gc_wallet, payees,
+      payees,
       inspections!draw_request_id ( id, status, credential_nft_id ),
       projects (
         name, loan_amount, amount_drawn,
-        borrowers ( profile_id, email, company_name, xrp_address ),
+        borrowers ( profile_id, email, company_name ),
         lenders   ( profile_id, company_name )
       )
     `)
@@ -326,17 +326,15 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         .select('bb_pay_app_id, sub_code, current_payment_due')
         .eq('draw_request_id', drawId)
 
-      const project = draw.projects as any
       const { sendEscrowReleasedWebhooks } = await import('@/lib/webhooks/building-block')
       await sendEscrowReleasedWebhooks({
-        bcDrawId:          drawId,
-        escrowFinishHash:  result.finishHash ?? null,
-        netAmount:         draw.net_amount ?? draw.amount,
-        payees:            draw.payees ?? null,
-        lineItems:         lineItems ?? [],
-        destinationWallet: draw.gc_wallet ?? project?.borrowers?.xrp_address ?? null,
-        fundedAt:          new Date().toISOString(),
-        trigger:           'orchestrator',
+        bcDrawId:         drawId,
+        escrowFinishHash: result.finishHash ?? null,
+        netAmount:        draw.net_amount ?? draw.amount,
+        payees:           draw.payees ?? null,
+        lineItems:        lineItems ?? [],
+        fundedAt:         new Date().toISOString(),
+        trigger:          'orchestrator',
       })
     } catch (webhookErr) {
       console.warn('[Orchestrator] escrow_released webhook failed (non-fatal):', webhookErr instanceof Error ? webhookErr.message : webhookErr)
