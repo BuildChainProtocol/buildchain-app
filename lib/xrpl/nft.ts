@@ -11,7 +11,9 @@
  *      → otherwise: burns the NFT as proof of settlement
  *
  * URI format:
- *   Currently: hex-encoded JSON loan metadata (centralized, but on-chain)
+ *   Currently: hex-encoded compact JSON keyed by the project id, within
+ *   XRPL's 256-byte URI limit (see nft-uri.ts). Names and the property
+ *   address stay in BuildChain's database, off the public ledger.
  *   Upgrade path: pin loan summary PDF to IPFS via Pinata, set URI = 'ipfs://{CID}'
  *   for true immutability. Change the URI value in mintLoanNFT() once Pinata
  *   is wired up — no other code changes needed.
@@ -21,6 +23,7 @@
 
 import { Wallet } from 'xrpl'
 import { getConnectedClient } from './client'
+import { nftUriHex, networkLabel } from './nft-uri'
 
 // Ripple epoch offset
 const RIPPLE_EPOCH = 946684800
@@ -62,32 +65,25 @@ function extractNFTokenId(meta: Record<string, unknown>): string | null {
 }
 
 /**
- * Mint an NFT at loan origination. The token URI encodes JSON metadata
- * describing the loan — loan number, parties, amount, terms.
+ * Mint an NFT at loan origination. The token URI encodes compact JSON
+ * metadata describing the loan — project id, loan number, amount, terms.
+ * The parties and the property are found through the project id.
  *
  * Returns the NFTokenID and mint TX hash to be stored on the project record.
  * Non-blocking: caller must wrap in try/catch.
  *
- * IPFS upgrade: replace `uriHex` with Buffer.from(`ipfs://${cid}`, 'utf8')
+ * IPFS upgrade: replace the URI with Buffer.from(`ipfs://${cid}`, 'utf8')
  * .toString('hex').toUpperCase() once Pinata integration is live.
  */
 export async function mintLoanNFT({
   projectId,
   loanNumber,
-  projectName,
-  propertyAddress,
-  borrowerName,
-  lenderName,
   loanAmount,
   interestRate,
   maturityDate,
 }: {
   projectId: string
   loanNumber: string
-  projectName: string
-  propertyAddress: string
-  borrowerName: string
-  lenderName: string
   loanAmount: number
   interestRate: number | null
   maturityDate: string | null
@@ -96,36 +92,27 @@ export async function mintLoanNFT({
 
   // ─── Loan metadata encoded into the NFT URI ────────────────────────────────
   // TODO: Replace with ipfs://{CID} once Pinata is integrated.
-  // The CID should point to a pinned JSON or PDF document containing these
-  // same fields. That makes the record truly immutable regardless of BuildChain
+  // The CID should point to a pinned JSON or PDF document with the full loan
+  // record. That makes the record truly immutable regardless of BuildChain
   // server state.
   const metadata = {
-    platform: 'BuildChain',
-    version: '1',
-    type: 'construction_loan',
-    project_id: projectId,
-    loan_number: loanNumber,
-    project_name: projectName,
-    property_address: propertyAddress,
-    borrower: borrowerName,
-    lender: lenderName,
-    loan_amount_usd: loanAmount,
-    interest_rate_pct: interestRate,
-    maturity_date: maturityDate,
-    origination_date: new Date().toISOString(),
-    ipfs_document_cid: null, // populated once Pinata is integrated
-    network: (process.env.XRPL_NETWORK ?? '').includes('altnet') ? 'testnet' : 'mainnet',
+    p: 'BuildChain',
+    t: 'construction_loan',
+    pid: projectId,
+    loan: String(loanNumber ?? '').slice(0, 32),
+    usd: loanAmount,
+    rate: interestRate ?? undefined,         // omitted when unknown
+    maturity: maturityDate ?? undefined,     // omitted when unknown
+    ts: new Date().toISOString(),
+    net: networkLabel(),
   }
-
-  // XRPL URI must be uppercase hex-encoded UTF-8
-  const uriHex = Buffer.from(JSON.stringify(metadata), 'utf8').toString('hex').toUpperCase()
 
   const client = await getConnectedClient()
   try {
     const txTemplate = {
       TransactionType: 'NFTokenMint' as const,
       Account: wallet.address,
-      URI: uriHex,
+      URI: nftUriHex(metadata),
       Flags: 8,        // tfTransferable — allows future transfer to borrower on payoff
       TransferFee: 0,
       NFTokenTaxon: 0, // BuildChain loan taxon (distinct from draw taxon = 1)

@@ -73,23 +73,15 @@ export async function POST(request: NextRequest) {
   })
 
   // ─── XRPL: Mint loan NFT (optional — non-fatal if XRPL unavailable) ────────
-  // Fetch borrower + lender names for the NFT metadata before minting.
+  // The NFT carries the project id and loan terms; names and the property
+  // address stay off the public ledger (lib/xrpl/nft-uri.ts).
   // This runs after the project is created so a failure here never blocks origination.
   try {
     const { isXrplConfigured, mintLoanNFT } = await import('@/lib/xrpl/nft')
     if (isXrplConfigured()) {
-      const [{ data: borrower }, { data: lender }] = await Promise.all([
-        supabase.from('borrowers').select('company_name').eq('id', body.borrower_id).single(),
-        supabase.from('lenders').select('company_name').eq('id', body.lender_id).single(),
-      ])
-
       const nft = await mintLoanNFT({
         projectId: data.id,
         loanNumber: loanNumber,
-        projectName: body.name,
-        propertyAddress: [body.address, body.city, body.state, body.zip].filter(Boolean).join(', '),
-        borrowerName: borrower?.company_name ?? 'Unknown Borrower',
-        lenderName: lender?.company_name ?? 'Unknown Lender',
         loanAmount: body.loan_amount,
         interestRate: body.interest_rate ?? null,
         maturityDate: body.maturity_date ?? null,

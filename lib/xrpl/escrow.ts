@@ -1,6 +1,7 @@
 import { Wallet, xrpToDrops } from 'xrpl'
 import type { EscrowCreate, EscrowFinish } from 'xrpl'
 import { getConnectedClient } from './client'
+import { nftUriHex, networkLabel } from './nft-uri'
 import { usdToXrpDrops } from './price-oracle'
 
 // ── ESCROW_CURRENCY config ─────────────────────────────────────────────────────
@@ -34,26 +35,6 @@ const RIPPLE_EPOCH = 946684800
 // Helper: UTF-8 string → uppercase hex (XRPL Memo encoding)
 function toHex(str: string): string {
   return Buffer.from(str, 'utf8').toString('hex').toUpperCase()
-}
-
-// XRPL caps an NFToken URI at 256 bytes (rippled maxTokenURILength); a longer
-// URI fails the whole NFTokenMint with temMALFORMED. So the URI carries a
-// compact record that ties the token to its draw, the full details stay in
-// BuildChain's database, and names and emails never go on the public ledger.
-const MAX_NFT_URI_BYTES = 256
-
-function nftUriHex(metadata: Record<string, unknown>): string {
-  const json = JSON.stringify(metadata)
-  const bytes = Buffer.byteLength(json, 'utf8')
-  if (bytes > MAX_NFT_URI_BYTES) {
-    throw new Error(`NFT metadata is ${bytes} bytes; XRPL allows at most ${MAX_NFT_URI_BYTES}`)
-  }
-  return toHex(json)
-}
-
-function networkLabel(): 'testnet' | 'mainnet' {
-  const network = process.env.XRPL_NETWORK ?? ''
-  return !network || network.includes('altnet') || network.includes('testnet') ? 'testnet' : 'mainnet'
 }
 
 function toRippleTime(unixMs: number): number {
@@ -407,8 +388,9 @@ export async function mintInspectorCredentialNFT({
 /**
  * Mints an XRPL NFToken as an immutable record of a draw lifecycle event.
  *
- * The NFT URI encodes JSON metadata (draw ID, project, amount, event type,
- * timestamp) as uppercase hex — this becomes the permanent on-chain record.
+ * The NFT URI encodes compact JSON metadata (draw ID, number, amount, event
+ * type, timestamp) as uppercase hex — this becomes the permanent on-chain
+ * record. The project is found through the draw.
  *
  * On testnet: token visible at https://testnet.xrpl.org/nft/{nftTokenId}
  * Non-blocking: caller must wrap in try/catch.
@@ -416,39 +398,32 @@ export async function mintInspectorCredentialNFT({
 export async function mintDrawNFT({
   drawRequestId,
   drawNumber,
-  projectName,
   drawAmount,
   eventType,
 }: {
   drawRequestId: string
   drawNumber: string
-  projectName: string
   drawAmount: number
   eventType: 'approval' | 'release'
 }): Promise<{ nftTokenId: string; txnHash: string }> {
   const wallet = getPlatformWallet()
 
   const metadata = {
-    platform: 'BuildChain',
-    version: '1',
-    type: eventType === 'approval' ? 'draw_approval' : 'draw_release',
-    draw_request_id: drawRequestId,
-    draw_number: drawNumber,
-    project: projectName,
-    amount_usd: drawAmount,
-    timestamp: new Date().toISOString(),
-    network: (process.env.XRPL_NETWORK ?? '').includes('altnet') ? 'testnet' : 'mainnet',
+    p: 'BuildChain',
+    t: eventType === 'approval' ? 'draw_approval' : 'draw_release',
+    drid: drawRequestId,
+    draw: String(drawNumber ?? '').slice(0, 24),
+    usd: drawAmount,
+    ts: new Date().toISOString(),
+    net: networkLabel(),
   }
-
-  // XRPL URI field must be uppercase hex-encoded UTF-8
-  const uriHex = Buffer.from(JSON.stringify(metadata), 'utf8').toString('hex').toUpperCase()
 
   const client = await getConnectedClient()
   try {
     const txTemplate = {
       TransactionType: 'NFTokenMint' as const,
       Account: wallet.address,
-      URI: uriHex,
+      URI: nftUriHex(metadata),
       Flags: 8,           // tfTransferable — allows future transfer if needed
       TransferFee: 0,
       NFTokenTaxon: 1,    // BuildChain platform taxon
