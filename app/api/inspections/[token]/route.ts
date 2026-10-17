@@ -2,19 +2,32 @@
  * Public API for the inspector portal — no auth required.
  * Only the inspection token grants access.
  *
+ * Inspectors have no session and anon has no access to inspections
+ * (migration 016), so both handlers use the service role. The token lookup
+ * comes first and everything after it is scoped to the inspection it found;
+ * PATCH writes nothing until that inspection is confirmed pending.
+ *
  * When an inspection passes (status → 'passed'):
  *   1. Mints an XLS-20 Inspector Credential NFT on XRPL (Patent §III)
  *   2. Stores the NFT ID on the inspection record
  *   3. Runs the Verification Orchestrator (Patent §V)
  *      → If lien waiver NFT is also present, auto-releases escrow
  */
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { sendEmail } from '@/lib/email/send'
 import { inspectionPassedEmail, inspectionFailedEmail } from '@/lib/email/templates'
 
 export const runtime = 'nodejs'
+
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set')
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
+  return createClient(url, key)
+}
 
 // ─── GET /api/inspections/[token] ─────────────────────────────────────────────
 // Returns the inspection + associated project + draw info
@@ -23,7 +36,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { token: string } }
 ) {
-  const supabase = createClient()
+  const supabase = getServiceClient()
 
   const { data: inspection, error } = await supabase
     .from('inspections')
@@ -53,7 +66,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { token: string } }
 ) {
-  const supabase = createClient()
+  const supabase = getServiceClient()
 
   // Verify token exists and is still pending
   const { data: inspection, error: fetchErr } = await supabase
@@ -80,6 +93,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'status must be "passed" or "failed"' }, { status: 400 })
   }
 
+  // Only while still pending, so a second submit or BB anchoring the same
+  // inspection (anchorBbInspection) can't overwrite a result that landed first
   const { data: updated, error: updateErr } = await supabase
     .from('inspections')
     .update({
@@ -88,11 +103,15 @@ export async function PATCH(
       submitted_at: new Date().toISOString(),
     })
     .eq('id', inspection.id)
+    .eq('status', 'pending')
     .select()
-    .single()
+    .maybeSingle()
 
   if (updateErr) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
+  }
+  if (!updated) {
+    return NextResponse.json({ error: 'Inspection already submitted' }, { status: 409 })
   }
 
   // If inspection passed, mark the draw's inspection_done flag
