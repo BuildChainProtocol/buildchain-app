@@ -24,9 +24,18 @@
  * BB sends gross_amount / retainage_held / net_amount / currency explicitly.
  * We honor those rather than recomputing. If only total_amount + retainage_rate
  * are present (older BB builds) we fall back to computing.
+ *
+ * Inspection
+ * ----------
+ * BB sends the project's latest signed inspection. A passed one that no other
+ * active draw has used becomes this draw's passed inspection, and its
+ * Inspector Credential NFT (taxon 3) is minted after the response. Anything
+ * else is saved as a pending inspection, so BuildChain's inspector link
+ * remains the fallback.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { createClient } from '@supabase/supabase-js'
 
 function getServiceClient() {
@@ -42,6 +51,89 @@ function unauthorized(msg: string) {
 }
 function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 })
+}
+
+/**
+ * Anchor BB's passed inspection on-ledger, as the inspector portal does for
+ * its own: mint the Inspector Credential NFT, record it, tell BB, and run the
+ * orchestrator in case the lien waiver condition is already met. The row is
+ * claimed pending → passed first; if the mint fails it goes back to pending.
+ */
+async function anchorBbInspection(opts: {
+  inspectionId:         string
+  drawRequestId:        string
+  bbInspectionResultId: number
+  passedAt:             string
+}): Promise<void> {
+  try {
+    const { isXrplConfigured, mintInspectorCredentialNFT } = await import('@/lib/xrpl/escrow')
+    if (!isXrplConfigured()) {
+      console.log('[BB submit] XRPL not configured — BB inspection left pending')
+      return
+    }
+    const supabase = getServiceClient()
+
+    const { data: claimed } = await supabase
+      .from('inspections')
+      .update({ status: 'passed', submitted_at: opts.passedAt })
+      .eq('id', opts.inspectionId)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
+    if (!claimed) return  // completed through the inspector link meanwhile
+
+    let nft: { nftTokenId: string; txnHash: string }
+    try {
+      nft = await mintInspectorCredentialNFT({
+        drawRequestId:        opts.drawRequestId,
+        inspectionId:         opts.inspectionId,
+        bbInspectionResultId: opts.bbInspectionResultId,
+        passedAt:             opts.passedAt,
+      })
+    } catch (mintErr) {
+      console.warn('[BB submit] Credential NFT mint failed — inspection back to pending:',
+        mintErr instanceof Error ? mintErr.message : mintErr)
+      await supabase
+        .from('inspections')
+        .update({ status: 'pending', submitted_at: null })
+        .eq('id', opts.inspectionId)
+      return
+    }
+
+    const { error: saveErr } = await supabase
+      .from('inspections')
+      .update({
+        credential_nft_id:        nft.nftTokenId,
+        credential_nft_hash:      nft.txnHash,
+        credential_nft_minted_at: new Date().toISOString(),
+      })
+      .eq('id', opts.inspectionId)
+    if (saveErr) {
+      // On-ledger but not recorded: needs a hand fix with these values
+      console.error(`[BB submit] Credential NFT ${nft.nftTokenId} (tx ${nft.txnHash}) minted but not saved on inspection ${opts.inspectionId}:`, saveErr.message)
+      return
+    }
+    console.log(`[BB submit] Credential NFT minted for BB inspection #${opts.bbInspectionResultId} — ID ${nft.nftTokenId}`)
+
+    const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+    await sendBuildingBlockWebhook({
+      event:                   'inspector_nft_minted',
+      bc_draw_id:              opts.drawRequestId,
+      nft_token_id:            nft.nftTokenId,
+      nft_txn_hash:            nft.txnHash,
+      minted_at:               new Date().toISOString(),
+      bb_inspection_result_id: opts.bbInspectionResultId,
+      taxon:                   3,
+    })
+
+    // A no-op until the draw is approved; releases if this was the last condition
+    const { runOrchestrator } = await import('@/lib/xrpl/orchestrator')
+    const orchResult = await runOrchestrator(opts.drawRequestId)
+    console.log(`[BB submit] Orchestrator for draw ${opts.drawRequestId}:`,
+      orchResult.escrowFinished ? `auto-funded! hash=${orchResult.finishHash}` : orchResult.reason)
+  } catch (err) {
+    console.warn('[BB submit] BB inspection anchoring failed (non-fatal):', err instanceof Error ? err.message : err)
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -185,6 +277,33 @@ export async function POST(req: NextRequest) {
     netAmt  = Math.round((grossAmt - retHeld) * 100) / 100
   }
 
+  // ── BB inspection: can it anchor this draw? ───────────────────────────────
+  // BB sends the project's LATEST signed inspection, not necessarily one for
+  // this period, so a passed one anchors only if no other active draw
+  // (not declined / failed) already used it: one inspection, one draw.
+  const bbInspectionId: number | null =
+    inspection?.inspection_result_id != null && !isNaN(Number(inspection.inspection_result_id))
+      ? Number(inspection.inspection_result_id)
+      : null
+  const bbInspectionPassed = !!inspection && ['pass', 'pass_with_observations'].includes(inspection.outcome)
+  let bbInspectionUsed = false
+  if (bbInspectionPassed && bbInspectionId != null) {
+    const { data: earlier } = await supabase
+      .from('inspections')
+      .select('draw_request_id')
+      .eq('bb_inspection_result_id', bbInspectionId)
+    const earlierDrawIds = (earlier ?? []).map((r: any) => r.draw_request_id).filter(Boolean)
+    if (earlierDrawIds.length > 0) {
+      const { data: activeEarlier } = await supabase
+        .from('draw_requests')
+        .select('id')
+        .in('id', earlierDrawIds)
+        .not('status', 'in', '("declined","failed")')
+      bbInspectionUsed = !!activeEarlier && activeEarlier.length > 0
+    }
+  }
+  const canAnchorInspection = bbInspectionPassed && bbInspectionId != null && !bbInspectionUsed
+
   // ── Create draw_request ───────────────────────────────────────────────────
   const { data: draw, error: drawErr } = await supabase
     .from('draw_requests')
@@ -202,7 +321,7 @@ export async function POST(req: NextRequest) {
       phase:               period_to ? `Period ending ${period_to}` : 'See G703',
       status:              'submitted',
       submitted_at:        new Date().toISOString(),
-      inspection_done:     !!inspection && ['pass', 'pass_with_observations'].includes(inspection.outcome),
+      inspection_done:     canAnchorInspection,
       lien_waiver:         lien_waivers.length > 0,
       bb_draw_id:          bb_draw_id ?? null,
       idempotency_key:     idempotencyKey ?? null,
@@ -332,23 +451,41 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Save inspection ───────────────────────────────────────────────────────
+  // Into the inspector-portal schema (migration 011 replaced the table that
+  // had outcome / inspection_date columns). It starts pending; a passed BB
+  // inspection is claimed and anchored after the response (anchorBbInspection).
   let inspectionSaved = false
-  if (inspection && inspection.inspector_name && inspection.inspection_date) {
-    const { error: iErr } = await supabase.from('inspections').insert({
-      project_id:                projectId,
-      draw_request_id:           draw.id,
-      inspection_result_id:      inspection.inspection_result_id ?? null,
-      inspector_name:            inspection.inspector_name,
-      inspector_company:         inspection.inspector_company    || null,
-      inspector_email:           inspection.inspector_email      || null,
-      inspection_date:           inspection.inspection_date,
-      outcome:                   inspection.outcome || 'pending',
-      percent_complete_verified: inspection.percent_complete_verified || null,
-      report_path:               inspection.report_path || null,
-      notes:                     inspection.notes       || null,
-      source:                    'building_block',
-    })
-    if (!iErr) inspectionSaved = true
+  let inspectionRowId: string | null = null
+  if (inspection && inspection.inspector_name && inspection.inspector_email) {
+    const bbSummary = [
+      `Building Block inspection${bbInspectionId != null ? ` #${bbInspectionId}` : ''}`,
+      inspection.outcome || null,
+      inspection.inspection_date ? `signed ${inspection.inspection_date}` : null,
+      inspection.inspector_company || null,
+      bbInspectionUsed ? 'already used by another active draw, so this draw needs a new inspection' : null,
+    ].filter(Boolean).join(' · ')
+    const { data: inspectionRow, error: iErr } = await supabase
+      .from('inspections')
+      .insert({
+        project_id:              projectId,
+        draw_request_id:         draw.id,
+        bb_inspection_result_id: bbInspectionId,
+        inspector_name:          inspection.inspector_name,
+        inspector_email:         inspection.inspector_email,
+        scheduled_date:          inspection.inspection_date || null,
+        status:                  'pending',
+        notes:                   [bbSummary, inspection.notes].filter(Boolean).join('\n'),
+      })
+      .select('id')
+      .single()
+    if (iErr) {
+      console.warn('[BB submit] inspection not saved:', iErr.message)
+    } else {
+      inspectionSaved = true
+      inspectionRowId = inspectionRow.id
+    }
+  } else if (inspection) {
+    console.warn('[BB submit] inspection not saved: inspector_name and inspector_email are required')
   }
 
   // ── Notify lender ─────────────────────────────────────────────────────────
@@ -372,6 +509,17 @@ export async function POST(req: NextRequest) {
     }
   } catch (notifErr) {
     console.warn('[BB submit] lender notification failed (non-fatal):', notifErr)
+  }
+
+  // ── Anchor BB's passed inspection (Inspector Credential NFT, taxon 3) ─────
+  // After the response under waitUntil, so BB's 30 s submit never waits on XRPL
+  if (canAnchorInspection && inspectionRowId && bbInspectionId != null) {
+    waitUntil(anchorBbInspection({
+      inspectionId:         inspectionRowId,
+      drawRequestId:        draw.id,
+      bbInspectionResultId: bbInspectionId,
+      passedAt:             inspection.inspection_date || new Date().toISOString(),
+    }))
   }
 
   // ── Response ──────────────────────────────────────────────────────────────
