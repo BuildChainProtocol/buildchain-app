@@ -59,3 +59,9 @@ $$;
 CREATE INDEX IF NOT EXISTS inspections_draw_idx    ON public.inspections (draw_request_id);
 CREATE INDEX IF NOT EXISTS inspections_project_idx ON public.inspections (project_id);
 CREATE INDEX IF NOT EXISTS inspections_token_idx   ON public.inspections (token);
+
+-- 011's grant. 010 gave authenticated only SELECT, so an admin's Assign
+-- Inspection (insert) and portal submit (update) were refused with 42501.
+-- Row-level security still limits writes to admins ("Admins can manage
+-- inspections" / "Admins full access on inspections").
+GRANT SELECT, INSERT, UPDATE ON public.inspections TO authenticated;
