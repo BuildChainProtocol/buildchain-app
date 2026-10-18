@@ -46,10 +46,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'draw_request_id, inspector_name, inspector_email required' }, { status: 400 })
   }
 
-  // Fetch draw + project info for the email
+  // Fetch draw + project info for the email (and the draw's project_id: the
+  // nested projects(...) select carries no id, and inspections.project_id
+  // must be set or the lender / borrower policies can't see the row)
   const { data: draw } = await supabase
     .from('draw_requests')
-    .select('request_number, amount, projects(name, address, city, state)')
+    .select('project_id, request_number, amount, projects(name, address, city, state)')
     .eq('id', draw_request_id)
     .single()
 
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
     .from('inspections')
     .insert({
       draw_request_id,
-      project_id: project_id ?? (draw as any)?.projects?.id,
+      project_id: project_id ?? (draw as any)?.project_id,
       inspector_name,
       inspector_email,
       scheduled_date: scheduled_date || null,
