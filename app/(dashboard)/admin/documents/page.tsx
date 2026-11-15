@@ -54,7 +54,7 @@ export default async function AdminDocumentsPage() {
       {/* Status summary */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
         {[
-          { label: 'Required', count: byStatus.required.length, color: 'rgba(243,156,18,0.15)', text: 'var(--bc-gold)' },
+          { label: 'Required', count: byStatus.required.length, color: 'rgba(201,164,87,0.15)', text: 'var(--bc-gold)' },
           { label: 'Uploaded', count: byStatus.uploaded.length, color: 'rgba(45,125,210,0.15)', text: 'var(--bc-blue)' },
           { label: 'Approved', count: byStatus.approved.length, color: 'rgba(46,204,113,0.15)', text: '#2ecc71' },
           { label: 'Rejected', count: byStatus.rejected.length, color: 'rgba(231,76,60,0.15)', text: '#e74c3c' },

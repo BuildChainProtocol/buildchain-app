@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 // BUILD_ID — bump this any time you deploy so you can confirm which
 // version is live: look for "v6" in the bottom-right corner of the page.
@@ -20,20 +21,7 @@ export default function LoginPage({
     >
       <div className="w-full max-w-md px-6">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-3">
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-base"
-              style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}
-            >
-              BC
-            </div>
-            <span className="text-2xl font-bold">
-              Build<span style={{ color: 'var(--bc-gold)' }}>Chain</span> Protocol
-            </span>
-          </div>
-          <p style={{ color: 'var(--bc-muted)' }} className="text-sm">
-            Construction loan management platform
-          </p>
+          <BuildChainLogo variant="lockup" height={120} alt="BuildChain Protocol" style={{ margin: '0 auto' }} />
         </div>
 
         <div

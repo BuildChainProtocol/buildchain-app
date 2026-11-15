@@ -26,7 +26,7 @@ export default function StatCard({ label, value, sub, subColor = 'default', icon
         </div>
         {icon && (
           <div className="w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0"
-            style={{ background: iconBg || 'rgba(201,168,76,0.15)' }}>
+            style={{ background: iconBg || 'rgba(201,164,87,0.15)' }}>
             {icon}
           </div>
         )}

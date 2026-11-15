@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/lib/types/database'
+import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 interface TopbarProps {
   profile: Profile
@@ -109,12 +110,11 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
             </svg>
           </button>
         )}
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0"
-          style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>BC</div>
-        {/* Hide brand text on small screens to avoid crowding */}
-        <span className="hidden sm:inline text-base font-bold">
-          Build<span style={{ color: 'var(--bc-gold)' }}>Chain</span>
-          <span className="text-xs font-normal ml-1.5" style={{ color: 'var(--bc-muted)' }}>{roleLabel}</span>
+        <BuildChainLogo variant="mark" height={32} />
+        {/* Hide the wordmark on small screens to avoid crowding */}
+        <span className="hidden sm:inline-flex items-center">
+          <BuildChainLogo variant="wordmark" height={18} alt="" />
+          <span className="text-xs font-normal ml-2" style={{ color: 'var(--bc-muted)' }}>{roleLabel}</span>
         </span>
       </div>
 
@@ -183,11 +183,11 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
                       className="px-4 py-3 flex gap-3 transition-colors border-b"
                       style={{
                         borderColor: 'var(--bc-border)',
-                        background: n.read ? 'transparent' : 'rgba(243,156,18,0.04)',
+                        background: n.read ? 'transparent' : 'rgba(201,164,87,0.04)',
                         cursor: n.link ? 'pointer' : 'default',
                       }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = n.read ? 'transparent' : 'rgba(243,156,18,0.04)')}>
+                      onMouseLeave={e => (e.currentTarget.style.background = n.read ? 'transparent' : 'rgba(201,164,87,0.04)')}>
                       {/* Unread dot */}
                       <div className="flex-shrink-0 mt-1.5">
                         {!n.read

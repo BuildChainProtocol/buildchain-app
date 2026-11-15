@@ -64,7 +64,7 @@ export default async function LenderLoansPage() {
       {/* Pending draws alert */}
       {pendingDraws > 0 && (
         <div className="rounded-xl border px-5 py-4 mb-6 flex items-center justify-between"
-          style={{ background: 'rgba(243,156,18,0.08)', borderColor: 'rgba(243,156,18,0.3)' }}>
+          style={{ background: 'rgba(201,164,87,0.08)', borderColor: 'rgba(201,164,87,0.3)' }}>
           <div className="flex items-center gap-3">
             <span className="text-xl">⏳</span>
             <div>
@@ -141,7 +141,7 @@ export default async function LenderLoansPage() {
                         {pending.length > 0 ? (
                           <Link href="/lender/approvals"
                             className="text-xs px-2.5 py-1 rounded-full font-bold"
-                            style={{ background: 'rgba(243,156,18,0.2)', color: 'var(--bc-gold)' }}>
+                            style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold)' }}>
                             {pending.length} pending
                           </Link>
                         ) : (

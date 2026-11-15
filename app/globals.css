@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --bc-dark: #0f1923;
+  --bc-dark: #0d1b2a;
   --bc-navy: #162032;
   --bc-card: #1e2d40;
   --bc-border: #2a3f57;
-  --bc-gold: #c9a84c;
+  --bc-gold: #c9a457;
   --bc-gold-light: #e8c97a;
   --bc-blue: #2d7dd2;
   --bc-teal: #1ab3a6;
@@ -48,6 +48,6 @@ body {
   .badge-blue { @apply bg-blue-500/15 text-blue-400; }
   .badge-yellow { @apply bg-yellow-500/15 text-yellow-400; }
   .badge-red { @apply bg-red-500/15 text-red-400; }
-  .badge-gold { background: rgba(201,168,76,0.15); color: var(--bc-gold); }
+  .badge-gold { background: rgba(201,164,87,0.15); color: var(--bc-gold); }
   .badge-gray { @apply bg-gray-500/15 text-gray-400; }
 }

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 export default async function Home() {
   const supabase = createClient()
@@ -90,18 +91,18 @@ export default async function Home() {
 
         .pulse-ring {
           position:absolute; inset:-6px; border-radius:50%;
-          border:1px solid rgba(201,168,76,.5);
+          border:1px solid rgba(201,164,87,.5);
           animation: pulse-ring 2.4s ease-out infinite;
         }
         .pulse-ring-2 {
           position:absolute; inset:-6px; border-radius:50%;
-          border:1px solid rgba(201,168,76,.25);
+          border:1px solid rgba(201,164,87,.25);
           animation: pulse-ring 2.4s ease-out infinite;
           animation-delay:1.2s;
         }
 
         .grad-gold {
-          background: linear-gradient(135deg, #ffffff 0%, #f0dfa8 40%, #c9a84c 100%);
+          background: linear-gradient(135deg, #ffffff 0%, #f0dfa8 40%, #c9a457 100%);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
         .grad-blue {
@@ -109,11 +110,11 @@ export default async function Home() {
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
         .grad-mixed {
-          background: linear-gradient(135deg, #e8d5a0 0%, #c9a84c 40%, #2d7dd2 100%);
+          background: linear-gradient(135deg, #e8d5a0 0%, #c9a457 40%, #2d7dd2 100%);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
         .grad-stat {
-          background: linear-gradient(135deg, #f0dfa8 0%, #c9a84c 100%);
+          background: linear-gradient(135deg, #f0dfa8 0%, #c9a457 100%);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
         .grad-stat-blue {
@@ -126,7 +127,7 @@ export default async function Home() {
         }
 
         .shimmer-text {
-          background: linear-gradient(90deg, #c9a84c 0%, #f5e0a0 40%, #c9a84c 60%, #e8c97a 100%);
+          background: linear-gradient(90deg, #c9a457 0%, #f5e0a0 40%, #c9a457 60%, #e8c97a 100%);
           background-size: 300% auto;
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
           animation: shimmer 4s linear infinite;
@@ -139,8 +140,8 @@ export default async function Home() {
         }
 
         .glass-gold {
-          background: linear-gradient(135deg, rgba(201,168,76,.06) 0%, rgba(201,168,76,.02) 100%);
-          border: 1px solid rgba(201,168,76,.18);
+          background: linear-gradient(135deg, rgba(201,164,87,.06) 0%, rgba(201,164,87,.02) 100%);
+          border: 1px solid rgba(201,164,87,.18);
         }
 
         .glass-blue {
@@ -164,16 +165,16 @@ export default async function Home() {
 
         .btn-gold {
           display: inline-flex; align-items: center; gap: 8px;
-          background: linear-gradient(135deg, #b8922e 0%, #c9a84c 30%, #e8c97a 70%, #c9a84c 100%);
+          background: linear-gradient(135deg, #b8922e 0%, #c9a457 30%, #e8c97a 70%, #c9a457 100%);
           background-size: 200% auto;
           color: #080e16; font-weight: 800; font-size: 15px;
           padding: 15px 32px; border-radius: 12px; text-decoration: none;
           letter-spacing: -.2px; transition: all .22s;
-          box-shadow: 0 4px 20px rgba(201,168,76,.2);
+          box-shadow: 0 4px 20px rgba(201,164,87,.2);
         }
         .btn-gold:hover {
           transform: translateY(-2px);
-          box-shadow: 0 12px 36px rgba(201,168,76,.4);
+          box-shadow: 0 12px 36px rgba(201,164,87,.4);
           background-position: right center;
         }
 
@@ -211,8 +212,8 @@ export default async function Home() {
           transform: translateY(-4px);
         }
         .audience-card.gold:hover {
-          border-color: rgba(201,168,76,.4) !important;
-          box-shadow: 0 20px 60px rgba(201,168,76,.1), 0 0 0 1px rgba(201,168,76,.12) !important;
+          border-color: rgba(201,164,87,.4) !important;
+          box-shadow: 0 20px 60px rgba(201,164,87,.1), 0 0 0 1px rgba(201,164,87,.12) !important;
         }
         .audience-card.blue:hover {
           border-color: rgba(45,125,210,.4) !important;
@@ -223,7 +224,7 @@ export default async function Home() {
           transition: all .2s ease;
         }
         .feature-card:hover {
-          border-color: rgba(201,168,76,.28) !important;
+          border-color: rgba(201,164,87,.28) !important;
           transform: translateY(-3px);
           box-shadow: 0 16px 48px rgba(0,0,0,.35);
         }
@@ -244,7 +245,7 @@ export default async function Home() {
 
         .scan-line {
           position: absolute; left: 0; right: 0; height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(201,168,76,.4), transparent);
+          background: linear-gradient(90deg, transparent, rgba(201,164,87,.4), transparent);
           animation: scan-line 3s linear infinite;
           pointer-events: none;
         }
@@ -290,7 +291,7 @@ export default async function Home() {
         <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
           <div className="orb1" style={{
             position: 'absolute', width: 1000, height: 1000, top: -300, left: -250,
-            background: 'radial-gradient(circle, rgba(201,168,76,.065) 0%, transparent 65%)',
+            background: 'radial-gradient(circle, rgba(201,164,87,.065) 0%, transparent 65%)',
           }} />
           <div className="orb2" style={{
             position: 'absolute', width: 900, height: 900, top: 100, right: -200,
@@ -313,17 +314,9 @@ export default async function Home() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 10,
-                background: 'linear-gradient(135deg, #b8922e 0%, #c9a84c 40%, #e8c97a 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 13, fontWeight: 900, color: '#06090f', flexShrink: 0,
-                boxShadow: '0 4px 16px rgba(201,168,76,.3)',
-              }}>BC</div>
+              <BuildChainLogo variant="mark" height={40} alt="" />
               <div>
-                <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: '-.5px', lineHeight: 1.1 }}>
-                  Build<span style={{ color: '#c9a84c' }}>Chain</span>
-                </div>
+                <BuildChainLogo variant="wordmark" height={20} style={{ marginBottom: 3 }} />
                 <div style={{ fontSize: 9, color: '#2a4a66', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase' }}>Construction Loan Protocol</div>
               </div>
             </div>
@@ -347,10 +340,10 @@ export default async function Home() {
             </Link>
             <a href="mailto:jason@buildchain.finance?subject=BuildChain Demo Request"
               style={{
-                background: 'linear-gradient(135deg, #c9a84c 0%, #e8c97a 100%)',
+                background: 'linear-gradient(135deg, #c9a457 0%, #e8c97a 100%)',
                 color: '#06090f', fontWeight: 800, fontSize: 13,
                 padding: '9px 20px', borderRadius: 9, textDecoration: 'none',
-                boxShadow: '0 4px 14px rgba(201,168,76,.25)',
+                boxShadow: '0 4px 14px rgba(201,164,87,.25)',
               }}>
               <span className="nav-cta-text">Request </span>Demo
             </a>
@@ -373,15 +366,15 @@ export default async function Home() {
             {/* Live badge */}
             <div className="fade-in" style={{
               display: 'inline-flex', alignItems: 'center', gap: 10,
-              background: 'rgba(201,168,76,.06)',
-              border: '1px solid rgba(201,168,76,.2)',
+              background: 'rgba(201,164,87,.06)',
+              border: '1px solid rgba(201,164,87,.2)',
               borderRadius: 100, padding: '8px 20px', marginBottom: 48,
             }}>
               <div style={{
-                width: 7, height: 7, borderRadius: '50%', background: '#c9a84c',
-                boxShadow: '0 0 10px rgba(201,168,76,.9)',
+                width: 7, height: 7, borderRadius: '50%', background: '#c9a457',
+                boxShadow: '0 0 10px rgba(201,164,87,.9)',
               }} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#c9a84c', letterSpacing: '.05em' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#c9a457', letterSpacing: '.05em' }}>
                 Patent Pending · BLDCHN-001-P · Powered by XRP Ledger
               </span>
             </div>
@@ -424,13 +417,13 @@ export default async function Home() {
               gap: 1, background: 'rgba(255,255,255,.04)',
               border: '1px solid rgba(255,255,255,.07)',
               borderRadius: 20, overflow: 'hidden',
-              boxShadow: '0 0 0 1px rgba(201,168,76,.04), 0 24px 80px rgba(0,0,0,.5)',
+              boxShadow: '0 0 0 1px rgba(201,164,87,.04), 0 24px 80px rgba(0,0,0,.5)',
             }}>
               {[
-                { val: '89%', label: 'Faster Draw Cycles', note: '14 days → under 48 hrs', color: '#c9a84c', cls: 'grad-stat' },
+                { val: '89%', label: 'Faster Draw Cycles', note: '14 days → under 48 hrs', color: '#c9a457', cls: 'grad-stat' },
                 { val: '$4.6M+', label: 'Annual Value Unlocked', note: 'per $200M portfolio', color: '#2d7dd2', cls: 'grad-stat-blue' },
                 { val: '100%', label: 'Lien Waiver Compliance', note: 'on-chain · immutable', color: '#1ab3a6', cls: 'grad-stat-teal' },
-                { val: '3–5s', label: 'XRPL Settlement', note: 'vs. 3–5 days by wire', color: '#c9a84c', cls: 'grad-stat' },
+                { val: '3–5s', label: 'XRPL Settlement', note: 'vs. 3–5 days by wire', color: '#c9a457', cls: 'grad-stat' },
               ].map((s, i) => (
                 <div key={i} style={{
                   background: 'rgba(6,9,15,.85)', padding: '32px 24px',
@@ -466,12 +459,12 @@ export default async function Home() {
               Trusted Infrastructure
             </span>
             {[
-              { icon: '🛡', label: 'Patent BLDCHN-001-P', color: '#c9a84c', bg: 'rgba(201,168,76,.07)', border: 'rgba(201,168,76,.18)' },
+              { icon: '🛡', label: 'Patent BLDCHN-001-P', color: '#c9a457', bg: 'rgba(201,164,87,.07)', border: 'rgba(201,164,87,.18)' },
               { icon: '⬡', label: 'XRP Ledger Native', color: '#2d7dd2', bg: 'rgba(45,125,210,.07)', border: 'rgba(45,125,210,.18)' },
               { icon: '🏛', label: 'Delaware C-Corp', color: '#e8edf2', bg: 'rgba(255,255,255,.04)', border: 'rgba(255,255,255,.1)' },
               { icon: '⚖️', label: 'Non-MSB Compliant', color: '#1ab3a6', bg: 'rgba(26,179,166,.07)', border: 'rgba(26,179,166,.18)' },
               { icon: '™', label: 'Class 042 Trademark', color: '#e8edf2', bg: 'rgba(255,255,255,.04)', border: 'rgba(255,255,255,.1)' },
-              { icon: '🔒', label: 'Institutional Grade', color: '#c9a84c', bg: 'rgba(201,168,76,.07)', border: 'rgba(201,168,76,.18)' },
+              { icon: '🔒', label: 'Institutional Grade', color: '#c9a457', bg: 'rgba(201,164,87,.07)', border: 'rgba(201,164,87,.18)' },
             ].map((b, i) => (
               <div key={i} className="trust-badge" style={{ background: b.bg, border: `1px solid ${b.border}` }}>
                 <span style={{ fontSize: 13 }}>{b.icon}</span>
@@ -487,7 +480,7 @@ export default async function Home() {
           textAlign: 'center',
         }}>
           <div style={{ maxWidth: 1160, margin: '0 auto' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', textTransform: 'uppercase', letterSpacing: '.15em' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#c9a457', textTransform: 'uppercase', letterSpacing: '.15em' }}>
               The Market
             </span>
             <h2 style={{
@@ -543,12 +536,12 @@ export default async function Home() {
 
               {/* Solution side */}
               <div style={{
-                background: 'linear-gradient(135deg, rgba(201,168,76,.05) 0%, rgba(26,179,166,.04) 100%)',
-                border: '1px solid rgba(201,168,76,.18)',
+                background: 'linear-gradient(135deg, rgba(201,164,87,.05) 0%, rgba(26,179,166,.04) 100%)',
+                border: '1px solid rgba(201,164,87,.18)',
                 borderRadius: 20, padding: '48px 40px', textAlign: 'left',
-                boxShadow: '0 0 80px rgba(201,168,76,.04)',
+                boxShadow: '0 0 80px rgba(201,164,87,.04)',
               }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#c9a84c', letterSpacing: '.08em', marginBottom: 32, textTransform: 'uppercase' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#c9a457', letterSpacing: '.08em', marginBottom: 32, textTransform: 'uppercase' }}>
                   ✓ &nbsp;BuildChain Protocol
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -561,9 +554,9 @@ export default async function Home() {
                     <div key={i} style={{ display: 'flex', gap: 16 }}>
                       <div style={{
                         width: 24, height: 24, borderRadius: 6,
-                        background: 'rgba(201,168,76,.1)', border: '1px solid rgba(201,168,76,.25)',
+                        background: 'rgba(201,164,87,.1)', border: '1px solid rgba(201,164,87,.25)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 11, color: '#c9a84c', flexShrink: 0, marginTop: 1,
+                        fontSize: 11, color: '#c9a457', flexShrink: 0, marginTop: 1,
                       }}>✓</div>
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: '#c8d8e8', marginBottom: 4 }}>{p.title}</div>
@@ -708,7 +701,7 @@ export default async function Home() {
                     {/* Stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 18 }}>
                       {[
-                        { label: 'In Escrow', value: '$8.2M', color: '#c9a84c' },
+                        { label: 'In Escrow', value: '$8.2M', color: '#c9a457' },
                         { label: 'Available', value: '$4.1M', color: '#2d7dd2' },
                         { label: 'Released Today', value: '$340K', color: '#1ab3a6' },
                       ].map((s, i) => (
@@ -744,7 +737,7 @@ export default async function Home() {
 
                     {/* Projects */}
                     {[
-                      { name: 'Riverside Commons Phase 3', pct: 71, status: 'Approved', color: '#c9a84c' },
+                      { name: 'Riverside Commons Phase 3', pct: 71, status: 'Approved', color: '#c9a457' },
                       { name: 'Scottsdale Medical Plaza', pct: 45, status: 'Inspecting', color: '#2d7dd2' },
                       { name: 'Harbor View Condominiums', pct: 28, status: 'Active', color: '#1ab3a6' },
                     ].map((p, i) => (
@@ -763,7 +756,7 @@ export default async function Home() {
                         <div style={{ fontSize: 10, color: p.color, fontWeight: 700, whiteSpace: 'nowrap' }}>{p.pct}%</div>
                         <div style={{
                           fontSize: 9, fontWeight: 700, color: p.color,
-                          background: `rgba(${p.color === '#c9a84c' ? '201,168,76' : p.color === '#2d7dd2' ? '45,125,210' : '26,179,166'},.1)`,
+                          background: `rgba(${p.color === '#c9a457' ? '201,164,87' : p.color === '#2d7dd2' ? '45,125,210' : '26,179,166'},.1)`,
                           padding: '3px 8px', borderRadius: 6, whiteSpace: 'nowrap',
                         }}>{p.status}</div>
                       </div>
@@ -784,7 +777,7 @@ export default async function Home() {
           <div style={{
             position: 'absolute', width: 800, height: 600,
             top: '50%', right: '-10%', transform: 'translateY(-50%)',
-            background: 'radial-gradient(ellipse, rgba(201,168,76,.07) 0%, transparent 70%)',
+            background: 'radial-gradient(ellipse, rgba(201,164,87,.07) 0%, transparent 70%)',
             pointerEvents: 'none',
           }} />
 
@@ -795,9 +788,9 @@ export default async function Home() {
               <div style={{ position: 'relative' }}>
                 <div style={{
                   background: 'linear-gradient(160deg, rgba(20,30,48,.98) 0%, rgba(6,9,15,.99) 100%)',
-                  border: '1px solid rgba(201,168,76,.18)',
+                  border: '1px solid rgba(201,164,87,.18)',
                   borderRadius: 22, overflow: 'hidden',
-                  boxShadow: '0 0 0 1px rgba(201,168,76,.06), 0 40px 100px rgba(0,0,0,.6)',
+                  boxShadow: '0 0 0 1px rgba(201,164,87,.06), 0 40px 100px rgba(0,0,0,.6)',
                 }}>
                   <div style={{
                     background: 'rgba(6,9,15,.9)', borderBottom: '1px solid rgba(255,255,255,.06)',
@@ -826,7 +819,7 @@ export default async function Home() {
                       background: 'rgba(255,255,255,.025)', border: '1px solid rgba(255,255,255,.07)',
                       borderRadius: 12, padding: '14px', marginBottom: 14,
                     }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#c9a84c', letterSpacing: '.08em', marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#c9a457', letterSpacing: '.08em', marginBottom: 12 }}>
                         G703 SCHEDULE OF VALUES
                       </div>
                       {[
@@ -844,7 +837,7 @@ export default async function Home() {
                           <div style={{ color: '#8fa8c4' }}>{row.item}</div>
                           <div style={{ color: '#3d5c78', textAlign: 'right' }}>{row.scheduled}</div>
                           <div style={{ color: '#1ab3a6', textAlign: 'center', fontWeight: 700 }}>{row.complete}</div>
-                          <div style={{ color: '#c9a84c', textAlign: 'right', fontWeight: 700 }}>{row.thisReq}</div>
+                          <div style={{ color: '#c9a457', textAlign: 'right', fontWeight: 700 }}>{row.thisReq}</div>
                         </div>
                       ))}
                       <div style={{
@@ -853,16 +846,16 @@ export default async function Home() {
                         gap: 8, alignItems: 'center',
                       }}>
                         <span style={{ fontSize: 11, color: '#4a6a86' }}>This Request:</span>
-                        <span style={{ fontSize: 18, fontWeight: 900, color: '#c9a84c' }}>$122,000</span>
+                        <span style={{ fontSize: 18, fontWeight: 900, color: '#c9a457' }}>$122,000</span>
                       </div>
                     </div>
 
                     {/* AI assistant */}
                     <div style={{
-                      background: 'rgba(201,168,76,.05)', border: '1px solid rgba(201,168,76,.15)',
+                      background: 'rgba(201,164,87,.05)', border: '1px solid rgba(201,164,87,.15)',
                       borderRadius: 10, padding: '12px 14px', marginBottom: 12,
                     }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#c9a84c', marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#c9a457', marginBottom: 6 }}>
                         ✦ Building Block AI
                       </div>
                       <div style={{ fontSize: 12, color: '#4a6a86', lineHeight: 1.6 }}>
@@ -875,7 +868,7 @@ export default async function Home() {
                       display: 'flex', gap: 10, justifyContent: 'flex-end',
                     }}>
                       <div style={{
-                        background: 'linear-gradient(135deg, #c9a84c 0%, #e8c97a 100%)',
+                        background: 'linear-gradient(135deg, #c9a457 0%, #e8c97a 100%)',
                         color: '#06090f', fontWeight: 800, fontSize: 12,
                         padding: '10px 20px', borderRadius: 9,
                       }}>Submit Draw →</div>
@@ -887,11 +880,11 @@ export default async function Home() {
               <div>
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
-                  background: 'rgba(201,168,76,.08)', border: '1px solid rgba(201,168,76,.2)',
+                  background: 'rgba(201,164,87,.08)', border: '1px solid rgba(201,164,87,.2)',
                   borderRadius: 100, padding: '7px 18px', marginBottom: 28,
                 }}>
                   <span style={{ fontSize: 16 }}>🏗</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#c9a84c', letterSpacing: '.05em' }}>FOR GENERAL CONTRACTORS</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#c9a457', letterSpacing: '.05em' }}>FOR GENERAL CONTRACTORS</span>
                 </div>
                 <h2 style={{
                   fontSize: 'clamp(32px,4vw,54px)', fontWeight: 900,
@@ -917,7 +910,7 @@ export default async function Home() {
                     <div key={i} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                       <div style={{
                         width: 44, height: 44, borderRadius: 12,
-                        background: 'rgba(201,168,76,.09)', border: '1px solid rgba(201,168,76,.18)',
+                        background: 'rgba(201,164,87,.09)', border: '1px solid rgba(201,164,87,.18)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 18, flexShrink: 0,
                       }}>{f.icon}</div>
@@ -953,7 +946,7 @@ export default async function Home() {
         }}>
           <div style={{ maxWidth: 1160, margin: '0 auto' }}>
             <div style={{ textAlign: 'center', marginBottom: 88 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', textTransform: 'uppercase', letterSpacing: '.15em', display: 'block', marginBottom: 18 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#c9a457', textTransform: 'uppercase', letterSpacing: '.15em', display: 'block', marginBottom: 18 }}>
                 The Protocol
               </span>
               <h2 style={{
@@ -981,13 +974,13 @@ export default async function Home() {
                   tag: 'EscrowCreate · XRPL',
                 },
                 {
-                  n: '02', icon: '🔍', color: '#c9a84c', hl: true,
+                  n: '02', icon: '🔍', color: '#c9a457', hl: true,
                   title: 'Site Inspected',
                   body: 'Licensed inspector submits via token-gated portal. On pass, BuildChain mints an XLS-20 Inspector Credential NFT (taxon 3). Tamper-proof. Permanent.',
                   tag: 'NFT taxon 3 · Condition ①',
                 },
                 {
-                  n: '03', icon: '📝', color: '#c9a84c', hl: true,
+                  n: '03', icon: '📝', color: '#c9a457', hl: true,
                   title: 'Lien Waiver Confirmed',
                   body: 'Lender confirms receipt. BuildChain mints a Lien Waiver NFT (taxon 2). That\'s Condition ② satisfied — both conditions are now on-ledger.',
                   tag: 'NFT taxon 2 · Condition ②',
@@ -1000,14 +993,14 @@ export default async function Home() {
                 },
               ].map((step, i) => (
                 <div key={i} className="feature-card" style={{
-                  background: step.hl ? 'rgba(201,168,76,.04)' : 'rgba(16,24,40,.7)',
-                  border: `1px solid ${step.hl ? 'rgba(201,168,76,.22)' : 'rgba(255,255,255,.07)'}`,
+                  background: step.hl ? 'rgba(201,164,87,.04)' : 'rgba(16,24,40,.7)',
+                  border: `1px solid ${step.hl ? 'rgba(201,164,87,.22)' : 'rgba(255,255,255,.07)'}`,
                   borderRadius: 20, padding: '36px 28px',
-                  boxShadow: step.hl ? '0 0 60px rgba(201,168,76,.04)' : 'none',
+                  boxShadow: step.hl ? '0 0 60px rgba(201,164,87,.04)' : 'none',
                 }}>
                   <div style={{
                     fontSize: 11, fontWeight: 900,
-                    color: step.hl ? '#c9a84c' : 'rgba(255,255,255,.12)',
+                    color: step.hl ? '#c9a457' : 'rgba(255,255,255,.12)',
                     letterSpacing: '.1em', marginBottom: 20,
                   }}>{step.n}</div>
                   <div style={{ fontSize: 32, marginBottom: 18 }}>{step.icon}</div>
@@ -1016,9 +1009,9 @@ export default async function Home() {
                   <div style={{
                     fontSize: 10, fontWeight: 700, fontFamily: 'monospace',
                     color: step.color,
-                    background: step.hl ? 'rgba(201,168,76,.08)' : 'rgba(45,125,210,.07)',
+                    background: step.hl ? 'rgba(201,164,87,.08)' : 'rgba(45,125,210,.07)',
                     padding: '5px 12px', borderRadius: 7, display: 'inline-block',
-                    border: `1px solid ${step.hl ? 'rgba(201,168,76,.15)' : 'rgba(45,125,210,.12)'}`,
+                    border: `1px solid ${step.hl ? 'rgba(201,164,87,.15)' : 'rgba(45,125,210,.12)'}`,
                   }}>{step.tag}</div>
                 </div>
               ))}
@@ -1074,8 +1067,8 @@ export default async function Home() {
                 {
                   val: '$4.6T', label: 'Annual U.S. Construction Activity',
                   body: 'The largest single segment of U.S. private investment. BuildChain targets the lending infrastructure that moves all of it.',
-                  color: '#c9a84c', cls: 'grad-stat',
-                  bg: 'rgba(201,168,76,.04)', border: 'rgba(201,168,76,.15)',
+                  color: '#c9a457', cls: 'grad-stat',
+                  bg: 'rgba(201,164,87,.04)', border: 'rgba(201,164,87,.15)',
                 },
                 {
                   val: '9M+', label: 'Construction Draw Events/Year',
@@ -1158,7 +1151,7 @@ export default async function Home() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                   {[
                     {
-                      color: '#c9a84c',
+                      color: '#c9a457',
                       title: 'XLS-20 NFT Standard',
                       body: 'Taxon 0 (loan titles) · Taxon 2 (lien waivers) · Taxon 3 (inspector credentials). All non-transferable, on-ledger, permanent proof of each condition. Cannot be forged, duplicated, or deleted.',
                     },
@@ -1188,17 +1181,17 @@ export default async function Home() {
 
                 {/* Patent card */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(201,168,76,.07) 0%, rgba(6,9,15,.9) 100%)',
-                  border: '1px solid rgba(201,168,76,.22)',
+                  background: 'linear-gradient(135deg, rgba(201,164,87,.07) 0%, rgba(6,9,15,.9) 100%)',
+                  border: '1px solid rgba(201,164,87,.22)',
                   borderRadius: 18, padding: '32px',
-                  boxShadow: '0 0 60px rgba(201,168,76,.05)',
+                  boxShadow: '0 0 60px rgba(201,164,87,.05)',
                   position: 'relative', overflow: 'hidden',
                 }}>
                   <div className="scan-line" />
                   <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', position: 'relative' }}>
                     <div style={{ fontSize: 36, flexShrink: 0 }}>🛡</div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#c9a84c', marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#c9a457', marginBottom: 8 }}>
                         U.S. Provisional Patent BLDCHN-001-P
                       </div>
                       <div style={{ fontSize: 14, color: '#8fa8c4', lineHeight: 1.7, marginBottom: 14 }}>
@@ -1222,11 +1215,11 @@ export default async function Home() {
                     { taxon: 'Taxon 3', type: 'Inspector Cred', desc: '⚡ Condition ① — triggers release', hl: true },
                   ].map((n, i) => (
                     <div key={i} style={{
-                      background: n.hl ? 'rgba(201,168,76,.06)' : 'rgba(255,255,255,.025)',
-                      border: `1px solid ${n.hl ? 'rgba(201,168,76,.22)' : 'rgba(255,255,255,.07)'}`,
+                      background: n.hl ? 'rgba(201,164,87,.06)' : 'rgba(255,255,255,.025)',
+                      border: `1px solid ${n.hl ? 'rgba(201,164,87,.22)' : 'rgba(255,255,255,.07)'}`,
                       borderRadius: 13, padding: '18px',
                     }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: n.hl ? '#c9a84c' : '#2a4a66', marginBottom: 5, letterSpacing: '.05em' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: n.hl ? '#c9a457' : '#2a4a66', marginBottom: 5, letterSpacing: '.05em' }}>
                         XLS-20 {n.taxon}
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 5 }}>{n.type}</div>
@@ -1286,16 +1279,16 @@ export default async function Home() {
           <div style={{
             position: 'absolute', width: 800, height: 500,
             top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'radial-gradient(ellipse, rgba(201,168,76,.07) 0%, transparent 70%)',
+            background: 'radial-gradient(ellipse, rgba(201,164,87,.07) 0%, transparent 70%)',
             pointerEvents: 'none',
           }} />
 
           <div style={{ position: 'relative', maxWidth: 720, margin: '0 auto' }}>
             <div style={{
               display: 'inline-block',
-              background: 'rgba(201,168,76,.07)', border: '1px solid rgba(201,168,76,.2)',
+              background: 'rgba(201,164,87,.07)', border: '1px solid rgba(201,164,87,.2)',
               borderRadius: 100, padding: '9px 22px', marginBottom: 40,
-              fontSize: 12, color: '#c9a84c', fontWeight: 700, letterSpacing: '.05em',
+              fontSize: 12, color: '#c9a457', fontWeight: 700, letterSpacing: '.05em',
             }}>
               Now accepting early-access partners
             </div>
@@ -1343,7 +1336,7 @@ export default async function Home() {
             <p style={{ fontSize: 13, color: '#2a4a66' }}>
               Questions? Email{' '}
               <a href="mailto:jason@buildchain.finance"
-                style={{ color: '#c9a84c', textDecoration: 'none', fontWeight: 600 }}>
+                style={{ color: '#c9a457', textDecoration: 'none', fontWeight: 600 }}>
                 jason@buildchain.finance
               </a>
             </p>
@@ -1362,16 +1355,8 @@ export default async function Home() {
               {/* Brand */}
               <div style={{ maxWidth: 280 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: 'linear-gradient(135deg, #c9a84c 0%, #e8c97a 100%)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 900, color: '#06090f',
-                    boxShadow: '0 4px 16px rgba(201,168,76,.25)',
-                  }}>BC</div>
-                  <span style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-.5px' }}>
-                    Build<span style={{ color: '#c9a84c' }}>Chain</span>
-                  </span>
+                  <BuildChainLogo variant="mark" height={40} alt="" />
+                  <BuildChainLogo variant="wordmark" height={21} />
                 </div>
                 <p style={{ fontSize: 13, color: '#2a4a66', lineHeight: 1.75, margin: 0 }}>
                   The construction loan protocol connecting lenders,
@@ -1404,7 +1389,7 @@ export default async function Home() {
                       Contact
                     </a>
                     <a href="mailto:jason@buildchain.finance?subject=BuildChain Lender Pilot Program"
-                      style={{ fontSize: 13, color: '#c9a84c', textDecoration: 'none', fontWeight: 600 }}>
+                      style={{ fontSize: 13, color: '#c9a457', textDecoration: 'none', fontWeight: 600 }}>
                       Join Pilot →
                     </a>
                     <Link href="/login" style={{ fontSize: 13, color: '#2a4a66', textDecoration: 'none' }}>

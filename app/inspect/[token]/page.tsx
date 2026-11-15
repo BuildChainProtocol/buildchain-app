@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 interface InspectionData {
   id: string
@@ -85,7 +86,7 @@ export default function InspectorPortal() {
   const card = '#111e2d'
   const border = '#1e3a50'
   const muted = '#6b8198'
-  const gold = '#c9a84c'
+  const gold = '#c9a457'
   const text = '#e8edf2'
 
   if (loading) return (
@@ -115,8 +116,8 @@ export default function InspectorPortal() {
       {/* Header */}
       <header style={{ background: card, borderBottom: `1px solid ${border}`, padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 13, color: navy }}>BC</div>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>Build<span style={{ color: gold }}>Chain</span></span>
+          <BuildChainLogo variant="mark" height={32} alt="" />
+          <BuildChainLogo variant="wordmark" height={16} />
           <span style={{ color: muted, fontSize: 12, marginLeft: 4 }}>· Inspector Portal</span>
         </div>
         <span style={{ fontSize: 12, color: muted }}>Secure link — no login required</span>
@@ -152,7 +153,7 @@ export default function InspectorPortal() {
 
           {inspection.inspector_name && (
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${border}`, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(201,168,76,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, color: gold }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(201,164,87,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, color: gold }}>
                 {inspection.inspector_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
               <div>
@@ -270,7 +271,7 @@ export default function InspectorPortal() {
               disabled={submitting || !result}
               style={{
                 width: '100%', padding: '14px 24px', borderRadius: 10,
-                background: !result || submitting ? 'rgba(201,168,76,0.4)' : gold,
+                background: !result || submitting ? 'rgba(201,164,87,0.4)' : gold,
                 color: navy, fontWeight: 800, fontSize: 15, border: 'none',
                 cursor: !result || submitting ? 'not-allowed' : 'pointer',
                 transition: 'all 0.15s',

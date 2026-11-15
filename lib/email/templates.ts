@@ -8,7 +8,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://buildchain.finance'
 
 const DARK    = '#0d1b2a'
 const NAVY    = '#0f2133'
-const GOLD    = '#f39c12'
+const GOLD    = '#c9a457'
 const MUTED   = '#7a8fa6'
 const BORDER  = '#1e3347'
 const LIGHT   = '#e8edf2'
@@ -26,10 +26,9 @@ function base(body: string): string {
     <tr><td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
 
-        <!-- Logo -->
+        <!-- Logo (PNG: most email clients block SVG) -->
         <tr><td style="padding-bottom:24px;">
-          <div style="background:${GOLD};display:inline-block;padding:8px 14px;border-radius:8px;font-size:14px;font-weight:900;color:${DARK};letter-spacing:-0.5px;">BC</div>
-          <span style="color:${LIGHT};font-size:18px;font-weight:700;margin-left:10px;vertical-align:middle;">Build<span style="color:${GOLD};">Chain</span></span>
+          <img src="${APP_URL}/brand/buildchain-logo-reverse-email.png" width="220" height="76" alt="BuildChain" style="display:block;border:0;outline:none;text-decoration:none;color:${LIGHT};font-size:18px;font-weight:700;"/>
         </td></tr>
 
         <!-- Card -->

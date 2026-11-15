@@ -10,11 +10,11 @@ const config: Config = {
     extend: {
       colors: {
         bc: {
-          dark: '#0f1923',
+          dark: '#0d1b2a',
           navy: '#162032',
           card: '#1e2d40',
           border: '#2a3f57',
-          gold: '#c9a84c',
+          gold: '#c9a457',
           'gold-light': '#e8c97a',
           blue: '#2d7dd2',
           teal: '#1ab3a6',

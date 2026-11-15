@@ -72,7 +72,7 @@ export default async function BorrowerProjectsPage() {
                       <h2 className="font-bold text-base">{p.name}</h2>
                       <span className={`badge ${stageBadge[p.stage] || 'badge-gray'}`}>{getStageLabel(p.stage)}</span>
                       {pendingDraws.length > 0 && (
-                        <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(243,156,18,0.2)', color: 'var(--bc-gold)' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold)' }}>
                           {pendingDraws.length} draw pending
                         </span>
                       )}

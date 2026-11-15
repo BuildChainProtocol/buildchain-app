@@ -255,7 +255,7 @@ export default function AdminBorrowersPage() {
                           onClick={() => sendInvite(b)}
                           disabled={inviting === b.id}
                           className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
-                          style={{ background: 'rgba(243,156,18,0.15)', color: 'var(--bc-gold)' }}>
+                          style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
                           {inviting === b.id ? 'Sending…' : '✉ Send Invite'}
                         </button>
                       )}

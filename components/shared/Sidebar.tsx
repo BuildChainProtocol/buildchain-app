@@ -40,7 +40,7 @@ export default function Sidebar({ items, isOpen = false }: SidebarProps) {
               className={cn(
                 'flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium transition-all border-l-2',
                 isActive
-                  ? 'border-l-[var(--bc-gold)] text-[var(--bc-gold)] bg-[rgba(201,168,76,0.1)]'
+                  ? 'border-l-[var(--bc-gold)] text-[var(--bc-gold)] bg-[rgba(201,164,87,0.1)]'
                   : 'border-l-transparent text-[var(--bc-muted)] hover:bg-white/5 hover:text-white'
               )}>
               <span className="w-4 h-4 flex-shrink-0">{item.icon}</span>

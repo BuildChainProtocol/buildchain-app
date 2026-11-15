@@ -85,8 +85,8 @@ export default async function LenderDocumentsPage() {
         <div className="space-y-6">
           {/* Pending attention section */}
           {pending > 0 && (
-            <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'rgba(243,156,18,0.4)' }}>
-              <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: 'rgba(243,156,18,0.3)', background: 'rgba(243,156,18,0.06)' }}>
+            <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'rgba(201,164,87,0.4)' }}>
+              <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: 'rgba(201,164,87,0.3)', background: 'rgba(201,164,87,0.06)' }}>
                 <span>⏳</span>
                 <h2 className="text-sm font-bold" style={{ color: 'var(--bc-gold)' }}>Needs Review ({pending})</h2>
               </div>

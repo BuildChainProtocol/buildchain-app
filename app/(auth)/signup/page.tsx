@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/lib/types/database'
+import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -46,10 +47,7 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center py-10" style={{ background: 'var(--bc-dark)' }}>
       <div className="w-full max-w-md px-6">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-base" style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>BC</div>
-            <span className="text-2xl font-bold">Build<span style={{ color: 'var(--bc-gold)' }}>Chain</span> Protocol</span>
-          </div>
+          <BuildChainLogo variant="lockup" height={120} alt="BuildChain Protocol" style={{ margin: '0 auto' }} />
         </div>
 
         <div className="rounded-xl p-8 border" style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>

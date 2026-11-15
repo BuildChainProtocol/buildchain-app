@@ -1,8 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#0d1b2a"/>
-  <rect width="32" height="32" rx="7" fill="#f39c12" opacity="0.12"/>
-  <text x="16" y="22" text-anchor="middle"
-    font-family="system-ui,-apple-system,Segoe UI,sans-serif"
-    font-weight="900" font-size="15" letter-spacing="-0.5"
-    fill="#f39c12">BC</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="68 202 416 416" width="416" height="416" role="img" aria-label="BuildChain">
+<title>BuildChain</title>
+<rect x="68" y="202" width="416" height="416" rx="80" fill="#0D1B2A"/>
+<path fill="#FFFFFF" fill-rule="evenodd" d="M282,333 L279,333 L276,335 L274,335 L255,345 L253,345 L124,409 L124,535 L153,549 L155,551 L174,560 L176,562 L211,579 L213,581 L250,599 L252,601 L254,601 L256,603 L279,614 L279,538 L210,503 L208,503 L188,493 L186,491 L186,449 L194,444 L196,444 L245,420 L247,420 L282,402 L284,402 L318,385 L318,352 L288,337 Z M279,206 L258,216 L256,218 L233,229 L231,231 L216,238 L214,240 L173,261 L173,356 L197,344 L199,344 L242,322 L244,322 L279,304 Z"/>
+<path fill="#C9A457" fill-rule="evenodd" d="M418,468 L304,525 L304,603 L308,602 L310,600 L342,584 L344,582 L359,575 L361,573 L376,566 L378,564 L393,557 L395,555 L406,550 L408,548 L418,543 Z M304,252 L304,318 L306,320 L323,328 L325,330 L367,351 L367,394 L362,398 L360,398 L317,419 L315,419 L280,436 L278,436 L247,451 L245,451 L239,455 L240,456 L240,462 L239,463 L240,488 L280,508 L428,433 L428,314 Z"/>
 </svg>

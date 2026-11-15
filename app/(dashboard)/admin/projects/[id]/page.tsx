@@ -166,7 +166,7 @@ export default function ProjectDetailPage() {
                 <h1 className="text-2xl font-bold">{project.name}</h1>
                 <span className={`badge ${stageBadge[project.stage] || 'badge-gray'} text-xs`}>{project.stage}</span>
                 {pendingDraws.length > 0 && (
-                  <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(243,156,18,0.2)', color: 'var(--bc-gold)' }}>
+                  <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold)' }}>
                     {pendingDraws.length} draw{pendingDraws.length > 1 ? 's' : ''} pending
                   </span>
                 )}
@@ -302,10 +302,10 @@ export default function ProjectDetailPage() {
           {/* XRPL Digital Title — full width below the grid */}
           <div className="col-span-2 rounded-xl border p-5" style={{
             background: project.loan_nft_token_id
-              ? 'rgba(243,156,18,0.04)'
+              ? 'rgba(201,164,87,0.04)'
               : 'var(--bc-card)',
             borderColor: project.loan_nft_token_id
-              ? 'rgba(243,156,18,0.2)'
+              ? 'rgba(201,164,87,0.2)'
               : 'var(--bc-border)',
           }}>
             <div className="flex items-center justify-between mb-4">
@@ -480,7 +480,7 @@ export default function ProjectDetailPage() {
                           <button onClick={() => updateDraw(d.id, 'funded')}
                             disabled={drawActionId === d.id + 'funded'}
                             className="px-2 py-1 rounded text-xs font-bold whitespace-nowrap"
-                            style={{ background: 'rgba(243,156,18,0.15)', color: 'var(--bc-gold)' }}>
+                            style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
                             {drawActionId === d.id + 'funded' ? '…' : '↑ Release'}
                           </button>
                         </div>

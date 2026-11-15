@@ -238,15 +238,15 @@ export default function LenderApprovalsPage() {
             <button key={t.key} onClick={() => setTab(t.key)}
               className="px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2"
               style={{
-                background: isActive ? 'rgba(243,156,18,0.12)' : 'transparent',
+                background: isActive ? 'rgba(201,164,87,0.12)' : 'transparent',
                 color: isActive ? 'var(--bc-gold)' : 'var(--bc-muted)',
-                border: isActive ? '1px solid rgba(243,156,18,0.25)' : '1px solid transparent',
+                border: isActive ? '1px solid rgba(201,164,87,0.25)' : '1px solid transparent',
               }}>
               {t.label}
               {count > 0 && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
                   style={{
-                    background: t.key === 'submitted' ? 'rgba(243,156,18,0.25)' : 'rgba(255,255,255,0.08)',
+                    background: t.key === 'submitted' ? 'rgba(201,164,87,0.25)' : 'rgba(255,255,255,0.08)',
                     color: t.key === 'submitted' ? 'var(--bc-gold)' : 'var(--bc-muted)',
                   }}>
                   {count}
@@ -348,7 +348,7 @@ export default function LenderApprovalsPage() {
 
                   {/* XRPL Records — shown on Approved tab */}
                   {tab === 'approved' && hasXrplRecords && (
-                    <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(243,156,18,0.05)', border: '1px solid rgba(243,156,18,0.15)' }}>
+                    <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(201,164,87,0.05)', border: '1px solid rgba(201,164,87,0.15)' }}>
                       <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--bc-gold)' }}>
                         ⬡ On-chain records
                       </p>
@@ -518,7 +518,7 @@ export default function LenderApprovalsPage() {
                         <button onClick={() => act(draw.id, 'approved')}
                           disabled={actionLoading === draw.id + 'approved'}
                           className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
-                          style={{ background: blockApprove ? 'rgba(201,168,76,0.4)' : 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
+                          style={{ background: blockApprove ? 'rgba(201,164,87,0.4)' : 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
                           {actionLoading === draw.id + 'approved' ? '⬡ Creating XRPL record…' : '⬡ Approve & Create XRPL Record'}
                         </button>
                         <button onClick={() => { setDeclineModal(draw); setDeclineReason('') }}
@@ -564,7 +564,7 @@ export default function LenderApprovalsPage() {
                               disabled={lienWaiverLoading === draw.id}
                               className="px-3 py-1 rounded-lg text-xs font-bold transition-all"
                               style={{
-                                background: lienWaiverLoading === draw.id ? 'rgba(243,156,18,0.4)' : 'var(--bc-gold)',
+                                background: lienWaiverLoading === draw.id ? 'rgba(201,164,87,0.4)' : 'var(--bc-gold)',
                                 color: 'var(--bc-dark)',
                                 opacity: lienWaiverLoading === draw.id ? 0.7 : 1,
                               }}>

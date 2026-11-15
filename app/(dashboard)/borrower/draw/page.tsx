@@ -337,7 +337,7 @@ export default function SubmitDrawPage() {
         {/* Simple amount form — shown when no SOV */}
         {!loadingSOV && !hasSov && (
           <div className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
-            <p className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: 'rgba(201,168,76,0.08)', color: 'var(--bc-gold)' }}>
+            <p className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: 'rgba(201,164,87,0.08)', color: 'var(--bc-gold)' }}>
               ℹ️ No Schedule of Values set up for this project yet. Enter a draw amount below. Ask your lender to set up the SOV for line-item tracking.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -383,7 +383,7 @@ export default function SubmitDrawPage() {
             </div>
             <button type="button" onClick={addWaiver}
               className="text-xs font-bold px-3 py-1.5 rounded-lg"
-              style={{ background: 'rgba(201,168,76,0.12)', color: 'var(--bc-gold)', border: '1px solid rgba(201,168,76,0.3)' }}>
+              style={{ background: 'rgba(201,164,87,0.12)', color: 'var(--bc-gold)', border: '1px solid rgba(201,164,87,0.3)' }}>
               + Add Sub
             </button>
           </div>
@@ -459,7 +459,7 @@ export default function SubmitDrawPage() {
               <div className="mt-2 space-y-1">
                 {files.map(f => (
                   <div key={f.name} className="text-xs flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                    style={{ background: 'rgba(201,168,76,0.08)', color: 'var(--bc-gold)' }}>
+                    style={{ background: 'rgba(201,164,87,0.08)', color: 'var(--bc-gold)' }}>
                     📄 {f.name} <span style={{ color: 'var(--bc-muted)' }}>({(f.size / 1024).toFixed(0)} KB)</span>
                   </div>
                 ))}
@@ -470,7 +470,7 @@ export default function SubmitDrawPage() {
 
         {/* Summary + Submit */}
         {hasSov && (
-          <div className="rounded-xl border p-4 flex items-center justify-between" style={{ background: 'rgba(201,168,76,0.06)', borderColor: 'rgba(201,168,76,0.2)' }}>
+          <div className="rounded-xl border p-4 flex items-center justify-between" style={{ background: 'rgba(201,164,87,0.06)', borderColor: 'rgba(201,164,87,0.2)' }}>
             <div className="text-sm">
               <span style={{ color: 'var(--bc-muted)' }}>Gross draw: </span>
               <span className="font-bold">{formatCurrency(totalGross)}</span>

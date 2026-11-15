@@ -48,8 +48,8 @@ export default async function LenderDashboard() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Active Loans" value={projects.filter(p => p.stage === 'active').length} icon="🏦" sub={`${projects.length} total`} />
-        <StatCard label="Total Committed" value={formatCurrency(totalCommitted)} icon="💵" iconBg="rgba(201,168,76,0.15)" sub={`${formatCurrency(totalDrawn)} drawn`} />
-        <StatCard label="Pending Approvals" value={pendingDraws.length} icon="⏳" iconBg="rgba(243,156,18,0.15)" sub={pendingAmount > 0 ? `${formatCurrency(pendingAmount)} awaiting` : 'None'} subColor={pendingAmount > 0 ? 'orange' : 'default'} />
+        <StatCard label="Total Committed" value={formatCurrency(totalCommitted)} icon="💵" iconBg="rgba(201,164,87,0.15)" sub={`${formatCurrency(totalDrawn)} drawn`} />
+        <StatCard label="Pending Approvals" value={pendingDraws.length} icon="⏳" iconBg="rgba(201,164,87,0.15)" sub={pendingAmount > 0 ? `${formatCurrency(pendingAmount)} awaiting` : 'None'} subColor={pendingAmount > 0 ? 'orange' : 'default'} />
         <StatCard label="Avg Portfolio LTV" value={`${avgLtv}%`} icon="📊" iconBg="rgba(46,204,113,0.15)" sub={avgLtv < 80 ? '✓ Within policy' : '⚠ High LTV'} subColor={avgLtv < 80 ? 'green' : 'orange'} />
       </div>
 

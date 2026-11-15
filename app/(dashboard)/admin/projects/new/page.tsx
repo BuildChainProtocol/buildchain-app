@@ -251,7 +251,7 @@ export default function NewProjectPage() {
             </div>
             {form.loan_amount && form.appraised_value && (
               <div className="flex items-end pb-1">
-                <div className="rounded-lg px-4 py-2.5 text-sm w-full" style={{ background: 'rgba(243,156,18,0.1)', border: '1px solid rgba(243,156,18,0.3)' }}>
+                <div className="rounded-lg px-4 py-2.5 text-sm w-full" style={{ background: 'rgba(201,164,87,0.1)', border: '1px solid rgba(201,164,87,0.3)' }}>
                   <span style={{ color: 'var(--bc-muted)' }}>LTV: </span>
                   <span className="font-bold" style={{ color: 'var(--bc-gold)' }}>
                     {Math.round(parseFloat(form.loan_amount) / parseFloat(form.appraised_value) * 100)}%

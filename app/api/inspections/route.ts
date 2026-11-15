@@ -82,9 +82,7 @@ export async function POST(request: NextRequest) {
       subject: `Inspection Request — ${project?.name ?? 'BuildChain Project'} · ${draw?.request_number ?? ''}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0d1b2a; color: #e8edf2; padding: 32px; border-radius: 12px;">
-          <div style="font-size: 24px; font-weight: 900; margin-bottom: 4px;">
-            Build<span style="color: #c9a84c;">Chain</span>
-          </div>
+          <img src="${baseUrl}/brand/buildchain-logo-reverse-email.png" width="220" height="76" alt="BuildChain" style="display: block; border: 0; margin-bottom: 8px;"/>
           <div style="font-size: 12px; color: #6b8198; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 1px;">
             Inspection Request
           </div>
@@ -115,7 +113,7 @@ export async function POST(request: NextRequest) {
           </p>
 
           <a href="${portalUrl}"
-            style="display: inline-block; background: #c9a84c; color: #0d1b2a; font-weight: 700; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">
+            style="display: inline-block; background: #c9a457; color: #0d1b2a; font-weight: 700; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">
             Submit Inspection Report →
           </a>
 

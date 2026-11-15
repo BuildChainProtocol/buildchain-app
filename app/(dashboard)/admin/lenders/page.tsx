@@ -233,7 +233,7 @@ export default function AdminLendersPage() {
                           onClick={() => sendInvite(l)}
                           disabled={inviting === l.id}
                           className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
-                          style={{ background: 'rgba(243,156,18,0.15)', color: 'var(--bc-gold)' }}>
+                          style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
                           {inviting === l.id ? 'Sending…' : '✉ Send Invite'}
                         </button>
                       )}

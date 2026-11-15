@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Platform Admin',
@@ -157,11 +158,8 @@ export default function ProfilePage() {
       <header className="h-14 flex items-center justify-between px-6 border-b"
         style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm"
-            style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>BC</div>
-          <span className="text-base font-bold">
-            Build<span style={{ color: 'var(--bc-gold)' }}>Chain</span>
-          </span>
+          <BuildChainLogo variant="mark" height={32} alt="" />
+          <BuildChainLogo variant="wordmark" height={18} />
         </div>
         <button onClick={() => router.push(ROLE_DASH[profile?.role] || '/')}
           className="text-sm hover:underline" style={{ color: 'var(--bc-muted)' }}>
@@ -182,7 +180,7 @@ export default function ProfilePage() {
             <h1 className="text-xl font-bold">{profile.full_name || 'Unnamed User'}</h1>
             <p className="text-sm mt-0.5" style={{ color: 'var(--bc-muted)' }}>{profile.email}</p>
             <span className="inline-block mt-2 text-xs font-bold px-2.5 py-1 rounded-full"
-              style={{ background: 'rgba(243,156,18,0.15)', color: 'var(--bc-gold)' }}>
+              style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
               {ROLE_LABEL[profile.role] || profile.role}
             </span>
           </div>

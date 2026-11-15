@@ -250,7 +250,7 @@ export default function AdminDrawsPage() {
                   className="flex-1 py-2.5 rounded-lg text-sm font-bold"
                   style={{
                     background: inspectSubmitting || !inspectForm.inspector_name || !inspectForm.inspector_email
-                      ? 'rgba(201,168,76,0.4)' : 'var(--bc-gold)',
+                      ? 'rgba(201,164,87,0.4)' : 'var(--bc-gold)',
                     color: 'var(--bc-dark)',
                     cursor: !inspectForm.inspector_name || !inspectForm.inspector_email ? 'not-allowed' : 'pointer',
                   }}>
@@ -346,7 +346,7 @@ export default function AdminDrawsPage() {
                           <button
                             onClick={() => setInspectModal(draw)}
                             className="text-xs font-semibold px-2 py-1 rounded border transition-all hover:bg-white/5"
-                            style={{ color: 'var(--bc-gold)', borderColor: 'rgba(201,168,76,0.3)' }}>
+                            style={{ color: 'var(--bc-gold)', borderColor: 'rgba(201,164,87,0.3)' }}>
                             + Assign
                           </button>
                         )}

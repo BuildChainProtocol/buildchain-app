@@ -124,7 +124,7 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
 
       {/* Add / Edit form */}
       {adding && !readOnly && (
-        <div className="rounded-xl border p-4 mb-4 space-y-3" style={{ borderColor: 'var(--bc-gold)', background: 'rgba(201,168,76,0.05)' }}>
+        <div className="rounded-xl border p-4 mb-4 space-y-3" style={{ borderColor: 'var(--bc-gold)', background: 'rgba(201,164,87,0.05)' }}>
           <p className="text-xs font-bold" style={{ color: 'var(--bc-gold)' }}>{editId ? 'Edit Line' : 'New Budget Line'}</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
