@@ -89,23 +89,23 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
   const initials = profile.full_name
     ?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'
 
-  const roleLabel = { admin: '⚙ Admin', lender: '🏦 Lender', borrower: '🏗 Borrower' }[profile.role]
+  const roleLabel = { admin: 'Admin', lender: 'Lender', borrower: 'Borrower' }[profile.role]
 
   const liveUnread = notifs.length > 0 ? notifs.filter(n => !n.read).length : unreadCount
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-6 border-b"
-      style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
+      style={{ background: 'var(--bc-header)', borderColor: '#08121d' }}>
       {/* Logo + hamburger */}
       <div className="flex items-center gap-2.5">
         {/* Hamburger — mobile only */}
         {onMenuToggle && (
           <button
             onClick={onMenuToggle}
-            className="md:hidden -ml-1 p-2 rounded-lg hover:bg-white/5 transition-colors"
+            className="md:hidden -ml-1 p-2 rounded-lg hover:bg-white/10 transition-colors"
             aria-label="Toggle navigation"
           >
-            <svg className="w-5 h-5" style={{ color: 'var(--bc-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" style={{ color: '#c7d0db' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
@@ -114,7 +114,7 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
         {/* Hide the wordmark on small screens to avoid crowding */}
         <span className="hidden sm:inline-flex items-center">
           <BuildChainLogo variant="wordmark" height={18} alt="" />
-          <span className="text-xs font-normal ml-2" style={{ color: 'var(--bc-muted)' }}>{roleLabel}</span>
+          <span className="ml-3 text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-0.5 rounded border" style={{ color: 'var(--bc-gold)', borderColor: 'rgba(201,164,87,0.45)' }}>{roleLabel}</span>
         </span>
       </div>
 
@@ -124,22 +124,22 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
         {/* ── Notifications bell ── */}
         <div className="relative" ref={notifsRef}>
           <button onClick={openNotifs}
-            className="relative p-1.5 rounded-lg transition-colors hover:bg-white/5">
-            <svg className="w-5 h-5" style={{ color: showNotifs ? 'var(--bc-gold)' : 'var(--bc-muted)' }}
+            className="relative p-1.5 rounded-lg transition-colors hover:bg-white/10" aria-label="Notifications">
+            <svg className="w-5 h-5" style={{ color: showNotifs ? 'var(--bc-gold)' : '#c7d0db' }}
               fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
             {liveUnread > 0 && (
               <span className="absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full font-bold"
-                style={{ background: '#e74c3c', color: '#fff', fontSize: '9px' }}>
+                style={{ background: '#c0392b', color: '#fff', fontSize: '9px', boxShadow: '0 0 0 2px var(--bc-header)' }}>
                 {liveUnread > 9 ? '9+' : liveUnread}
               </span>
             )}
           </button>
 
           {showNotifs && (
-            <div className="absolute right-0 mt-2 rounded-xl border shadow-2xl z-50 flex flex-col"
+            <div className="absolute right-0 mt-2 rounded-lg border shadow-lg z-50 flex flex-col"
               style={{
                 background: 'var(--bc-navy)',
                 borderColor: 'var(--bc-border)',
@@ -149,11 +149,11 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
                 style={{ borderColor: 'var(--bc-border)' }}>
-                <span className="text-sm font-bold">Notifications</span>
+                <span className="text-sm font-semibold" style={{ color: 'var(--bc-dark)' }}>Notifications</span>
                 {notifs.some(n => !n.read) && (
                   <button onClick={markAllRead}
                     className="text-xs font-semibold hover:underline"
-                    style={{ color: 'var(--bc-gold)' }}>
+                    style={{ color: 'var(--bc-gold-ink)' }}>
                     Mark all read
                   </button>
                 )}
@@ -167,8 +167,7 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
                   </div>
                 ) : notifs.length === 0 ? (
                   <div className="py-10 text-center">
-                    <div className="text-2xl mb-2">🔔</div>
-                    <div className="text-sm font-medium">All caught up</div>
+                                        <div className="text-sm font-medium">All caught up</div>
                     <div className="text-xs mt-1" style={{ color: 'var(--bc-muted)' }}>
                       No notifications yet
                     </div>
@@ -186,7 +185,7 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
                         background: n.read ? 'transparent' : 'rgba(201,164,87,0.04)',
                         cursor: n.link ? 'pointer' : 'default',
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(13,27,42,0.04)')}
                       onMouseLeave={e => (e.currentTarget.style.background = n.read ? 'transparent' : 'rgba(201,164,87,0.04)')}>
                       {/* Unread dot */}
                       <div className="flex-shrink-0 mt-1.5">
@@ -213,29 +212,29 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
         {/* ── User menu ── */}
         <div className="relative" ref={userMenuRef}>
           <button onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifs(false) }}
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/5">
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10">
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
               style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>{initials}</div>
-            <span className="hidden sm:inline text-sm font-medium">{profile.full_name || profile.email}</span>
-            <svg className="w-4 h-4" style={{ color: 'var(--bc-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="hidden sm:inline text-sm font-medium text-white">{profile.full_name || profile.email}</span>
+            <svg className="w-4 h-4" style={{ color: '#c7d0db' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 mt-1 w-48 rounded-xl border shadow-xl py-1 z-50"
+            <div className="absolute right-0 mt-1 w-52 rounded-lg border shadow-lg py-1 z-50"
               style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
               <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--bc-border)' }}>
-                <div className="text-xs font-semibold">{profile.full_name}</div>
+                <div className="text-xs font-semibold" style={{ color: 'var(--bc-dark)' }}>{profile.full_name}</div>
                 <div className="text-xs" style={{ color: 'var(--bc-muted)' }}>{profile.email}</div>
               </div>
               <button onClick={() => { setShowUserMenu(false); router.push('/profile') }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 transition-colors">
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 transition-colors">
                 My Profile
               </button>
               <button onClick={handleSignOut}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 transition-colors"
-                style={{ color: '#e74c3c' }}>
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 transition-colors"
+                style={{ color: '#c0392b' }}>
                 Sign Out
               </button>
             </div>

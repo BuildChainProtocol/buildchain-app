@@ -212,9 +212,9 @@ export default function SubmitDrawPage() {
   }
 
   const inputStyle = {
-    background: 'rgba(255,255,255,0.05)',
+    background: 'rgba(13,27,42,0.05)',
     border: '1px solid var(--bc-border)',
-    color: '#e8edf2',
+    color: 'var(--bc-text)',
   }
 
   if (success) {
@@ -270,7 +270,7 @@ export default function SubmitDrawPage() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <thead style={{ background: 'rgba(13,27,42,0.03)' }}>
                   <tr style={{ borderBottom: '1px solid var(--bc-border)', color: 'var(--bc-muted)' }}>
                     <th className="text-left px-4 py-2.5 font-semibold w-10">#</th>
                     <th className="text-left px-2 py-2.5 font-semibold">Description</th>
@@ -283,7 +283,7 @@ export default function SubmitDrawPage() {
                 </thead>
                 <tbody>
                   {lineEntries.map(line => (
-                    <tr key={line.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={line.id} style={{ borderBottom: '1px solid rgba(13,27,42,0.04)' }}>
                       <td className="px-4 py-2.5 font-mono" style={{ color: 'var(--bc-muted)' }}>{line.line_no}</td>
                       <td className="px-2 py-2.5">
                         <div className="font-medium">{line.description}</div>
@@ -307,24 +307,24 @@ export default function SubmitDrawPage() {
                           placeholder="0" />
                       </td>
                       <td className="px-2 py-2.5 text-right">
-                        <span style={{ color: line.pct >= 100 ? '#2ecc71' : line.pct > 0 ? 'var(--bc-gold)' : 'var(--bc-muted)' }}>
+                        <span style={{ color: line.pct >= 100 ? '#15803d' : line.pct > 0 ? 'var(--bc-gold-ink)' : 'var(--bc-muted)' }}>
                           {line.pct.toFixed(1)}%
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-semibold" style={{ color: line.due > 0 ? '#e8edf2' : 'var(--bc-muted)' }}>
+                      <td className="px-4 py-2.5 text-right font-semibold" style={{ color: line.due > 0 ? 'var(--bc-text)' : 'var(--bc-muted)' }}>
                         {line.due > 0 ? formatCurrency(line.due) : '—'}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot style={{ background: 'rgba(255,255,255,0.03)', borderTop: '1px solid var(--bc-border)' }}>
+                <tfoot style={{ background: 'rgba(13,27,42,0.03)', borderTop: '1px solid var(--bc-border)' }}>
                   <tr>
                     <td colSpan={3} className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--bc-muted)' }}>TOTALS</td>
-                    <td className="px-2 py-3 text-right text-xs font-bold" style={{ color: 'var(--bc-gold)' }}>{formatCurrency(totalGross)}</td>
+                    <td className="px-2 py-3 text-right text-xs font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(totalGross)}</td>
                     <td />
                     <td />
                     <td className="px-4 py-3 text-right text-xs">
-                      <div className="font-bold" style={{ color: '#e8edf2' }}>{formatCurrency(totalNet)}</div>
+                      <div className="font-bold" style={{ color: 'var(--bc-text)' }}>{formatCurrency(totalNet)}</div>
                       <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>−{formatCurrency(totalRetainage)} retainage</div>
                     </td>
                   </tr>
@@ -337,7 +337,7 @@ export default function SubmitDrawPage() {
         {/* Simple amount form — shown when no SOV */}
         {!loadingSOV && !hasSov && (
           <div className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
-            <p className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: 'rgba(201,164,87,0.08)', color: 'var(--bc-gold)' }}>
+            <p className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: 'rgba(201,164,87,0.08)', color: 'var(--bc-gold-ink)' }}>
               ℹ️ No Schedule of Values set up for this project yet. Enter a draw amount below. Ask your lender to set up the SOV for line-item tracking.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -346,9 +346,9 @@ export default function SubmitDrawPage() {
                 <input type="number" min="1" max={available} required={!hasSov} value={form.amount}
                   onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                  style={{ ...inputStyle, borderRadius: '0.5rem', padding: '0.625rem 0.75rem', borderColor: overLimit ? '#e74c3c' : 'var(--bc-border)' }}
+                  style={{ ...inputStyle, borderRadius: '0.5rem', padding: '0.625rem 0.75rem', borderColor: overLimit ? '#c0392b' : 'var(--bc-border)' }}
                   placeholder="e.g. 45000" />
-                {overLimit && <p className="text-xs mt-1" style={{ color: '#e74c3c' }}>Exceeds available balance ({formatCurrency(available)})</p>}
+                {overLimit && <p className="text-xs mt-1" style={{ color: '#c0392b' }}>Exceeds available balance ({formatCurrency(available)})</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>Construction Phase</label>
@@ -383,7 +383,7 @@ export default function SubmitDrawPage() {
             </div>
             <button type="button" onClick={addWaiver}
               className="text-xs font-bold px-3 py-1.5 rounded-lg"
-              style={{ background: 'rgba(201,164,87,0.12)', color: 'var(--bc-gold)', border: '1px solid rgba(201,164,87,0.3)' }}>
+              style={{ background: 'rgba(201,164,87,0.12)', color: 'var(--bc-gold-ink)', border: '1px solid rgba(201,164,87,0.3)' }}>
               + Add Sub
             </button>
           </div>
@@ -395,10 +395,10 @@ export default function SubmitDrawPage() {
           ) : (
             <div className="space-y-3">
               {lienWaivers.map((wv, i) => (
-                <div key={i} className="rounded-lg border p-3 space-y-2" style={{ borderColor: 'var(--bc-border)', background: 'rgba(255,255,255,0.02)' }}>
+                <div key={i} className="rounded-lg border p-3 space-y-2" style={{ borderColor: 'var(--bc-border)', background: 'rgba(13,27,42,0.02)' }}>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-semibold" style={{ color: 'var(--bc-gold)' }}>Subcontractor {i + 1}</span>
-                    <button type="button" onClick={() => removeWaiver(i)} className="text-xs" style={{ color: '#e74c3c' }}>Remove</button>
+                    <span className="text-xs font-semibold" style={{ color: 'var(--bc-gold-ink)' }}>Subcontractor {i + 1}</span>
+                    <button type="button" onClick={() => removeWaiver(i)} className="text-xs" style={{ color: '#c0392b' }}>Remove</button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -459,7 +459,7 @@ export default function SubmitDrawPage() {
               <div className="mt-2 space-y-1">
                 {files.map(f => (
                   <div key={f.name} className="text-xs flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                    style={{ background: 'rgba(201,164,87,0.08)', color: 'var(--bc-gold)' }}>
+                    style={{ background: 'rgba(201,164,87,0.08)', color: 'var(--bc-gold-ink)' }}>
                     📄 {f.name} <span style={{ color: 'var(--bc-muted)' }}>({(f.size / 1024).toFixed(0)} KB)</span>
                   </div>
                 ))}
@@ -476,10 +476,10 @@ export default function SubmitDrawPage() {
               <span className="font-bold">{formatCurrency(totalGross)}</span>
               <span className="mx-2" style={{ color: 'var(--bc-muted)' }}>·</span>
               <span style={{ color: 'var(--bc-muted)' }}>Retainage ({Math.round(retainageRate * 100)}%): </span>
-              <span className="font-bold" style={{ color: '#e74c3c' }}>−{formatCurrency(totalRetainage)}</span>
+              <span className="font-bold" style={{ color: '#c0392b' }}>−{formatCurrency(totalRetainage)}</span>
               <span className="mx-2" style={{ color: 'var(--bc-muted)' }}>·</span>
               <span style={{ color: 'var(--bc-muted)' }}>Net release: </span>
-              <span className="font-bold text-base" style={{ color: 'var(--bc-gold)' }}>{formatCurrency(totalNet)}</span>
+              <span className="font-bold text-base" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(totalNet)}</span>
             </div>
           </div>
         )}

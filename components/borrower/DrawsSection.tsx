@@ -54,12 +54,12 @@ function timeAgo(iso: string): string {
 // ('draft','submitted','pending','approved','funded','declined')
 // 'pending' and 'submitted' are both shown as "Submitted" to the borrower.
 const STATUS: Record<string, { label: string; color: string; bg: string; step: number }> = {
-  draft:     { label: 'Draft',      color: '#6b8198',  bg: 'rgba(107,129,152,0.12)', step: 0 },
-  pending:   { label: 'Submitted',  color: '#f39c12',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
-  submitted: { label: 'Submitted',  color: '#f39c12',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
-  approved:  { label: 'Approved',   color: '#2ecc71',  bg: 'rgba(46,204,113,0.12)',  step: 2 },
-  funded:    { label: 'Funded',     color: '#27ae60',  bg: 'rgba(39,174,96,0.18)',   step: 3 },
-  declined:  { label: 'Declined',   color: '#e74c3c',  bg: 'rgba(231,76,60,0.12)',   step: -1 },
+  draft:     { label: 'Draft',      color: 'var(--bc-muted)',  bg: 'rgba(107,129,152,0.12)', step: 0 },
+  pending:   { label: 'Submitted',  color: '#b45309',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
+  submitted: { label: 'Submitted',  color: '#b45309',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
+  approved:  { label: 'Approved',   color: '#15803d',  bg: 'rgba(46,204,113,0.12)',  step: 2 },
+  funded:    { label: 'Funded',     color: '#15803d',  bg: 'rgba(39,174,96,0.18)',   step: 3 },
+  declined:  { label: 'Declined',   color: '#c0392b',  bg: 'rgba(231,76,60,0.12)',   step: -1 },
 }
 
 // 3-step real pipeline: Submitted (step 1) → Approved (step 2) → Funded (step 3)
@@ -117,8 +117,8 @@ export default function BorrowerDrawsSection() {
             <span className="flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50"
-                  style={{ background: '#2ecc71' }} />
-                <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#2ecc71' }} />
+                  style={{ background: '#15803d' }} />
+                <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#15803d' }} />
               </span>
               <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
                 {refreshing ? 'Updating…' : lastAt
@@ -151,7 +151,7 @@ export default function BorrowerDrawsSection() {
             onClick={() => setFilter(tab)}
             className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
             style={{
-              background: filter === tab ? 'var(--bc-gold)' : 'rgba(255,255,255,0.05)',
+              background: filter === tab ? 'var(--bc-gold)' : 'rgba(13,27,42,0.05)',
               color: filter === tab ? 'var(--bc-dark)' : 'var(--bc-muted)',
             }}>
             {tab}
@@ -208,7 +208,7 @@ export default function BorrowerDrawsSection() {
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <div className="font-bold" style={{ color: 'var(--bc-gold)' }}>
+                    <div className="font-bold" style={{ color: 'var(--bc-gold-ink)' }}>
                       {formatCurrency(displayAmt)}
                     </div>
                     {draw.retainage_held ? (
@@ -225,8 +225,8 @@ export default function BorrowerDrawsSection() {
                     {PIPELINE.map((label, i) => {
                       const isDone   = step > i + 1
                       const isActive = step === i + 1
-                      const dotColor = isDone || isActive ? cfg.color : 'rgba(255,255,255,0.12)'
-                      const lineColor = isDone ? cfg.color : 'rgba(255,255,255,0.1)'
+                      const dotColor = isDone || isActive ? cfg.color : 'rgba(13,27,42,0.12)'
+                      const lineColor = isDone ? cfg.color : 'rgba(13,27,42,0.1)'
                       return (
                         <div key={label} className="flex items-center" style={{ flex: i < PIPELINE.length - 1 ? '1 1 0' : 'none' }}>
                           <div className="flex flex-col items-center" style={{ minWidth: 0 }}>
@@ -238,7 +238,7 @@ export default function BorrowerDrawsSection() {
                             <span className="mt-1 text-center leading-tight"
                               style={{
                                 fontSize: 9,
-                                color: isActive ? cfg.color : isDone ? '#8ea5b8' : 'rgba(255,255,255,0.2)',
+                                color: isActive ? cfg.color : isDone ? 'var(--bc-muted)' : 'rgba(13,27,42,0.2)',
                                 fontWeight: isActive ? 700 : 400,
                                 whiteSpace: 'nowrap',
                               }}>
@@ -257,7 +257,7 @@ export default function BorrowerDrawsSection() {
                 {/* Draft banner */}
                 {isDraft && (
                   <div className="mb-3 px-3 py-2 rounded-lg text-xs font-medium"
-                    style={{ background: 'rgba(107,129,152,0.08)', color: '#6b8198', border: '1px solid rgba(107,129,152,0.2)' }}>
+                    style={{ background: 'rgba(107,129,152,0.08)', color: 'var(--bc-muted)', border: '1px solid rgba(107,129,152,0.2)' }}>
                     📝 Saved as draft — not yet submitted to your lender.
                   </div>
                 )}
@@ -265,7 +265,7 @@ export default function BorrowerDrawsSection() {
                 {/* Declined banner */}
                 {isDeclined && (
                   <div className="mb-3 px-3 py-2 rounded-lg text-xs font-medium"
-                    style={{ background: 'rgba(231,76,60,0.08)', color: '#e74c3c', border: '1px solid rgba(231,76,60,0.2)' }}>
+                    style={{ background: 'rgba(231,76,60,0.08)', color: '#c0392b', border: '1px solid rgba(231,76,60,0.2)' }}>
                     ❌{' '}
                     {draw.decline_reason
                       ? <><span className="opacity-70">Not approved — </span>{draw.decline_reason}</>
@@ -301,7 +301,7 @@ export default function BorrowerDrawsSection() {
                       <div className="flex items-center justify-between text-xs">
                         <span style={{ color: 'var(--bc-muted)' }}>① Inspector Credential</span>
                         {draw.inspection_done ? (
-                          <span style={{ color: '#2ecc71' }}>✅ Verified</span>
+                          <span style={{ color: '#15803d' }}>✅ Verified</span>
                         ) : (
                           <span style={{ color: 'var(--bc-muted)' }}>⏳ Awaiting inspection</span>
                         )}
@@ -310,16 +310,16 @@ export default function BorrowerDrawsSection() {
                       <div className="flex items-center justify-between text-xs">
                         <span style={{ color: 'var(--bc-muted)' }}>② Lien Waiver NFT</span>
                         {draw.lien_waiver_nft_id ? (
-                          <span style={{ color: '#2ecc71' }}>✅ On-ledger</span>
+                          <span style={{ color: '#15803d' }}>✅ On-ledger</span>
                         ) : draw.lien_waiver ? (
-                          <span style={{ color: '#f39c12' }}>⏳ Confirmed — minting NFT…</span>
+                          <span style={{ color: '#b45309' }}>⏳ Confirmed — minting NFT…</span>
                         ) : (
                           <span style={{ color: 'var(--bc-muted)' }}>⏳ Awaiting lender confirmation</span>
                         )}
                       </div>
                     </div>
                     {draw.inspection_done && draw.lien_waiver && (
-                      <div className="mt-2 text-xs font-semibold" style={{ color: '#f39c12' }}>
+                      <div className="mt-2 text-xs font-semibold" style={{ color: '#b45309' }}>
                         Both conditions met — orchestrator processing auto-release…
                       </div>
                     )}
@@ -342,7 +342,7 @@ export default function BorrowerDrawsSection() {
                   <div className="mt-1">
                     {draw.verification_receipt ? (
                       <div className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-semibold"
-                        style={{ background: 'rgba(46,204,113,0.12)', color: '#2ecc71', border: '1px solid rgba(46,204,113,0.25)' }}>
+                        style={{ background: 'rgba(46,204,113,0.12)', color: '#15803d', border: '1px solid rgba(46,204,113,0.25)' }}>
                         ⬡ Dual-condition auto-released
                         {draw.funded_at ? ` · ${timeAgo(draw.funded_at)}` : ''}
                       </div>

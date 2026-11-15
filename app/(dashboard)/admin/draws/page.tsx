@@ -155,7 +155,7 @@ export default function AdminDrawsPage() {
     funded: 'badge-green', declined: 'badge-red', draft: 'badge-gray',
   }
   const inspectStatusColor: Record<string, string> = {
-    pending: 'var(--bc-gold)', passed: '#2ecc71', failed: '#e74c3c', cancelled: 'var(--bc-muted)'
+    pending: 'var(--bc-gold-ink)', passed: '#15803d', failed: '#c0392b', cancelled: 'var(--bc-muted)'
   }
   const inspectStatusIcon: Record<string, string> = {
     pending: '⏳', passed: '✅', failed: '❌', cancelled: '—'
@@ -168,18 +168,18 @@ export default function AdminDrawsPage() {
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
-          style={{ background: toast.ok ? 'var(--bc-gold)' : '#e74c3c', color: 'var(--bc-dark)' }}>
+          style={{ background: toast.ok ? 'var(--bc-gold)' : '#c0392b', color: 'var(--bc-dark)' }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
         </div>
       )}
 
       {/* Error modal */}
       {errorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40"
           onClick={() => setErrorModal(null)}>
           <div className="rounded-xl border p-6 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}
             style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
-            <div className="text-lg font-bold mb-2 text-red-400">Action Failed</div>
+            <div className="text-lg font-bold mb-2 text-red-700">Action Failed</div>
             <div className="text-sm mb-4" style={{ color: 'var(--bc-muted)' }}>{errorModal}</div>
             <button onClick={() => setErrorModal(null)}
               className="px-4 py-2 rounded-lg text-sm font-bold"
@@ -192,7 +192,7 @@ export default function AdminDrawsPage() {
 
       {/* Assign Inspection Modal */}
       {inspectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
           onClick={() => setInspectModal(null)}>
           <div className="rounded-xl border w-full max-w-md" onClick={e => e.stopPropagation()}
             style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
@@ -215,7 +215,7 @@ export default function AdminDrawsPage() {
                   onChange={e => setInspectForm(f => ({ ...f, inspector_name: e.target.value }))}
                   placeholder="John Smith"
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
+                  style={{ background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
                 />
               </div>
               <div>
@@ -228,7 +228,7 @@ export default function AdminDrawsPage() {
                   onChange={e => setInspectForm(f => ({ ...f, inspector_email: e.target.value }))}
                   placeholder="inspector@company.com"
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
+                  style={{ background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
                 />
               </div>
               <div>
@@ -240,7 +240,7 @@ export default function AdminDrawsPage() {
                   value={inspectForm.scheduled_date}
                   onChange={e => setInspectForm(f => ({ ...f, scheduled_date: e.target.value }))}
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)', colorScheme: 'dark' }}
+                  style={{ background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)', colorScheme: 'dark' }}
                 />
               </div>
               <div className="pt-1 flex gap-3">
@@ -310,8 +310,8 @@ export default function AdminDrawsPage() {
                   const latestInspection = drawInspections[0]
 
                   return (
-                    <tr key={draw.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
-                      <td className="px-4 py-3 font-bold" style={{ color: 'var(--bc-gold)' }}>{draw.request_number}</td>
+                    <tr key={draw.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
+                      <td className="px-4 py-3 font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{draw.request_number}</td>
                       <td className="px-4 py-3">
                         <div className="font-medium">{draw.projects?.name}</div>
                         <div className="text-xs" style={{ color: 'var(--bc-muted)' }}>{draw.projects?.loan_number}</div>
@@ -345,8 +345,8 @@ export default function AdminDrawsPage() {
                         ) : (
                           <button
                             onClick={() => setInspectModal(draw)}
-                            className="text-xs font-semibold px-2 py-1 rounded border transition-all hover:bg-white/5"
-                            style={{ color: 'var(--bc-gold)', borderColor: 'rgba(201,164,87,0.3)' }}>
+                            className="text-xs font-semibold px-2 py-1 rounded border transition-all hover:bg-slate-900/5"
+                            style={{ color: 'var(--bc-gold-ink)', borderColor: 'rgba(201,164,87,0.3)' }}>
                             + Assign
                           </button>
                         )}
@@ -354,10 +354,10 @@ export default function AdminDrawsPage() {
 
                       <td className="px-4 py-3 text-center text-xs">
                         {draw.lien_waiver_nft_id
-                          ? <span className="font-bold" style={{ color: '#4ade80' }}>⬡ NFT</span>
+                          ? <span className="font-bold" style={{ color: '#15803d' }}>⬡ NFT</span>
                           : draw.lien_waiver
                           ? <span>✅</span>
-                          : <span style={{ color: '#e74c3c' }}>❌</span>}
+                          : <span style={{ color: '#c0392b' }}>❌</span>}
                       </td>
                       <td className="px-4 py-3 text-xs" style={{ color: 'var(--bc-muted)' }}>
                         {draw.submitted_at ? timeAgo(draw.submitted_at) : '—'}
@@ -382,15 +382,15 @@ export default function AdminDrawsPage() {
                               </div>
                             )}
                             {draw.lien_waiver_nft_id && (
-                              <div className="font-mono" style={{ color: '#4ade80' }}>
+                              <div className="font-mono" style={{ color: '#15803d' }}>
                                 LW⬡ {draw.lien_waiver_nft_id.slice(0, 6)}…
                               </div>
                             )}
                             {draw.verification_receipt ? (
-                              <div className="font-bold" style={{ color: '#4ade80' }}>⬡ Auto-released</div>
+                              <div className="font-bold" style={{ color: '#15803d' }}>⬡ Auto-released</div>
                             ) : draw.escrow_finish_hash ? (
                               <a href={`${TESTNET_EXPLORER}/${draw.escrow_finish_hash}`} target="_blank" rel="noreferrer"
-                                className="block font-mono hover:underline" style={{ color: '#2ecc71' }}>
+                                className="block font-mono hover:underline" style={{ color: '#15803d' }}>
                                 Released ↗
                               </a>
                             ) : null}
@@ -415,7 +415,7 @@ export default function AdminDrawsPage() {
                               onClick={() => updateDraw(draw.id, 'declined', 'Declined by admin')}
                               disabled={actionLoading === draw.id + 'declined'}
                               className="px-2.5 py-1 rounded-lg text-xs font-bold border transition-all"
-                              style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>
+                              style={{ background: 'rgba(231,76,60,0.1)', color: '#c0392b', borderColor: 'rgba(231,76,60,0.3)' }}>
                               ✗
                             </button>
                           </div>
@@ -430,7 +430,7 @@ export default function AdminDrawsPage() {
                                 disabled={lienWaiverLoading === draw.id}
                                 title="Confirm lien waiver received — mints XLS-20 NFT + runs dual-condition check"
                                 className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all w-full"
-                                style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)' }}>
+                                style={{ background: 'rgba(74,222,128,0.12)', color: '#15803d', border: '1px solid rgba(74,222,128,0.3)' }}>
                                 {lienWaiverLoading === draw.id ? '⬡ …' : '✓ Lien Waiver'}
                               </button>
                             )}
@@ -448,7 +448,7 @@ export default function AdminDrawsPage() {
                         {draw.status === 'funded' && draw.funded_at && (
                           <div className="text-xs space-y-0.5">
                             {draw.verification_receipt ? (
-                              <div className="font-semibold" style={{ color: '#4ade80' }}>⬡ Auto-released</div>
+                              <div className="font-semibold" style={{ color: '#15803d' }}>⬡ Auto-released</div>
                             ) : (
                               <div style={{ color: 'var(--bc-muted)' }}>↑ Manual release</div>
                             )}

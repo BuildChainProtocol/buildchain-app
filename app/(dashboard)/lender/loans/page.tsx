@@ -51,7 +51,7 @@ export default async function LenderLoansPage() {
           { label: 'Total Loans', value: total, sub: `${active} active builds` },
           { label: 'Portfolio Value', value: formatCurrency(totalLoan), sub: 'total commitments' },
           { label: 'Capital Deployed', value: formatCurrency(totalDrawn), sub: `${totalLoan ? Math.round(totalDrawn/totalLoan*100) : 0}% drawn` },
-          { label: 'Pending Draws', value: pendingDraws, sub: 'awaiting approval', color: pendingDraws > 0 ? 'var(--bc-gold)' : undefined },
+          { label: 'Pending Draws', value: pendingDraws, sub: 'awaiting approval', color: pendingDraws > 0 ? 'var(--bc-gold-ink)' : undefined },
         ].map(s => (
           <div key={s.label} className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
             <div className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: 'var(--bc-muted)' }}>{s.label}</div>
@@ -68,7 +68,7 @@ export default async function LenderLoansPage() {
           <div className="flex items-center gap-3">
             <span className="text-xl">⏳</span>
             <div>
-              <div className="font-bold text-sm" style={{ color: 'var(--bc-gold)' }}>{pendingDraws} draw request{pendingDraws !== 1 ? 's' : ''} need{pendingDraws === 1 ? 's' : ''} your review</div>
+              <div className="font-bold text-sm" style={{ color: 'var(--bc-gold-ink)' }}>{pendingDraws} draw request{pendingDraws !== 1 ? 's' : ''} need{pendingDraws === 1 ? 's' : ''} your review</div>
               <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>Approve to create XRPL escrow and lock funds on-chain</div>
             </div>
           </div>
@@ -111,8 +111,8 @@ export default async function LenderLoansPage() {
                   const drawPct = p.loan_amount ? Math.round((p.amount_drawn || 0) / p.loan_amount * 100) : 0
 
                   return (
-                    <tr key={p.id} className="border-b last:border-0 hover:bg-white/[0.02]"
-                      style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                    <tr key={p.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]"
+                      style={{ borderColor: '#edf0f4' }}>
                       <td className="px-4 py-3">
                         <div className="font-semibold">{p.name}</div>
                         <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>
@@ -123,25 +123,25 @@ export default async function LenderLoansPage() {
                       <td className="px-4 py-3">
                         <div>{borrower?.company_name || '—'}</div>
                         {borrower?.rating && (
-                          <div className="text-xs mt-0.5 font-bold" style={{ color: borrower.rating === 'preferred' ? '#2ecc71' : borrower.rating === 'standard' ? 'var(--bc-blue)' : borrower.rating === 'new' ? 'var(--bc-gold)' : '#e74c3c' }}>
+                          <div className="text-xs mt-0.5 font-bold" style={{ color: borrower.rating === 'preferred' ? '#15803d' : borrower.rating === 'standard' ? 'var(--bc-blue)' : borrower.rating === 'new' ? 'var(--bc-gold)' : '#c0392b' }}>
                             {{ preferred: 'A', standard: 'B', new: 'C', probation: 'D' }[borrower.rating] || borrower.rating}
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3 font-semibold">{formatCurrency(p.loan_amount)}</td>
                       <td className="px-4 py-3">
-                        <div style={{ color: 'var(--bc-gold)' }}>{formatCurrency(p.amount_drawn || 0)}</div>
-                        <div className="rounded-full overflow-hidden h-1 mt-1.5 w-16" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                          <div className="h-full rounded-full" style={{ width: `${drawPct}%`, background: drawPct > 80 ? '#e74c3c' : 'var(--bc-gold)' }} />
+                        <div style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(p.amount_drawn || 0)}</div>
+                        <div className="rounded-full overflow-hidden h-1 mt-1.5 w-16" style={{ background: 'rgba(13,27,42,0.06)' }}>
+                          <div className="h-full rounded-full" style={{ width: `${drawPct}%`, background: drawPct > 80 ? '#c0392b' : 'var(--bc-gold)' }} />
                         </div>
                       </td>
-                      <td className="px-4 py-3" style={{ color: '#2ecc71' }}>{formatCurrency(available)}</td>
+                      <td className="px-4 py-3" style={{ color: '#15803d' }}>{formatCurrency(available)}</td>
                       <td className="px-4 py-3"><StageBadge stage={p.stage} /></td>
                       <td className="px-4 py-3">
                         {pending.length > 0 ? (
                           <Link href="/lender/approvals"
                             className="text-xs px-2.5 py-1 rounded-full font-bold"
-                            style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold)' }}>
+                            style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold-ink)' }}>
                             {pending.length} pending
                           </Link>
                         ) : (
@@ -184,10 +184,10 @@ export default async function LenderLoansPage() {
                     <span className="ml-2 text-xs" style={{ color: 'var(--bc-muted)' }}>{formatCurrency(p.loan_amount)}</span>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold" style={{ color: urgent ? '#e74c3c' : undefined }}>
+                    <div className="font-semibold" style={{ color: urgent ? '#c0392b' : undefined }}>
                       {new Date(p.maturity_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
-                    <div className="text-xs mt-0.5" style={{ color: urgent ? '#e74c3c' : 'var(--bc-muted)' }}>
+                    <div className="text-xs mt-0.5" style={{ color: urgent ? '#c0392b' : 'var(--bc-muted)' }}>
                       {daysLeft > 0 ? `${daysLeft} days` : 'Matured'}
                     </div>
                   </div>

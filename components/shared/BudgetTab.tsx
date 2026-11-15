@@ -88,9 +88,9 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
   }
 
   const inputStyle = {
-    background: 'rgba(255,255,255,0.05)',
+    background: 'rgba(13,27,42,0.05)',
     border: '1px solid var(--bc-border)',
-    color: '#e8edf2',
+    color: 'var(--bc-text)',
     borderRadius: '0.5rem',
     padding: '0.4rem 0.6rem',
     fontSize: '0.8rem',
@@ -125,7 +125,7 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
       {/* Add / Edit form */}
       {adding && !readOnly && (
         <div className="rounded-xl border p-4 mb-4 space-y-3" style={{ borderColor: 'var(--bc-gold)', background: 'rgba(201,164,87,0.05)' }}>
-          <p className="text-xs font-bold" style={{ color: 'var(--bc-gold)' }}>{editId ? 'Edit Line' : 'New Budget Line'}</p>
+          <p className="text-xs font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{editId ? 'Edit Line' : 'New Budget Line'}</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs mb-1 block" style={{ color: 'var(--bc-muted)' }}>Line #</label>
@@ -203,27 +203,27 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
                 const drawnPct = line.scheduled_value > 0
                   ? Math.min(Math.round((drawn / line.scheduled_value) * 100), 100)
                   : 0
-                const barColor = drawnPct >= 100 ? '#2ecc71'
+                const barColor = drawnPct >= 100 ? '#15803d'
                   : drawnPct > 80 ? 'var(--bc-gold)'
                   : 'var(--bc-blue)'
 
                 return (
-                  <tr key={line.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={line.id} style={{ borderBottom: '1px solid rgba(13,27,42,0.04)' }}>
                     <td className="py-3 pr-3 font-mono" style={{ color: 'var(--bc-muted)' }}>{line.line_no}</td>
                     <td className="py-3 pr-3 font-medium">{line.description}</td>
                     <td className="py-3 pr-3 hidden md:table-cell" style={{ color: 'var(--bc-muted)' }}>{line.trade || '—'}</td>
-                    <td className="py-3 pr-3 text-right font-semibold" style={{ color: 'var(--bc-gold)' }}>
+                    <td className="py-3 pr-3 text-right font-semibold" style={{ color: 'var(--bc-gold-ink)' }}>
                       {formatCurrency(line.scheduled_value)}
                     </td>
-                    <td className="py-3 pr-3 text-right font-semibold" style={{ color: drawn > 0 ? '#e8edf2' : 'var(--bc-muted)' }}>
+                    <td className="py-3 pr-3 text-right font-semibold" style={{ color: drawn > 0 ? 'var(--bc-text)' : 'var(--bc-muted)' }}>
                       {drawn > 0 ? formatCurrency(drawn) : '—'}
                     </td>
-                    <td className="py-3 pr-3 text-right hidden sm:table-cell" style={{ color: remaining > 0 ? '#2ecc71' : 'var(--bc-muted)' }}>
+                    <td className="py-3 pr-3 text-right hidden sm:table-cell" style={{ color: remaining > 0 ? '#15803d' : 'var(--bc-muted)' }}>
                       {formatCurrency(Math.max(remaining, 0))}
                     </td>
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(255,255,255,0.08)', minWidth: 48 }}>
+                        <div className="flex-1 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(13,27,42,0.08)', minWidth: 48 }}>
                           <div className="h-full rounded-full transition-all duration-500"
                             style={{ width: `${drawnPct}%`, background: barColor }} />
                         </div>
@@ -235,8 +235,8 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
                     {!readOnly && (
                       <td className="py-3">
                         <div className="flex gap-2 justify-end">
-                          <button onClick={() => startEdit(line)} className="hover:underline" style={{ color: 'var(--bc-gold)' }}>Edit</button>
-                          <button onClick={() => deleteLine(line.id)} className="hover:underline" style={{ color: '#e74c3c' }}>Del</button>
+                          <button onClick={() => startEdit(line)} className="hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>Edit</button>
+                          <button onClick={() => deleteLine(line.id)} className="hover:underline" style={{ color: '#c0392b' }}>Del</button>
                         </div>
                       </td>
                     )}
@@ -249,22 +249,22 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
                 <td colSpan={3} className="py-3 pr-3 font-bold" style={{ color: 'var(--bc-muted)' }}>
                   TOTAL CONTRACT SUM
                 </td>
-                <td className="py-3 pr-3 text-right font-bold" style={{ color: 'var(--bc-gold)' }}>
+                <td className="py-3 pr-3 text-right font-bold" style={{ color: 'var(--bc-gold-ink)' }}>
                   {formatCurrency(totalBudget)}
                 </td>
                 <td className="py-3 pr-3 text-right font-bold">
                   {totalDrawn > 0 ? formatCurrency(totalDrawn) : '—'}
                 </td>
-                <td className="py-3 pr-3 text-right font-bold hidden sm:table-cell text-green-400">
+                <td className="py-3 pr-3 text-right font-bold hidden sm:table-cell text-green-700">
                   {formatCurrency(Math.max(totalBudget - totalDrawn, 0))}
                 </td>
                 <td className="py-3 pr-3">
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(255,255,255,0.08)', minWidth: 48 }}>
+                    <div className="flex-1 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(13,27,42,0.08)', minWidth: 48 }}>
                       <div className="h-full rounded-full"
                         style={{ width: `${totalBudget > 0 ? Math.min(Math.round(totalDrawn / totalBudget * 100), 100) : 0}%`, background: 'var(--bc-gold)' }} />
                     </div>
-                    <span className="font-bold tabular-nums" style={{ color: 'var(--bc-gold)', minWidth: 32, textAlign: 'right' }}>
+                    <span className="font-bold tabular-nums" style={{ color: 'var(--bc-gold-ink)', minWidth: 32, textAlign: 'right' }}>
                       {totalBudget > 0 ? Math.round(totalDrawn / totalBudget * 100) : 0}%
                     </span>
                   </div>

@@ -3,12 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import DashboardShell from '@/components/shared/DashboardShell'
 
 const adminNav = [
-  { href: '/admin', label: 'Dashboard', icon: '▦' },
-  { href: '/admin/projects', label: 'Projects', icon: '🏗' },
-  { href: '/admin/draws', label: 'Draw Requests', icon: '💵', badge: 0 },
-  { href: '/admin/documents', label: 'Documents', icon: '📁' },
-  { href: '/admin/lenders', label: 'Lenders', icon: '🏦' },
-  { href: '/admin/borrowers', label: 'Borrowers', icon: '👥' },
+  { href: '/admin', label: 'Dashboard', group: 'Overview' },
+  { href: '/admin/projects', label: 'Projects', group: 'Lending' },
+  { href: '/admin/draws', label: 'Draw Requests', group: 'Lending', badge: 0 },
+  { href: '/admin/documents', label: 'Documents', group: 'Lending' },
+  { href: '/admin/lenders', label: 'Lenders', group: 'Directory' },
+  { href: '/admin/borrowers', label: 'Borrowers', group: 'Directory' },
 ]
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

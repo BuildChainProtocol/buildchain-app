@@ -166,7 +166,7 @@ export default function ProjectDetailPage() {
                 <h1 className="text-2xl font-bold">{project.name}</h1>
                 <span className={`badge ${stageBadge[project.stage] || 'badge-gray'} text-xs`}>{project.stage}</span>
                 {pendingDraws.length > 0 && (
-                  <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold)' }}>
+                  <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold-ink)' }}>
                     {pendingDraws.length} draw{pendingDraws.length > 1 ? 's' : ''} pending
                   </span>
                 )}
@@ -180,18 +180,18 @@ export default function ProjectDetailPage() {
               <select value={project.stage} disabled={stageUpdating}
                 onChange={e => updateStage(e.target.value)}
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold outline-none"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--bc-border)', color: '#e8edf2' }}>
+                style={{ background: 'rgba(13,27,42,0.06)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}>
                 {STAGES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1).replace('_', ' ')}</option>)}
               </select>
               {project.archived_at ? (
                 <button onClick={unarchiveProject}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-white/5"
-                  style={{ borderColor: 'var(--bc-border)', color: '#2ecc71' }}>
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-slate-900/5"
+                  style={{ borderColor: 'var(--bc-border)', color: '#15803d' }}>
                   ↩ Restore
                 </button>
               ) : (
                 <button onClick={archiveProject}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-white/5"
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-slate-900/5"
                   style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
                   Archive
                 </button>
@@ -202,12 +202,12 @@ export default function ProjectDetailPage() {
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             {[
-              { label: 'Loan Amount', value: formatCurrency(project.loan_amount), color: '#e8edf2' },
-              { label: 'Amount Drawn', value: formatCurrency(drawn), color: 'var(--bc-gold)' },
-              { label: 'Available', value: formatCurrency(available), color: '#2ecc71' },
+              { label: 'Loan Amount', value: formatCurrency(project.loan_amount), color: 'var(--bc-text)' },
+              { label: 'Amount Drawn', value: formatCurrency(drawn), color: 'var(--bc-gold-ink)' },
+              { label: 'Available', value: formatCurrency(available), color: '#15803d' },
               { label: 'Interest Rate', value: project.interest_rate ? `${project.interest_rate}%` : '—', color: 'var(--bc-blue)' },
             ].map(s => (
-              <div key={s.label} className="rounded-lg p-3 border text-center" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'var(--bc-border)' }}>
+              <div key={s.label} className="rounded-lg p-3 border text-center" style={{ background: 'rgba(13,27,42,0.03)', borderColor: 'var(--bc-border)' }}>
                 <div className="text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
                 <div className="text-xs mt-0.5 uppercase tracking-wide" style={{ color: 'var(--bc-muted)' }}>{s.label}</div>
               </div>
@@ -218,11 +218,11 @@ export default function ProjectDetailPage() {
           <div>
             <div className="flex justify-between text-xs mb-1.5" style={{ color: 'var(--bc-muted)' }}>
               <span>Draw utilization</span>
-              <span style={{ color: 'var(--bc-gold)' }}>{drawPct}% drawn</span>
+              <span style={{ color: 'var(--bc-gold-ink)' }}>{drawPct}% drawn</span>
             </div>
-            <div className="rounded-full overflow-hidden h-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="rounded-full overflow-hidden h-2" style={{ background: 'rgba(13,27,42,0.06)' }}>
               <div className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(drawPct, 100)}%`, background: drawPct > 80 ? '#e74c3c' : 'var(--bc-gold)' }} />
+                style={{ width: `${Math.min(drawPct, 100)}%`, background: drawPct > 80 ? '#c0392b' : 'var(--bc-gold)' }} />
             </div>
           </div>
         </div>
@@ -234,7 +234,7 @@ export default function ProjectDetailPage() {
               className="flex-shrink-0 px-4 sm:px-5 py-3 text-sm font-semibold capitalize transition-all border-b-2"
               style={{
                 borderColor: tab === t ? 'var(--bc-gold)' : 'transparent',
-                color: tab === t ? 'var(--bc-gold)' : 'var(--bc-muted)',
+                color: tab === t ? 'var(--bc-gold-ink)' : 'var(--bc-muted)',
               }}>
               {t}
               {t === 'draws' && draws.length > 0 && <span className="ml-1.5 text-xs opacity-60">({draws.length})</span>}
@@ -309,7 +309,7 @@ export default function ProjectDetailPage() {
               : 'var(--bc-border)',
           }}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--bc-gold)' }}>
+              <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--bc-gold-ink)' }}>
                 ⬡ XRPL Digital Title
               </h3>
               {project.loan_nft_token_id && (
@@ -325,7 +325,7 @@ export default function ProjectDetailPage() {
                   <span style={{ color: 'var(--bc-muted)' }}>NFT Token ID</span>
                   <a href={`${TESTNET_NFT}/${project.loan_nft_token_id}`}
                     target="_blank" rel="noreferrer"
-                    className="font-mono text-xs hover:underline" style={{ color: 'var(--bc-gold)' }}>
+                    className="font-mono text-xs hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>
                     {project.loan_nft_token_id.slice(0, 14)}…{project.loan_nft_token_id.slice(-8)} ↗
                   </a>
                 </div>
@@ -344,7 +344,7 @@ export default function ProjectDetailPage() {
                     <span style={{ color: 'var(--bc-muted)' }}>Settlement TX</span>
                     <a href={`${TESTNET_EXPLORER}/${project.loan_nft_burn_hash}`}
                       target="_blank" rel="noreferrer"
-                      className="font-mono text-xs hover:underline" style={{ color: '#4ade80' }}>
+                      className="font-mono text-xs hover:underline" style={{ color: '#15803d' }}>
                       {project.loan_nft_burn_hash.slice(0, 14)}…{project.loan_nft_burn_hash.slice(-8)} ↗
                     </a>
                   </div>
@@ -357,8 +357,8 @@ export default function ProjectDetailPage() {
             ) : (
               <div>
                 <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>
-                  No digital title minted. Set <code className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)' }}>XRPL_WALLET_SEED</code> and{' '}
-                  <code className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)' }}>XRPL_DEFAULT_DESTINATION</code>{' '}
+                  No digital title minted. Set <code className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(13,27,42,0.06)' }}>XRPL_WALLET_SEED</code> and{' '}
+                  <code className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(13,27,42,0.06)' }}>XRPL_DEFAULT_DESTINATION</code>{' '}
                   in Vercel environment variables, then new projects will mint a loan NFT at origination.
                 </p>
               </div>
@@ -392,8 +392,8 @@ export default function ProjectDetailPage() {
               </thead>
               <tbody>
                 {draws.map((d: any) => (
-                  <tr key={d.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
-                    <td className="px-4 py-3 font-bold" style={{ color: 'var(--bc-gold)' }}>{d.request_number}</td>
+                  <tr key={d.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
+                    <td className="px-4 py-3 font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{d.request_number}</td>
                     <td className="px-4 py-3 font-semibold whitespace-nowrap">{formatCurrency(d.amount)}</td>
                     <td className="px-4 py-3 text-xs">{d.phase || d.purpose || '—'}</td>
                     <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--bc-muted)' }}>{d.submitted_at ? timeAgo(d.submitted_at) : '—'}</td>
@@ -403,7 +403,7 @@ export default function ProjectDetailPage() {
                     <td className="px-4 py-3">
                       {d.verification_receipt ? (
                         // Dual-condition auto-released
-                        <div className="text-xs font-semibold" style={{ color: '#2ecc71' }}>
+                        <div className="text-xs font-semibold" style={{ color: '#15803d' }}>
                           ⬡ Auto-released
                           {d.funded_at && <div className="font-normal mt-0.5" style={{ color: 'var(--bc-muted)' }}>{timeAgo(d.funded_at)}</div>}
                         </div>
@@ -416,16 +416,16 @@ export default function ProjectDetailPage() {
                         // Show dual-condition progress
                         <div className="space-y-1 text-xs">
                           <div className="flex items-center gap-1.5">
-                            <span style={{ color: d.inspection_done ? '#2ecc71' : 'var(--bc-muted)' }}>
+                            <span style={{ color: d.inspection_done ? '#15803d' : 'var(--bc-muted)' }}>
                               {d.inspection_done ? '✅' : '⏳'}
                             </span>
-                            <span style={{ color: d.inspection_done ? '#2ecc71' : 'var(--bc-muted)' }}>Inspect</span>
+                            <span style={{ color: d.inspection_done ? '#15803d' : 'var(--bc-muted)' }}>Inspect</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span style={{ color: d.lien_waiver_nft_id ? '#2ecc71' : d.lien_waiver ? '#f39c12' : 'var(--bc-muted)' }}>
+                            <span style={{ color: d.lien_waiver_nft_id ? '#15803d' : d.lien_waiver ? '#b45309' : 'var(--bc-muted)' }}>
                               {d.lien_waiver_nft_id ? '⬡' : d.lien_waiver ? '✓' : '⏳'}
                             </span>
-                            <span style={{ color: d.lien_waiver_nft_id ? '#2ecc71' : d.lien_waiver ? '#f39c12' : 'var(--bc-muted)' }}>
+                            <span style={{ color: d.lien_waiver_nft_id ? '#15803d' : d.lien_waiver ? '#b45309' : 'var(--bc-muted)' }}>
                               {d.lien_waiver_nft_id ? 'LW NFT' : d.lien_waiver ? 'LW conf.' : 'LW pending'}
                             </span>
                           </div>
@@ -459,7 +459,7 @@ export default function ProjectDetailPage() {
                           <button onClick={() => updateDraw(d.id, 'declined')}
                             disabled={drawActionId === d.id + 'declined'}
                             className="px-2 py-1 rounded text-xs font-bold"
-                            style={{ background: 'rgba(231,76,60,0.15)', color: '#e74c3c' }}>
+                            style={{ background: 'rgba(231,76,60,0.15)', color: '#c0392b' }}>
                             ✗
                           </button>
                         </div>
@@ -472,7 +472,7 @@ export default function ProjectDetailPage() {
                               onClick={() => confirmLienWaiver(d.id)}
                               disabled={lienWaiverLoading === d.id}
                               className="px-2 py-1 rounded text-xs font-bold whitespace-nowrap"
-                              style={{ background: 'rgba(46,204,113,0.15)', color: '#2ecc71' }}>
+                              style={{ background: 'rgba(46,204,113,0.15)', color: '#15803d' }}>
                               {lienWaiverLoading === d.id ? '…' : '✓ Lien Waiver'}
                             </button>
                           )}
@@ -480,13 +480,13 @@ export default function ProjectDetailPage() {
                           <button onClick={() => updateDraw(d.id, 'funded')}
                             disabled={drawActionId === d.id + 'funded'}
                             className="px-2 py-1 rounded text-xs font-bold whitespace-nowrap"
-                            style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
+                            style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold-ink)' }}>
                             {drawActionId === d.id + 'funded' ? '…' : '↑ Release'}
                           </button>
                         </div>
                       )}
                       {d.status === 'funded' && !d.verification_receipt && (
-                        <span className="text-xs" style={{ color: '#2ecc71' }}>Funded {d.funded_at ? timeAgo(d.funded_at) : ''}</span>
+                        <span className="text-xs" style={{ color: '#15803d' }}>Funded {d.funded_at ? timeAgo(d.funded_at) : ''}</span>
                       )}
                     </td>
                   </tr>
@@ -521,7 +521,7 @@ export default function ProjectDetailPage() {
               </thead>
               <tbody>
                 {docs.map((doc: any) => (
-                  <tr key={doc.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                  <tr key={doc.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span>{doc.required ? '📌' : '📄'}</span>
@@ -551,14 +551,14 @@ export default function ProjectDetailPage() {
                               onClick={() => updateDoc(doc.id, 'approved')}
                               disabled={docActionId === doc.id + 'approved'}
                               className="text-xs font-bold px-2 py-0.5 rounded transition-all"
-                              style={{ background: 'rgba(39,174,96,0.15)', color: '#27ae60' }}>
+                              style={{ background: 'rgba(39,174,96,0.15)', color: '#15803d' }}>
                               {docActionId === doc.id + 'approved' ? '…' : '✓ Approve'}
                             </button>
                             <button
                               onClick={() => updateDoc(doc.id, 'rejected')}
                               disabled={docActionId === doc.id + 'rejected'}
                               className="text-xs font-bold px-2 py-0.5 rounded transition-all"
-                              style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c' }}>
+                              style={{ background: 'rgba(231,76,60,0.1)', color: '#c0392b' }}>
                               {docActionId === doc.id + 'rejected' ? '…' : '✗ Reject'}
                             </button>
                           </>
@@ -568,7 +568,7 @@ export default function ProjectDetailPage() {
                             onClick={() => updateDoc(doc.id, 'approved')}
                             disabled={docActionId === doc.id + 'approved'}
                             className="text-xs font-bold px-2 py-0.5 rounded transition-all"
-                            style={{ background: 'rgba(39,174,96,0.1)', color: '#27ae60' }}>
+                            style={{ background: 'rgba(39,174,96,0.1)', color: '#15803d' }}>
                             {docActionId === doc.id + 'approved' ? '…' : '↩ Re-approve'}
                           </button>
                         )}
@@ -599,9 +599,9 @@ export default function ProjectDetailPage() {
           {activity.length === 0 ? (
             <div className="px-5 py-12 text-center" style={{ color: 'var(--bc-muted)' }}>No activity yet.</div>
           ) : (
-            <div className="divide-y" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+            <div className="divide-y" style={{ borderColor: '#edf0f4' }}>
               {activity.map((a: any) => (
-                <div key={a.id} className="px-5 py-3 flex items-start gap-3 hover:bg-white/[0.02]">
+                <div key={a.id} className="px-5 py-3 flex items-start gap-3 hover:bg-slate-900/[0.02]">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
                     style={{ background: 'rgba(45,125,210,0.15)', color: 'var(--bc-blue)', fontSize: 12 }}>
                     ⊙

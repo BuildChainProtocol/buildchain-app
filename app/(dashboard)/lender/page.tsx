@@ -90,10 +90,10 @@ export default async function LenderDashboard() {
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span style={{ color: 'var(--bc-muted)' }}>Draw utilization</span>
-                  <span style={{ color: 'var(--bc-gold)' }}>{pct}%</span>
+                  <span style={{ color: 'var(--bc-gold-ink)' }}>{pct}%</span>
                 </div>
-                <div className="rounded-full overflow-hidden h-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 90 ? '#e74c3c' : 'var(--bc-gold)' }} />
+                <div className="rounded-full overflow-hidden h-2" style={{ background: 'rgba(13,27,42,0.08)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 90 ? '#c0392b' : 'var(--bc-gold)' }} />
                 </div>
               </div>
             </div>

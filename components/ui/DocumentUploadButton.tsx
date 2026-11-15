@@ -49,13 +49,13 @@ export default function DocumentUploadButton({ projectId, documentId, label = 'U
     `📎 ${label}`
 
   const borderColor =
-    state === 'done' ? '#2ecc71' :
-    state === 'error' ? '#e74c3c' :
+    state === 'done' ? '#15803d' :
+    state === 'error' ? '#c0392b' :
     'var(--bc-border)'
 
   const textColor =
-    state === 'done' ? '#2ecc71' :
-    state === 'error' ? '#e74c3c' :
+    state === 'done' ? '#15803d' :
+    state === 'error' ? '#c0392b' :
     'var(--bc-muted)'
 
   return (

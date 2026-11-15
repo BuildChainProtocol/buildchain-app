@@ -35,12 +35,12 @@ export default async function AdminProjectsPage() {
         {['review', 'approved', 'active', 'complete'].map(stage => {
           const stageProjects = projects?.filter(p => p.stage === stage) || []
           return (
-            <div key={stage} className="rounded-xl border" style={{ background: 'rgba(255,255,255,0.02)', borderColor: 'var(--bc-border)' }}>
+            <div key={stage} className="rounded-xl border" style={{ background: 'rgba(13,27,42,0.02)', borderColor: 'var(--bc-border)' }}>
               <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--bc-border)' }}>
                 <span className="text-xs font-bold uppercase tracking-wide capitalize" style={{ color: 'var(--bc-muted)' }}>
                   {stage === 'active' ? 'Active Build' : stage}
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(13,27,42,0.08)' }}>
                   {stageProjects.length}
                 </span>
               </div>
@@ -55,9 +55,9 @@ export default async function AdminProjectsPage() {
                     </div>
                     <div className="text-xs mb-1.5 flex justify-between">
                       <span style={{ color: 'var(--bc-muted)' }}>{formatCurrency(p.loan_amount)}</span>
-                      <span style={{ color: 'var(--bc-gold)' }}>{getDrawProgress(p.amount_drawn, p.loan_amount)}%</span>
+                      <span style={{ color: 'var(--bc-gold-ink)' }}>{getDrawProgress(p.amount_drawn, p.loan_amount)}%</span>
                     </div>
-                    <div className="rounded-full overflow-hidden h-1" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div className="rounded-full overflow-hidden h-1" style={{ background: 'rgba(13,27,42,0.08)' }}>
                       <div className="h-full rounded-full" style={{ width: `${getDrawProgress(p.amount_drawn, p.loan_amount)}%`, background: 'var(--bc-gold)' }} />
                     </div>
                   </Link>
@@ -87,9 +87,9 @@ export default async function AdminProjectsPage() {
             </thead>
             <tbody>
               {projects?.map(p => (
-                <tr key={p.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                <tr key={p.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
                   <td className="px-4 py-3">
-                    <Link href={`/admin/projects/${p.id}`} className="font-semibold hover:underline" style={{ color: 'var(--bc-gold)' }}>{p.name}</Link>
+                    <Link href={`/admin/projects/${p.id}`} className="font-semibold hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>{p.name}</Link>
                     <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>{p.loan_number}</div>
                   </td>
                   <td className="px-4 py-3 text-xs">{p.address}, {p.city}</td>
@@ -98,7 +98,7 @@ export default async function AdminProjectsPage() {
                   <td className="px-4 py-3 font-semibold">{formatCurrency(p.loan_amount)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-12 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <div className="w-12 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(13,27,42,0.08)' }}>
                         <div className="h-full rounded-full" style={{ width: `${getDrawProgress(p.amount_drawn, p.loan_amount)}%`, background: 'var(--bc-gold)' }} />
                       </div>
                       <span className="text-xs">{getDrawProgress(p.amount_drawn, p.loan_amount)}%</span>

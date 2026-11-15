@@ -3,10 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import DashboardShell from '@/components/shared/DashboardShell'
 
 const lenderNav = [
-  { href: '/lender', label: 'Portfolio', icon: '▦' },
-  { href: '/lender/loans', label: 'My Loans', icon: '🏦' },
-  { href: '/lender/approvals', label: 'Approvals', icon: '✅', badge: 0 },
-  { href: '/lender/documents', label: 'Documents', icon: '📁' },
+  { href: '/lender', label: 'Portfolio', group: 'Overview' },
+  { href: '/lender/loans', label: 'My Loans', group: 'Lending' },
+  { href: '/lender/approvals', label: 'Approvals', group: 'Lending', badge: 0 },
+  { href: '/lender/documents', label: 'Documents', group: 'Lending' },
 ]
 
 export default async function LenderLayout({ children }: { children: React.ReactNode }) {

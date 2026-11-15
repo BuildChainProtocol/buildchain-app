@@ -12,13 +12,13 @@ interface Borrower {
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']
 
 const RATINGS = [
-  { value: 'preferred', label: 'A', color: '#2ecc71' },
+  { value: 'preferred', label: 'A', color: '#15803d' },
   { value: 'standard',  label: 'B', color: 'var(--bc-blue)' },
-  { value: 'new',       label: 'C', color: 'var(--bc-gold)' },
-  { value: 'probation', label: 'D', color: '#e74c3c' },
+  { value: 'new',       label: 'C', color: 'var(--bc-gold-ink)' },
+  { value: 'probation', label: 'D', color: '#c0392b' },
 ]
 const ratingColor: Record<string, string> = {
-  preferred: '#2ecc71', standard: 'var(--bc-blue)', new: 'var(--bc-gold)', probation: '#e74c3c'
+  preferred: '#15803d', standard: 'var(--bc-blue)', new: 'var(--bc-gold-ink)', probation: '#c0392b'
 }
 const ratingLabel: Record<string, string> = {
   preferred: 'A', standard: 'B', new: 'C', probation: 'D'
@@ -41,10 +41,10 @@ function AddBorrowerModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   }
 
   const inputClass = "w-full rounded-lg px-3 py-2 text-sm outline-none"
-  const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: '#e8edf2' }
+  const inputStyle = { background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" onClick={onClose}>
       <div className="rounded-xl border w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}
         style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
@@ -104,7 +104,7 @@ function AddBorrowerModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
               </select>
             </div>
           </div>
-          {error && <div className="text-sm p-3 rounded-lg" style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c' }}>{error}</div>}
+          {error && <div className="text-sm p-3 rounded-lg" style={{ background: 'rgba(231,76,60,0.1)', color: '#c0392b' }}>{error}</div>}
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading}
               className="px-5 py-2 rounded-lg text-sm font-bold"
@@ -164,7 +164,7 @@ export default function AdminBorrowersPage() {
     <div>
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
-          style={{ background: toast.startsWith('Error') ? '#e74c3c' : 'var(--bc-gold)', color: toast.startsWith('Error') ? '#fff' : 'var(--bc-dark)' }}>
+          style={{ background: toast.startsWith('Error') ? '#c0392b' : 'var(--bc-gold)', color: toast.startsWith('Error') ? '#fff' : 'var(--bc-dark)' }}>
           {toast}
         </div>
       )}
@@ -185,7 +185,7 @@ export default function AdminBorrowersPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Borrowers', value: borrowers.length, sub: `${activeBorrowers.length} active` },
-          { label: 'Preferred', value: borrowers.filter(b => b.rating === 'preferred').length, sub: 'top credit quality', color: '#2ecc71' },
+          { label: 'Preferred', value: borrowers.filter(b => b.rating === 'preferred').length, sub: 'top credit quality', color: '#15803d' },
           { label: 'Avg Rating', value: borrowers.length ? (['A','B','C','D'].includes(borrowers[0]?.rating) ? borrowers[0].rating : '—') : '—', sub: 'most recent borrower' },
         ].map(s => (
           <div key={s.label} className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
@@ -225,7 +225,7 @@ export default function AdminBorrowersPage() {
               </thead>
               <tbody>
                 {borrowers.map(b => (
-                  <tr key={b.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                  <tr key={b.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
                     <td className="px-4 py-3">
                       <div className="font-semibold">{b.company_name}</div>
                       <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>{b.email}</div>
@@ -249,13 +249,13 @@ export default function AdminBorrowersPage() {
                     </td>
                     <td className="px-4 py-3">
                       {b.profile_id ? (
-                        <span className="text-xs font-semibold" style={{ color: '#2ecc71' }}>✓ Linked</span>
+                        <span className="text-xs font-semibold" style={{ color: '#15803d' }}>✓ Linked</span>
                       ) : (
                         <button
                           onClick={() => sendInvite(b)}
                           disabled={inviting === b.id}
                           className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
-                          style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
+                          style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold-ink)' }}>
                           {inviting === b.id ? 'Sending…' : '✉ Send Invite'}
                         </button>
                       )}

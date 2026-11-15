@@ -55,7 +55,7 @@ export default async function AdminDashboard() {
           <div className="space-y-3">
             {projects?.map(project => {
               const pct = getDrawProgress(project.amount_drawn, project.loan_amount)
-              const barColor = pct > 80 ? '#e74c3c' : pct > 50 ? 'var(--bc-gold)' : 'var(--bc-blue)'
+              const barColor = pct > 80 ? '#c0392b' : pct > 50 ? 'var(--bc-gold)' : 'var(--bc-blue)'
               return (
                 <div key={project.id}>
                   <div className="flex justify-between text-xs mb-1">
@@ -64,7 +64,7 @@ export default async function AdminDashboard() {
                     </Link>
                     <span style={{ color: barColor }}>{pct}%</span>
                   </div>
-                  <div className="rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                  <div className="rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(13,27,42,0.08)' }}>
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} />
                   </div>
                 </div>
@@ -78,14 +78,14 @@ export default async function AdminDashboard() {
           <h2 className="text-sm font-bold mb-4">Recent Activity</h2>
           <div className="space-y-0">
             {activity?.map(item => (
-              <div key={item.id} className="flex gap-3 py-2.5 border-b last:border-0" style={{ borderColor: 'rgba(42,63,87,0.5)' }}>
+              <div key={item.id} className="flex gap-3 py-2.5 border-b last:border-0" style={{ borderColor: '#edf0f4' }}>
                 <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{
-                  background: item.action.includes('funded') ? '#2ecc71' : item.action.includes('declined') ? '#e74c3c' : item.action.includes('submitted') ? 'var(--bc-gold)' : 'var(--bc-blue)'
+                  background: item.action.includes('funded') ? '#15803d' : item.action.includes('declined') ? '#c0392b' : item.action.includes('submitted') ? 'var(--bc-gold)' : 'var(--bc-blue)'
                 }} />
                 <div>
                   <div className="text-xs leading-relaxed capitalize">{item.action.replace(/_/g, ' ')}
                     {item.details && typeof item.details === 'object' && 'amount' in (item.details as object) &&
-                      <span style={{ color: 'var(--bc-gold)' }}> · {formatCurrency((item.details as { amount: number }).amount)}</span>}
+                      <span style={{ color: 'var(--bc-gold-ink)' }}> · {formatCurrency((item.details as { amount: number }).amount)}</span>}
                   </div>
                   <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>{timeAgo(item.created_at)}</div>
                 </div>
@@ -102,7 +102,7 @@ export default async function AdminDashboard() {
       <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
           <h2 className="text-sm font-bold">All Projects</h2>
-          <Link href="/admin/projects" className="text-xs font-semibold hover:underline" style={{ color: 'var(--bc-gold)' }}>View all →</Link>
+          <Link href="/admin/projects" className="text-xs font-semibold hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>View all →</Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -115,9 +115,9 @@ export default async function AdminDashboard() {
             </thead>
             <tbody>
               {projects?.map(p => (
-                <tr key={p.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                <tr key={p.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
                   <td className="px-4 py-3">
-                    <Link href={`/admin/projects/${p.id}`} className="font-semibold hover:underline" style={{ color: 'var(--bc-gold)' }}>{p.name}</Link>
+                    <Link href={`/admin/projects/${p.id}`} className="font-semibold hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>{p.name}</Link>
                     <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>{p.loan_number}</div>
                   </td>
                   <td className="px-4 py-3 text-sm">{(p.borrowers as { company_name: string } | null)?.company_name}</td>
@@ -125,7 +125,7 @@ export default async function AdminDashboard() {
                   <td className="px-4 py-3 font-semibold">{formatCurrency(p.loan_amount)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-14 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <div className="w-14 rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(13,27,42,0.08)' }}>
                         <div className="h-full rounded-full" style={{ width: `${getDrawProgress(p.amount_drawn, p.loan_amount)}%`, background: 'var(--bc-gold)' }} />
                       </div>
                       <span className="text-xs">{getDrawProgress(p.amount_drawn, p.loan_amount)}%</span>

@@ -84,16 +84,16 @@ export default async function BorrowerDashboard() {
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--bc-muted)' }}>Available</span>
-                  <span className="font-semibold text-green-400">{formatCurrency(project.loan_amount - project.amount_drawn)}</span>
+                  <span className="font-semibold text-green-700">{formatCurrency(project.loan_amount - project.amount_drawn)}</span>
                 </div>
               </div>
 
               <div className="mb-4">
                 <div className="flex justify-between text-xs mb-1">
                   <span style={{ color: 'var(--bc-muted)' }}>Loan utilization</span>
-                  <span style={{ color: 'var(--bc-gold)' }}>{pct}%</span>
+                  <span style={{ color: 'var(--bc-gold-ink)' }}>{pct}%</span>
                 </div>
-                <div className="rounded-full overflow-hidden h-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="rounded-full overflow-hidden h-2" style={{ background: 'rgba(13,27,42,0.08)' }}>
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--bc-gold)' }} />
                 </div>
               </div>

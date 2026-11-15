@@ -30,10 +30,10 @@ function AddLenderModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   }
 
   const inputClass = "w-full rounded-lg px-3 py-2 text-sm outline-none"
-  const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: '#e8edf2' }
+  const inputStyle = { background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" onClick={onClose}>
       <div className="rounded-xl border w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}
         style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
@@ -84,7 +84,7 @@ function AddLenderModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
               ))}
             </div>
           </div>
-          {error && <div className="text-sm p-3 rounded-lg" style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c' }}>{error}</div>}
+          {error && <div className="text-sm p-3 rounded-lg" style={{ background: 'rgba(231,76,60,0.1)', color: '#c0392b' }}>{error}</div>}
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading}
               className="px-5 py-2 rounded-lg text-sm font-bold"
@@ -144,7 +144,7 @@ export default function AdminLendersPage() {
     <div>
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
-          style={{ background: toast.startsWith('Error') ? '#e74c3c' : 'var(--bc-gold)', color: toast.startsWith('Error') ? '#fff' : 'var(--bc-dark)' }}>
+          style={{ background: toast.startsWith('Error') ? '#c0392b' : 'var(--bc-gold)', color: toast.startsWith('Error') ? '#fff' : 'var(--bc-dark)' }}>
           {toast}
         </div>
       )}
@@ -165,7 +165,7 @@ export default function AdminLendersPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Lenders', value: lenders.length, sub: `${activeLenders.length} active` },
-          { label: 'Platform Status', value: 'Live', sub: 'XRPL escrow enabled', color: '#2ecc71' },
+          { label: 'Platform Status', value: 'Live', sub: 'XRPL escrow enabled', color: '#15803d' },
           { label: 'Loan Types', value: [...new Set(lenders.flatMap(l => l.loan_types || []))].length, sub: 'types offered' },
         ].map(s => (
           <div key={s.label} className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
@@ -205,7 +205,7 @@ export default function AdminLendersPage() {
               </thead>
               <tbody>
                 {lenders.map(l => (
-                  <tr key={l.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                  <tr key={l.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
                     <td className="px-4 py-3">
                       <div className="font-semibold">{l.company_name}</div>
                       <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>{l.email}</div>
@@ -227,13 +227,13 @@ export default function AdminLendersPage() {
                     </td>
                     <td className="px-4 py-3">
                       {l.profile_id ? (
-                        <span className="text-xs font-semibold" style={{ color: '#2ecc71' }}>✓ Linked</span>
+                        <span className="text-xs font-semibold" style={{ color: '#15803d' }}>✓ Linked</span>
                       ) : (
                         <button
                           onClick={() => sendInvite(l)}
                           disabled={inviting === l.id}
                           className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
-                          style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
+                          style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold-ink)' }}>
                           {inviting === l.id ? 'Sending…' : '✉ Send Invite'}
                         </button>
                       )}

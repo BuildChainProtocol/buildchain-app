@@ -62,8 +62,8 @@ export default async function LenderDocumentsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Total Documents', value: total, sub: 'across all projects' },
-          { label: 'Pending Review', value: pending, sub: 'need action', color: pending > 0 ? 'var(--bc-gold)' : undefined },
-          { label: 'Approved', value: approved, sub: `${total ? Math.round(approved/total*100) : 0}% approval rate`, color: '#2ecc71' },
+          { label: 'Pending Review', value: pending, sub: 'need action', color: pending > 0 ? 'var(--bc-gold-ink)' : undefined },
+          { label: 'Approved', value: approved, sub: `${total ? Math.round(approved/total*100) : 0}% approval rate`, color: '#15803d' },
         ].map(s => (
           <div key={s.label} className="rounded-xl border p-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
             <div className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: 'var(--bc-muted)' }}>{s.label}</div>
@@ -88,7 +88,7 @@ export default async function LenderDocumentsPage() {
             <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'rgba(201,164,87,0.4)' }}>
               <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: 'rgba(201,164,87,0.3)', background: 'rgba(201,164,87,0.06)' }}>
                 <span>⏳</span>
-                <h2 className="text-sm font-bold" style={{ color: 'var(--bc-gold)' }}>Needs Review ({pending})</h2>
+                <h2 className="text-sm font-bold" style={{ color: 'var(--bc-gold-ink)' }}>Needs Review ({pending})</h2>
               </div>
               <div className="divide-y" style={{ borderColor: 'var(--bc-border)' }}>
                 {documents.filter(d => d.status === 'pending').map(doc => {
@@ -143,8 +143,8 @@ export default async function LenderDocumentsPage() {
                     const uploader = doc.profiles as { full_name: string } | null
                     const meta = statusMeta[doc.status] || { label: doc.status, cls: 'badge-gray' }
                     return (
-                      <tr key={doc.id} className="border-b last:border-0 hover:bg-white/[0.02]"
-                        style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                      <tr key={doc.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]"
+                        style={{ borderColor: '#edf0f4' }}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span>{docIcon[doc.type || 'other'] || '📎'}</span>
@@ -166,7 +166,7 @@ export default async function LenderDocumentsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-xs capitalize px-2 py-0.5 rounded"
-                            style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--bc-muted)' }}>
+                            style={{ background: 'rgba(13,27,42,0.06)', color: 'var(--bc-muted)' }}>
                             {doc.type || 'other'}
                           </span>
                         </td>

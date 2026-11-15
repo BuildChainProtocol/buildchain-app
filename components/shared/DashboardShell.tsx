@@ -9,7 +9,8 @@ import type { Profile } from '@/lib/types/database'
 interface NavItem {
   href: string
   label: string
-  icon: React.ReactNode
+  group?: string
+  icon?: React.ReactNode
   badge?: number
 }
 
@@ -37,7 +38,7 @@ export default function DashboardShell({ profile, items, unreadCount, children }
   }, [])
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bc-dark)' }}>
+    <div className="bc-light min-h-screen">
       <Topbar
         profile={profile}
         unreadCount={unreadCount}
@@ -46,7 +47,7 @@ export default function DashboardShell({ profile, items, unreadCount, children }
 
       {/* Dark overlay — mobile only, when sidebar is open */}
       <div
-        className={`fixed inset-0 z-30 bg-black/60 md:hidden transition-opacity duration-300 ${
+        className={`fixed inset-0 z-30 bg-slate-900/40 md:hidden transition-opacity duration-300 ${
           sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => setSidebarOpen(false)}
@@ -54,8 +55,10 @@ export default function DashboardShell({ profile, items, unreadCount, children }
 
       <div className="flex pt-14">
         <Sidebar items={items} isOpen={sidebarOpen} />
-        <main className="flex-1 md:ml-[220px] p-4 md:p-7 min-h-[calc(100vh-56px)] min-w-0">
+        <main className="flex-1 md:ml-[220px] px-4 py-5 md:px-8 md:py-7 min-h-[calc(100vh-56px)] min-w-0">
+          <div className="max-w-[1280px]">
           {children}
+          </div>
         </main>
       </div>
     </div>

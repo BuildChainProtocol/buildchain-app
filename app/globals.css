@@ -12,7 +12,56 @@
   --bc-blue: #2d7dd2;
   --bc-teal: #1ab3a6;
   --bc-muted: #7f9ab0;
+  --bc-text: #e8edf2;
+  --bc-gold-ink: #c9a457;   /* gold used as text: brand gold on dark */
+  --bc-page: #0d1b2a;
+  --bc-header: #0d1b2a;
+  --bc-serif: Georgia, Cambria, 'Times New Roman', serif;
 }
+
+/* Signed-in platform (dashboards, profile): light workspace under a navy
+   header, white cards with hairline borders, serif headings and figures. */
+.bc-light {
+  --bc-navy: #ffffff;       /* panels, menus, inputs */
+  --bc-card: #ffffff;
+  --bc-border: #e1e6ec;
+  --bc-muted: #5b6573;
+  --bc-text: #1a2433;
+  --bc-gold-ink: #8a6a24;   /* darker gold so text reads on white */
+  --bc-blue: #1f6fc5;
+  --bc-page: #f3f5f8;
+  color: var(--bc-text);
+  background: var(--bc-page);
+  color-scheme: light;
+}
+.bc-light h1 {
+  font-family: var(--bc-serif);
+  font-weight: 400;
+  color: var(--bc-dark);
+  letter-spacing: -0.01em;
+}
+.bc-light h2, .bc-light h3 {
+  font-family: var(--bc-serif);
+  font-weight: 400;
+  color: var(--bc-dark);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+/* All-caps headings act as section labels, the way BB marks card sections. */
+.bc-light h2.uppercase, .bc-light h3.uppercase {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--bc-muted);
+}
+.bc-light input:not([type=checkbox]):not([type=radio]):not([type=file]),
+.bc-light select,
+.bc-light textarea {
+  color: var(--bc-text);
+}
+.bc-light ::placeholder { color: #9ca3af; }
+.bc-light .bc-figure { font-family: var(--bc-serif); font-weight: 400; color: var(--bc-dark); }
 
 * { box-sizing: border-box; }
 
@@ -48,6 +97,12 @@ body {
   .badge-blue { @apply bg-blue-500/15 text-blue-400; }
   .badge-yellow { @apply bg-yellow-500/15 text-yellow-400; }
   .badge-red { @apply bg-red-500/15 text-red-400; }
-  .badge-gold { background: rgba(201,164,87,0.15); color: var(--bc-gold); }
+  .badge-gold { background: rgba(201,164,87,0.15); color: var(--bc-gold-ink); }
   .badge-gray { @apply bg-gray-500/15 text-gray-400; }
+  .bc-light .badge-green { @apply bg-green-50 text-green-800 ring-1 ring-inset ring-green-600/20; }
+  .bc-light .badge-blue { @apply bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-600/20; }
+  .bc-light .badge-yellow { @apply bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-600/20; }
+  .bc-light .badge-red { @apply bg-red-50 text-red-800 ring-1 ring-inset ring-red-600/20; }
+  .bc-light .badge-gold { @apply ring-1 ring-inset; background: #faf5ea; --tw-ring-color: rgba(201,164,87,0.35); }
+  .bc-light .badge-gray { @apply bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-500/20; }
 }

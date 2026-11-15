@@ -160,14 +160,14 @@ export default function LenderApprovalsPage() {
     <div>
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
-          style={{ background: toast.ok ? 'var(--bc-gold)' : '#e74c3c', color: '#fff' }}>
+          style={{ background: toast.ok ? 'var(--bc-gold)' : '#c0392b', color: '#fff' }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
         </div>
       )}
 
       {/* Decline reason modal */}
       {declineModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
           onClick={() => { setDeclineModal(null); setDeclineReason('') }}>
           <div className="rounded-xl border w-full max-w-md" onClick={e => e.stopPropagation()}
             style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
@@ -195,7 +195,7 @@ export default function LenderApprovalsPage() {
                   rows={3}
                   placeholder="e.g. Inspection not yet completed. Please schedule and submit inspector report before resubmitting."
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
+                  style={{ background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
                 />
               </div>
               <div className="flex gap-3 pt-1">
@@ -208,7 +208,7 @@ export default function LenderApprovalsPage() {
                   }}
                   disabled={actionLoading === declineModal.id + 'declined'}
                   className="flex-1 py-2.5 rounded-lg text-sm font-bold"
-                  style={{ background: 'rgba(231,76,60,0.15)', color: '#e74c3c', border: '1px solid rgba(231,76,60,0.3)' }}>
+                  style={{ background: 'rgba(231,76,60,0.15)', color: '#c0392b', border: '1px solid rgba(231,76,60,0.3)' }}>
                   {actionLoading === declineModal.id + 'declined' ? 'Declining…' : '✗ Confirm Decline'}
                 </button>
                 <button onClick={() => { setDeclineModal(null); setDeclineReason('') }}
@@ -230,7 +230,7 @@ export default function LenderApprovalsPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--bc-border)' }}>
+      <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-xl" style={{ background: 'rgba(13,27,42,0.04)', border: '1px solid var(--bc-border)' }}>
         {tabs.map(t => {
           const count = draws[t.key].length
           const isActive = tab === t.key
@@ -239,15 +239,15 @@ export default function LenderApprovalsPage() {
               className="px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2"
               style={{
                 background: isActive ? 'rgba(201,164,87,0.12)' : 'transparent',
-                color: isActive ? 'var(--bc-gold)' : 'var(--bc-muted)',
+                color: isActive ? 'var(--bc-gold-ink)' : 'var(--bc-muted)',
                 border: isActive ? '1px solid rgba(201,164,87,0.25)' : '1px solid transparent',
               }}>
               {t.label}
               {count > 0 && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
                   style={{
-                    background: t.key === 'submitted' ? 'rgba(201,164,87,0.25)' : 'rgba(255,255,255,0.08)',
-                    color: t.key === 'submitted' ? 'var(--bc-gold)' : 'var(--bc-muted)',
+                    background: t.key === 'submitted' ? 'rgba(201,164,87,0.25)' : 'rgba(13,27,42,0.08)',
+                    color: t.key === 'submitted' ? 'var(--bc-gold-ink)' : 'var(--bc-muted)',
                   }}>
                   {count}
                 </span>
@@ -258,7 +258,7 @@ export default function LenderApprovalsPage() {
       </div>
 
       {errorMsg && (
-        <div className="mb-4 p-4 rounded-xl border text-sm" style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#e74c3c' }}>
+        <div className="mb-4 p-4 rounded-xl border text-sm" style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#c0392b' }}>
           <strong>Error:</strong> {errorMsg}
         </div>
       )}
@@ -288,7 +288,7 @@ export default function LenderApprovalsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-5 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
                   <div>
                     <div className="font-bold text-base">
-                      {draw.request_number} — <span style={{ color: 'var(--bc-gold)' }}>{formatCurrency(draw.amount)}</span>
+                      {draw.request_number} — <span style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(draw.amount)}</span>
                     </div>
                     <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>
                       {draw.projects?.name} · {draw.projects?.loan_number} ·{' '}
@@ -313,7 +313,7 @@ export default function LenderApprovalsPage() {
                       </div>
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>Amount</span>
-                        <span className="font-bold" style={{ color: 'var(--bc-gold)' }}>{formatCurrency(draw.amount)}</span>
+                        <span className="font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(draw.amount)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>Inspection</span>
@@ -327,18 +327,18 @@ export default function LenderApprovalsPage() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>LTV After Draw</span>
-                        <span className={`font-bold ${ltv > 80 ? 'text-red-400' : 'text-green-400'}`}>{ltv}%</span>
+                        <span className={`font-bold ${ltv > 80 ? 'text-red-700' : 'text-green-700'}`}>{ltv}%</span>
                       </div>
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>Remaining After</span>
-                        <span className="font-semibold text-green-400">
+                        <span className="font-semibold text-green-700">
                           {draw.projects ? formatCurrency(draw.projects.loan_amount - draw.projects.amount_drawn - draw.amount) : '—'}
                         </span>
                       </div>
                       {tab === 'approved' && (
                         <div className="flex justify-between">
                           <span style={{ color: 'var(--bc-muted)' }}>Status</span>
-                          <span className="text-yellow-400 font-semibold">
+                          <span className="text-amber-700 font-semibold">
                             {draw.funded_at ? '✅ Funded' : '⏳ Pending release'}
                           </span>
                         </div>
@@ -349,7 +349,7 @@ export default function LenderApprovalsPage() {
                   {/* XRPL Records — shown on Approved tab */}
                   {tab === 'approved' && hasXrplRecords && (
                     <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(201,164,87,0.05)', border: '1px solid rgba(201,164,87,0.15)' }}>
-                      <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--bc-gold)' }}>
+                      <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--bc-gold-ink)' }}>
                         ⬡ On-chain records
                       </p>
                       <div className="space-y-1.5">
@@ -358,7 +358,7 @@ export default function LenderApprovalsPage() {
                             <span style={{ color: 'var(--bc-muted)' }}>Escrow transaction</span>
                             <a href={`${XRPL_EXPLORER}/transactions/${draw.escrow_txn_hash}`}
                               target="_blank" rel="noopener noreferrer"
-                              className="font-mono hover:underline" style={{ color: 'var(--bc-gold)' }}>
+                              className="font-mono hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>
                               {draw.escrow_txn_hash.slice(0, 10)}…{draw.escrow_txn_hash.slice(-6)} ↗
                             </a>
                           </div>
@@ -368,7 +368,7 @@ export default function LenderApprovalsPage() {
                             <span style={{ color: 'var(--bc-muted)' }}>Approval NFT</span>
                             <a href={`${XRPL_EXPLORER}/nft/${draw.nft_token_id}`}
                               target="_blank" rel="noopener noreferrer"
-                              className="font-mono hover:underline" style={{ color: 'var(--bc-gold)' }}>
+                              className="font-mono hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>
                               {draw.nft_token_id.slice(0, 10)}…{draw.nft_token_id.slice(-6)} ↗
                             </a>
                           </div>
@@ -378,7 +378,7 @@ export default function LenderApprovalsPage() {
                             <span style={{ color: 'var(--bc-muted)' }}>Release transaction</span>
                             <a href={`${XRPL_EXPLORER}/transactions/${draw.escrow_finish_hash}`}
                               target="_blank" rel="noopener noreferrer"
-                              className="font-mono hover:underline" style={{ color: '#4ade80' }}>
+                              className="font-mono hover:underline" style={{ color: '#15803d' }}>
                               {draw.escrow_finish_hash.slice(0, 10)}…{draw.escrow_finish_hash.slice(-6)} ↗
                             </a>
                           </div>
@@ -388,7 +388,7 @@ export default function LenderApprovalsPage() {
                             <span style={{ color: 'var(--bc-muted)' }}>Lien Waiver NFT (§IV)</span>
                             <a href={`${XRPL_EXPLORER}/nft/${draw.lien_waiver_nft_id}`}
                               target="_blank" rel="noopener noreferrer"
-                              className="font-mono hover:underline" style={{ color: '#4ade80' }}>
+                              className="font-mono hover:underline" style={{ color: '#15803d' }}>
                               {draw.lien_waiver_nft_id.slice(0, 10)}…{draw.lien_waiver_nft_id.slice(-6)} ↗
                             </a>
                           </div>
@@ -404,7 +404,7 @@ export default function LenderApprovalsPage() {
 
                   {/* Description */}
                   {draw.description && (
-                    <div className="text-sm p-3 rounded-lg mb-4" style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--bc-muted)' }}>
+                    <div className="text-sm p-3 rounded-lg mb-4" style={{ background: 'rgba(13,27,42,0.03)', color: 'var(--bc-muted)' }}>
                       &ldquo;{draw.description}&rdquo;
                     </div>
                   )}
@@ -413,7 +413,7 @@ export default function LenderApprovalsPage() {
                   <div className="mb-4">
                     <button onClick={() => toggleDrawDetail(draw.id)}
                       className="text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
-                      style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--bc-muted)', border: '1px solid var(--bc-border)' }}>
+                      style={{ background: 'rgba(13,27,42,0.04)', color: 'var(--bc-muted)', border: '1px solid var(--bc-border)' }}>
                       {expandedDrawId === draw.id ? '▲' : '▼'} G703 Line Items &amp; Lien Waivers
                     </button>
 
@@ -427,7 +427,7 @@ export default function LenderApprovalsPage() {
                             {drawLines[draw.id]?.length > 0 ? (
                               <div className="overflow-x-auto">
                                 <table className="w-full text-xs">
-                                  <thead style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                  <thead style={{ background: 'rgba(13,27,42,0.03)' }}>
                                     <tr style={{ borderBottom: '1px solid var(--bc-border)', color: 'var(--bc-muted)' }}>
                                       <th className="text-left px-4 py-2 font-semibold">#</th>
                                       <th className="text-left px-2 py-2 font-semibold">Description</th>
@@ -439,24 +439,24 @@ export default function LenderApprovalsPage() {
                                   </thead>
                                   <tbody>
                                     {drawLines[draw.id].map(dl => (
-                                      <tr key={dl.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                      <tr key={dl.id} style={{ borderBottom: '1px solid rgba(13,27,42,0.04)' }}>
                                         <td className="px-4 py-2 font-mono" style={{ color: 'var(--bc-muted)' }}>{dl.budget_line_items.line_no}</td>
                                         <td className="px-2 py-2">{dl.budget_line_items.description}</td>
                                         <td className="px-2 py-2 text-right" style={{ color: 'var(--bc-muted)' }}>{formatCurrency(dl.budget_line_items.scheduled_value)}</td>
-                                        <td className="px-2 py-2 text-right font-semibold" style={{ color: 'var(--bc-gold)' }}>{formatCurrency(dl.work_completed_period)}</td>
-                                        <td className="px-2 py-2 text-right" style={{ color: dl.percent_complete >= 100 ? '#2ecc71' : 'var(--bc-muted)' }}>{dl.percent_complete.toFixed(1)}%</td>
+                                        <td className="px-2 py-2 text-right font-semibold" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(dl.work_completed_period)}</td>
+                                        <td className="px-2 py-2 text-right" style={{ color: dl.percent_complete >= 100 ? '#15803d' : 'var(--bc-muted)' }}>{dl.percent_complete.toFixed(1)}%</td>
                                         <td className="px-4 py-2 text-right font-bold">{formatCurrency(dl.current_payment_due)}</td>
                                       </tr>
                                     ))}
                                   </tbody>
-                                  <tfoot style={{ background: 'rgba(255,255,255,0.03)', borderTop: '1px solid var(--bc-border)' }}>
+                                  <tfoot style={{ background: 'rgba(13,27,42,0.03)', borderTop: '1px solid var(--bc-border)' }}>
                                     <tr>
                                       <td colSpan={3} className="px-4 py-2 font-bold" style={{ color: 'var(--bc-muted)' }}>TOTALS</td>
-                                      <td className="px-2 py-2 text-right font-bold" style={{ color: 'var(--bc-gold)' }}>
+                                      <td className="px-2 py-2 text-right font-bold" style={{ color: 'var(--bc-gold-ink)' }}>
                                         {formatCurrency(drawLines[draw.id].reduce((s, l) => s + l.work_completed_period, 0))}
                                       </td>
                                       <td />
-                                      <td className="px-4 py-2 text-right font-bold" style={{ color: '#e8edf2' }}>
+                                      <td className="px-4 py-2 text-right font-bold" style={{ color: 'var(--bc-text)' }}>
                                         {formatCurrency(drawLines[draw.id].reduce((s, l) => s + l.current_payment_due, 0))}
                                       </td>
                                     </tr>
@@ -477,13 +477,13 @@ export default function LenderApprovalsPage() {
                                       <div>
                                         <span className="font-semibold">{wv.sub_name}</span>
                                         {wv.sub_code && <span className="ml-1.5" style={{ color: 'var(--bc-muted)' }}>{wv.sub_code}</span>}
-                                        <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--bc-muted)' }}>
+                                        <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{ background: 'rgba(13,27,42,0.06)', color: 'var(--bc-muted)' }}>
                                           {wv.waiver_type.replace(/_/g, ' ')}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-3">
                                         <span style={{ color: 'var(--bc-muted)' }}>{formatCurrency(wv.through_amount)}</span>
-                                        <span style={{ color: wv.status === 'signed' || wv.status === 'issued' ? '#2ecc71' : '#e74c3c' }}>
+                                        <span style={{ color: wv.status === 'signed' || wv.status === 'issued' ? '#15803d' : '#c0392b' }}>
                                           {wv.status === 'signed' || wv.status === 'issued' ? '✅ Signed' : '⏳ Pending'}
                                         </span>
                                       </div>
@@ -491,7 +491,7 @@ export default function LenderApprovalsPage() {
                                   ))}
                                 </div>
                               ) : (
-                                <p className="text-xs" style={{ color: '#e74c3c' }}>⚠️ No lien waivers on file — required before approval.</p>
+                                <p className="text-xs" style={{ color: '#c0392b' }}>⚠️ No lien waivers on file — required before approval.</p>
                               )}
                             </div>
                           </>
@@ -509,8 +509,8 @@ export default function LenderApprovalsPage() {
                     <div className="space-y-3">
                       {blockApprove && (
                         <div className="flex gap-3 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.2)' }}>
-                          {!draw.inspection_done && <span style={{ color: '#e74c3c' }}>⚠️ Inspection not confirmed</span>}
-                          {!draw.lien_waiver && <span style={{ color: '#e74c3c' }}>⚠️ Lien waiver missing</span>}
+                          {!draw.inspection_done && <span style={{ color: '#c0392b' }}>⚠️ Inspection not confirmed</span>}
+                          {!draw.lien_waiver && <span style={{ color: '#c0392b' }}>⚠️ Lien waiver missing</span>}
                           <span style={{ color: 'var(--bc-muted)' }}>— You can still approve with override</span>
                         </div>
                       )}
@@ -524,7 +524,7 @@ export default function LenderApprovalsPage() {
                         <button onClick={() => { setDeclineModal(draw); setDeclineReason('') }}
                           disabled={!!actionLoading}
                           className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
-                          style={{ background: 'rgba(231,76,60,0.1)', color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)' }}>
+                          style={{ background: 'rgba(231,76,60,0.1)', color: '#c0392b', borderColor: 'rgba(231,76,60,0.3)' }}>
                           ✗ Decline
                         </button>
                         <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
@@ -537,7 +537,7 @@ export default function LenderApprovalsPage() {
 
                   {/* ── Dual-Condition Verification Panel (Patent §V) ──────────────── */}
                   {tab === 'approved' && !draw.funded_at && (
-                    <div className="rounded-lg p-3 mt-1" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--bc-border)' }}>
+                    <div className="rounded-lg p-3 mt-1" style={{ background: 'rgba(13,27,42,0.02)', border: '1px solid var(--bc-border)' }}>
                       <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: 'var(--bc-muted)' }}>
                         ⬡ Auto-Release Conditions (Patent §V)
                       </p>
@@ -546,16 +546,16 @@ export default function LenderApprovalsPage() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>① Inspector Credential</span>
                           {draw.inspection_done ? (
-                            <span className="text-xs font-semibold" style={{ color: '#4ade80' }}>✅ Verified on-ledger</span>
+                            <span className="text-xs font-semibold" style={{ color: '#15803d' }}>✅ Verified on-ledger</span>
                           ) : (
-                            <span className="text-xs" style={{ color: '#e74c3c' }}>⏳ Awaiting inspection pass</span>
+                            <span className="text-xs" style={{ color: '#c0392b' }}>⏳ Awaiting inspection pass</span>
                           )}
                         </div>
                         {/* Condition 2 — Lien Waiver NFT */}
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>② Lien Waiver NFT</span>
                           {draw.lien_waiver ? (
-                            <span className="text-xs font-semibold" style={{ color: '#4ade80' }}>
+                            <span className="text-xs font-semibold" style={{ color: '#15803d' }}>
                               ✅ Confirmed{draw.lien_waiver_nft_id ? ' · on-ledger' : ''}
                             </span>
                           ) : (
@@ -575,7 +575,7 @@ export default function LenderApprovalsPage() {
                       </div>
                       {/* Status line */}
                       {draw.inspection_done && draw.lien_waiver ? (
-                        <div className="mt-2.5 pt-2 border-t text-xs font-semibold" style={{ borderColor: 'var(--bc-border)', color: '#4ade80' }}>
+                        <div className="mt-2.5 pt-2 border-t text-xs font-semibold" style={{ borderColor: 'var(--bc-border)', color: '#15803d' }}>
                           Both conditions met — orchestrator is processing auto-release…
                         </div>
                       ) : (
@@ -589,7 +589,7 @@ export default function LenderApprovalsPage() {
                   {tab === 'approved' && draw.funded_at && draw.verification_receipt && (
                     <div className="rounded-lg px-3 py-2 mt-1" style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)' }}>
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold" style={{ color: '#4ade80' }}>
+                        <span className="font-bold" style={{ color: '#15803d' }}>
                           ⬡ Dual-condition auto-released
                         </span>
                         <span style={{ color: 'var(--bc-muted)' }}>
@@ -600,8 +600,8 @@ export default function LenderApprovalsPage() {
                   )}
 
                   {tab === 'approved' && draw.funded_at && !draw.verification_receipt && (
-                    <div className="flex items-center gap-2 text-xs pt-1" style={{ color: '#4ade80' }}>
-                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#4ade80' }}></span>
+                    <div className="flex items-center gap-2 text-xs pt-1" style={{ color: '#15803d' }}>
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#15803d' }}></span>
                       Funded {timeAgo(draw.funded_at)}
                     </div>
                   )}

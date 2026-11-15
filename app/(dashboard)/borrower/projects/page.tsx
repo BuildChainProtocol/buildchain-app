@@ -72,7 +72,7 @@ export default async function BorrowerProjectsPage() {
                       <h2 className="font-bold text-base">{p.name}</h2>
                       <span className={`badge ${stageBadge[p.stage] || 'badge-gray'}`}>{getStageLabel(p.stage)}</span>
                       {pendingDraws.length > 0 && (
-                        <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold)' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(201,164,87,0.2)', color: 'var(--bc-gold-ink)' }}>
                           {pendingDraws.length} draw pending
                         </span>
                       )}
@@ -98,11 +98,11 @@ export default async function BorrowerProjectsPage() {
                     </div>
                     <div>
                       <div className="text-xs uppercase tracking-wide mb-1" style={{ color: 'var(--bc-muted)' }}>Drawn to Date</div>
-                      <div className="font-bold" style={{ color: 'var(--bc-gold)' }}>{formatCurrency(p.amount_drawn || 0)}</div>
+                      <div className="font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(p.amount_drawn || 0)}</div>
                     </div>
                     <div>
                       <div className="text-xs uppercase tracking-wide mb-1" style={{ color: 'var(--bc-muted)' }}>Available</div>
-                      <div className="font-bold" style={{ color: '#2ecc71' }}>{formatCurrency(p.loan_amount - (p.amount_drawn || 0))}</div>
+                      <div className="font-bold" style={{ color: '#15803d' }}>{formatCurrency(p.loan_amount - (p.amount_drawn || 0))}</div>
                     </div>
                   </div>
                   <div>
@@ -110,8 +110,8 @@ export default async function BorrowerProjectsPage() {
                       <span>Draw utilization</span>
                       <span>{drawPct}%</span>
                     </div>
-                    <div className="rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${drawPct}%`, background: drawPct > 80 ? '#e74c3c' : 'var(--bc-gold)' }} />
+                    <div className="rounded-full overflow-hidden h-1.5" style={{ background: 'rgba(13,27,42,0.06)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${drawPct}%`, background: drawPct > 80 ? '#c0392b' : 'var(--bc-gold)' }} />
                     </div>
                   </div>
                   {p.maturity_date && (

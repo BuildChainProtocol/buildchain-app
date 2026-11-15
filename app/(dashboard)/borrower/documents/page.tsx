@@ -45,7 +45,7 @@ export default async function BorrowerDocumentsPage() {
                 <span className="badge badge-green">All clear</span>
               )}
             </div>
-            <div className="divide-y" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+            <div className="divide-y" style={{ borderColor: '#edf0f4' }}>
               {docs.map(doc => (
                 <div key={doc.id} className="flex items-center justify-between px-5 py-3">
                   <div className="flex items-center gap-3">

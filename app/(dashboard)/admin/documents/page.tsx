@@ -54,11 +54,11 @@ export default async function AdminDocumentsPage() {
       {/* Status summary */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
         {[
-          { label: 'Required', count: byStatus.required.length, color: 'rgba(201,164,87,0.15)', text: 'var(--bc-gold)' },
+          { label: 'Required', count: byStatus.required.length, color: 'rgba(201,164,87,0.15)', text: 'var(--bc-gold-ink)' },
           { label: 'Uploaded', count: byStatus.uploaded.length, color: 'rgba(45,125,210,0.15)', text: 'var(--bc-blue)' },
-          { label: 'Approved', count: byStatus.approved.length, color: 'rgba(46,204,113,0.15)', text: '#2ecc71' },
-          { label: 'Rejected', count: byStatus.rejected.length, color: 'rgba(231,76,60,0.15)', text: '#e74c3c' },
-          { label: 'Overdue', count: byStatus.overdue.length, color: 'rgba(231,76,60,0.15)', text: '#e74c3c' },
+          { label: 'Approved', count: byStatus.approved.length, color: 'rgba(46,204,113,0.15)', text: '#15803d' },
+          { label: 'Rejected', count: byStatus.rejected.length, color: 'rgba(231,76,60,0.15)', text: '#c0392b' },
+          { label: 'Overdue', count: byStatus.overdue.length, color: 'rgba(231,76,60,0.15)', text: '#c0392b' },
         ].map(s => (
           <div key={s.label} className="rounded-xl border p-4 text-center" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
             <div className="text-2xl font-bold" style={{ color: s.text }}>{s.count}</div>
@@ -73,16 +73,16 @@ export default async function AdminDocumentsPage() {
           <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: 'var(--bc-border)' }}>
             <span>⚠</span>
             <h2 className="text-sm font-bold">Needs Attention</h2>
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(231,76,60,0.15)', color: '#e74c3c' }}>
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(231,76,60,0.15)', color: '#c0392b' }}>
               {byStatus.overdue.length + byStatus.uploaded.length}
             </span>
           </div>
-          <div className="divide-y" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+          <div className="divide-y" style={{ borderColor: '#edf0f4' }}>
             {[...byStatus.overdue, ...byStatus.uploaded].map(doc => {
               const project = doc.projects as { name: string; loan_number: string } | null
               const uploader = doc.profiles as { full_name: string } | null
               return (
-                <div key={doc.id} className="px-5 py-3 flex items-center justify-between hover:bg-white/[0.02]">
+                <div key={doc.id} className="px-5 py-3 flex items-center justify-between hover:bg-slate-900/[0.02]">
                   <div className="flex items-center gap-3">
                     <span className="text-lg">📄</span>
                     <div>
@@ -130,7 +130,7 @@ export default async function AdminDocumentsPage() {
                 {documents?.map(doc => {
                   const project = doc.projects as { name: string; loan_number: string } | null
                   return (
-                    <tr key={doc.id} className="border-b last:border-0 hover:bg-white/[0.02]" style={{ borderColor: 'rgba(42,63,87,0.4)' }}>
+                    <tr key={doc.id} className="border-b last:border-0 hover:bg-slate-900/[0.02]" style={{ borderColor: '#edf0f4' }}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span>📄</span>

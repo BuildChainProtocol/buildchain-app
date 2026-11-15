@@ -130,39 +130,39 @@ export default function ProfilePage() {
 
   const inputClass = 'w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors'
   const inputStyle = {
-    background: 'rgba(255,255,255,0.05)',
+    background: 'rgba(13,27,42,0.05)',
     border: '1px solid var(--bc-border)',
-    color: '#e8edf2',
+    color: 'var(--bc-text)',
   }
   const labelClass = 'block text-xs font-semibold uppercase tracking-wide mb-1.5'
   const labelStyle = { color: 'var(--bc-muted)' }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bc-dark)' }}>
+      <div className="bc-light min-h-screen flex items-center justify-center">
         <span className="text-sm" style={{ color: 'var(--bc-muted)' }}>Loading…</span>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bc-dark)' }}>
+    <div className="bc-light min-h-screen">
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
-          style={{ background: toast.ok ? 'var(--bc-gold)' : '#e74c3c', color: toast.ok ? 'var(--bc-dark)' : '#fff' }}>
+          style={{ background: toast.ok ? 'var(--bc-gold)' : '#c0392b', color: toast.ok ? 'var(--bc-dark)' : '#fff' }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
         </div>
       )}
 
       {/* Top nav */}
       <header className="h-14 flex items-center justify-between px-6 border-b"
-        style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
+        style={{ background: 'var(--bc-header)', borderColor: '#08121d' }}>
         <div className="flex items-center gap-2.5">
           <BuildChainLogo variant="mark" height={32} alt="" />
           <BuildChainLogo variant="wordmark" height={18} />
         </div>
         <button onClick={() => router.push(ROLE_DASH[profile?.role] || '/')}
-          className="text-sm hover:underline" style={{ color: 'var(--bc-muted)' }}>
+          className="text-sm hover:underline" style={{ color: '#c7d0db' }}>
           ← Back to Dashboard
         </button>
       </header>
@@ -180,7 +180,7 @@ export default function ProfilePage() {
             <h1 className="text-xl font-bold">{profile.full_name || 'Unnamed User'}</h1>
             <p className="text-sm mt-0.5" style={{ color: 'var(--bc-muted)' }}>{profile.email}</p>
             <span className="inline-block mt-2 text-xs font-bold px-2.5 py-1 rounded-full"
-              style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold)' }}>
+              style={{ background: 'rgba(201,164,87,0.15)', color: 'var(--bc-gold-ink)' }}>
               {ROLE_LABEL[profile.role] || profile.role}
             </span>
           </div>
@@ -272,14 +272,14 @@ export default function ProfilePage() {
           </div>
 
           {pwError && (
-            <p className="text-sm" style={{ color: '#e74c3c' }}>{pwError}</p>
+            <p className="text-sm" style={{ color: '#c0392b' }}>{pwError}</p>
           )}
 
           <button onClick={changePassword} disabled={pwSaving}
             className="px-5 py-2.5 rounded-lg text-sm font-bold border transition-all"
             style={{
               borderColor: 'var(--bc-border)',
-              color: '#e8edf2',
+              color: 'var(--bc-text)',
               opacity: pwSaving ? 0.7 : 1,
             }}>
             {pwSaving ? 'Updating…' : 'Update Password'}

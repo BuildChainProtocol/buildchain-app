@@ -91,7 +91,7 @@ export default function NewProjectPage() {
   }
 
   const inputClass = "w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-  const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: '#e8edf2' }
+  const inputStyle = { background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }
   const labelClass = "block text-xs font-semibold uppercase tracking-wide mb-1.5"
   const labelStyle = { color: 'var(--bc-muted)' }
 
@@ -181,7 +181,7 @@ export default function NewProjectPage() {
                 ))}
               </select>
               {borrowers.length === 0 && (
-                <p className="text-xs mt-1" style={{ color: '#e74c3c' }}>No borrowers found — add one first in the Borrowers tab.</p>
+                <p className="text-xs mt-1" style={{ color: '#c0392b' }}>No borrowers found — add one first in the Borrowers tab.</p>
               )}
             </div>
             <div>
@@ -194,7 +194,7 @@ export default function NewProjectPage() {
                 ))}
               </select>
               {lenders.length === 0 && (
-                <p className="text-xs mt-1" style={{ color: '#e74c3c' }}>No lenders found — add one first in the Lenders tab.</p>
+                <p className="text-xs mt-1" style={{ color: '#c0392b' }}>No lenders found — add one first in the Lenders tab.</p>
               )}
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function NewProjectPage() {
               <div className="flex items-end pb-1">
                 <div className="rounded-lg px-4 py-2.5 text-sm w-full" style={{ background: 'rgba(201,164,87,0.1)', border: '1px solid rgba(201,164,87,0.3)' }}>
                   <span style={{ color: 'var(--bc-muted)' }}>LTV: </span>
-                  <span className="font-bold" style={{ color: 'var(--bc-gold)' }}>
+                  <span className="font-bold" style={{ color: 'var(--bc-gold-ink)' }}>
                     {Math.round(parseFloat(form.loan_amount) / parseFloat(form.appraised_value) * 100)}%
                   </span>
                 </div>
@@ -263,7 +263,7 @@ export default function NewProjectPage() {
         </div>
 
         {error && (
-          <div className="rounded-lg p-4 text-sm border" style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#e74c3c' }}>
+          <div className="rounded-lg p-4 text-sm border" style={{ background: 'rgba(231,76,60,0.1)', borderColor: 'rgba(231,76,60,0.3)', color: '#c0392b' }}>
             {error}
           </div>
         )}
