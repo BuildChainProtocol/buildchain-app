@@ -1406,17 +1406,20 @@ export default async function Home() {
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               flexWrap: 'wrap', gap: 12,
             }}>
-              <div style={{ fontSize: 12, color: '#2a4a66' }}>
+              <div style={{ fontSize: 12, color: '#6b86a3' }}>
                 © 2026 BuildChain Protocol, Inc. · Delaware C-Corp
               </div>
-              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#c9a457', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: '#c9a457' }} />
+                  Settled on the XRP Ledger
+                </span>
                 {[
                   'Patent BLDCHN-001-P · Filed 2026',
-                  'Powered by XRP Ledger',
                   'Class 042 Trademark',
                   'Non-MSB Compliant',
                 ].map((s, i) => (
-                  <span key={i} style={{ fontSize: 12, color: '#2a4a66' }}>{s}</span>
+                  <span key={i} style={{ fontSize: 12, color: '#6b86a3' }}>{s}</span>
                 ))}
               </div>
             </div>
