@@ -176,4 +176,4 @@ buildchain-app/
 
 ## Support
 
-Built by BuildChain Protocol. Questions: jcaruso27@yahoo.com
+Built by BuildChain Protocol. Questions: info@buildchain.finance

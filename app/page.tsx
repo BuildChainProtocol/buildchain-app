@@ -338,7 +338,7 @@ export default async function Home() {
             <Link href="/login" style={{ fontSize: 13, color: '#3d5c78', textDecoration: 'none', fontWeight: 500 }}>
               Log in
             </Link>
-            <a href="mailto:jason@buildchain.finance?subject=BuildChain Demo Request"
+            <a href="mailto:info@buildchain.finance?subject=BuildChain Demo Request"
               style={{
                 background: 'linear-gradient(135deg, #c9a457 0%, #e8c97a 100%)',
                 color: '#06090f', fontWeight: 800, fontSize: 13,
@@ -402,7 +402,7 @@ export default async function Home() {
               display: 'flex', gap: 14, justifyContent: 'center',
               flexWrap: 'wrap', marginBottom: 100,
             }}>
-              <a href="mailto:jason@buildchain.finance?subject=BuildChain Lender Pilot Program"
+              <a href="mailto:info@buildchain.finance?subject=BuildChain Lender Pilot Program"
                 className="btn-gold" style={{ fontSize: 16, padding: '17px 36px' }}>
                 Join Lender Pilot →
               </a>
@@ -635,11 +635,11 @@ export default async function Home() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                  <a href="mailto:jason@buildchain.finance?subject=BuildChain Lender Pilot Program"
+                  <a href="mailto:info@buildchain.finance?subject=BuildChain Lender Pilot Program"
                     className="btn-blue" style={{ fontSize: 15 }}>
                     Join Lender Pilot →
                   </a>
-                  <a href="mailto:jason@buildchain.finance?subject=BuildChain Enterprise Demo"
+                  <a href="mailto:info@buildchain.finance?subject=BuildChain Enterprise Demo"
                     className="btn-ghost" style={{ fontSize: 15 }}>
                     Request Enterprise Demo
                   </a>
@@ -923,11 +923,11 @@ export default async function Home() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                  <a href="mailto:jason@buildchain.finance?subject=BuildChain GC Early Access"
+                  <a href="mailto:info@buildchain.finance?subject=BuildChain GC Early Access"
                     className="btn-gold" style={{ fontSize: 15 }}>
                     Get GC Early Access →
                   </a>
-                  <a href="mailto:jason@buildchain.finance?subject=BuildChain Platform Demo"
+                  <a href="mailto:info@buildchain.finance?subject=BuildChain Platform Demo"
                     className="btn-ghost" style={{ fontSize: 15 }}>
                     Request Demo
                   </a>
@@ -1314,7 +1314,7 @@ export default async function Home() {
                 <div style={{ fontSize: 13, color: '#4a6a86', lineHeight: 1.7, marginBottom: 24 }}>
                   Join our 90-day pilot. Deploy capital across 5 active construction loans — no cost, full ROI analysis delivered at close.
                 </div>
-                <a href="mailto:jason@buildchain.finance?subject=BuildChain Lender Pilot Program"
+                <a href="mailto:info@buildchain.finance?subject=BuildChain Lender Pilot Program"
                   className="btn-gold" style={{ display: 'inline-flex', fontSize: 14, padding: '13px 24px' }}>
                   Join Lender Pilot →
                 </a>
@@ -1326,7 +1326,7 @@ export default async function Home() {
                 <div style={{ fontSize: 13, color: '#4a6a86', lineHeight: 1.7, marginBottom: 24 }}>
                   Get early access to the Building Block platform. Submit draws, track inspections, and get paid faster — starting now.
                 </div>
-                <a href="mailto:jason@buildchain.finance?subject=BuildChain GC Early Access"
+                <a href="mailto:info@buildchain.finance?subject=BuildChain GC Early Access"
                   className="btn-blue" style={{ display: 'inline-flex', fontSize: 14, padding: '13px 24px' }}>
                   Get GC Access →
                 </a>
@@ -1335,9 +1335,9 @@ export default async function Home() {
 
             <p style={{ fontSize: 13, color: '#2a4a66' }}>
               Questions? Email{' '}
-              <a href="mailto:jason@buildchain.finance"
+              <a href="mailto:info@buildchain.finance"
                 style={{ color: '#c9a457', textDecoration: 'none', fontWeight: 600 }}>
-                jason@buildchain.finance
+                info@buildchain.finance
               </a>
             </p>
           </div>
@@ -1384,11 +1384,11 @@ export default async function Home() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#4a6a86', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 16 }}>Company</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <a href="mailto:jason@buildchain.finance"
+                    <a href="mailto:info@buildchain.finance"
                       style={{ fontSize: 13, color: '#2a4a66', textDecoration: 'none' }}>
                       Contact
                     </a>
-                    <a href="mailto:jason@buildchain.finance?subject=BuildChain Lender Pilot Program"
+                    <a href="mailto:info@buildchain.finance?subject=BuildChain Lender Pilot Program"
                       style={{ fontSize: 13, color: '#c9a457', textDecoration: 'none', fontWeight: 600 }}>
                       Join Pilot →
                     </a>
