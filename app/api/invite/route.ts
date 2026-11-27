@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       full_name: name || '',
       company_name: company || '',
     },
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://buildchain-app.vercel.app'}/login`,
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.buildchain.finance'}/login`,
   })
 
   if (error) {

@@ -1,9 +1,22 @@
 import type { Metadata } from 'next'
 import './globals.css'
 
+const DESCRIPTION =
+  'Construction draw management on the XRP Ledger: a draw is released only when the inspection and the lien waiver are both recorded. Now in pilot on the test network.'
+
 export const metadata: Metadata = {
+  metadataBase: new URL('https://www.buildchain.finance'),
   title: 'BuildChain Protocol',
-  description: 'Construction loan management platform — powered by blockchain verification',
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    url: 'https://www.buildchain.finance',
+    siteName: 'BuildChain Protocol',
+    title: 'BuildChain Protocol',
+    description: DESCRIPTION,
+    images: [{ url: '/apple-touch-icon.png' }],
+  },
+  twitter: { card: 'summary', title: 'BuildChain Protocol', description: DESCRIPTION },
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },

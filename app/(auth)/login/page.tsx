@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 // BUILD_ID — bump this any time you deploy so you can confirm which
-// version is live: look for "v6" in the bottom-right corner of the page.
-const BUILD_ID = 'v8'
+// version is live: look for it in the bottom-right corner of the page.
+const BUILD_ID = 'v9'
 
 export default function LoginPage({
   searchParams,

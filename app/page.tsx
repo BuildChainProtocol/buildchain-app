@@ -18,7 +18,7 @@ export default async function Home() {
 
   return (
     <>
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; }
@@ -277,7 +277,7 @@ export default async function Home() {
           .stat-grid { grid-template-columns: 1fr 1fr !important; }
           .step-grid { grid-template-columns: 1fr !important; }
         }
-      `}</style>
+      ` }} />
 
       <div style={{
         background: '#06090f',
