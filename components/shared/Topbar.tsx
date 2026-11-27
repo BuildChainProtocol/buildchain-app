@@ -176,7 +176,7 @@ export default function Topbar({ profile, unreadCount: initialUnread = 0, onMenu
                   notifs.map((n, i) => (
                     <div key={n.id}
                       onClick={() => {
-                        if (n.link) router.push(n.link)
+                        if (n.link && n.link.startsWith('/') && !n.link.startsWith('//')) router.push(n.link)
                         setShowNotifs(false)
                       }}
                       className="px-4 py-3 flex gap-3 transition-colors border-b"

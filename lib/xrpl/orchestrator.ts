@@ -34,6 +34,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { isXrplConfigured } from './escrow'
 import { isTokenMethod, releaseDraw } from './release'
+import { ledgerName, pilotNote } from '@/lib/network'
 import { sendEmail } from '@/lib/email/send'
 import { drawFundedEmail } from '@/lib/email/templates'
 
@@ -88,13 +89,13 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       inspection_done, lien_waiver,
       lien_waiver_nft_id,
       escrow_sequence, escrow_txn_hash,
-      settlement_method, settlement_state, escrow_owner, lender_signed_blob,
+      settlement_method, settlement_state, settlement_payee, escrow_owner,
       payees,
       inspections!draw_request_id ( id, status, credential_nft_id ),
       projects (
         name, loan_amount, amount_drawn,
         borrowers ( profile_id, email, company_name ),
-        lenders   ( profile_id, company_name )
+        lenders   ( profile_id, company_name, xrp_address )
       )
     `)
     .eq('id', drawId)
@@ -179,8 +180,20 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     if (tokenSettled && (draw as any).settlement_state !== 'locked') {
       throw new Error('The lender has not locked this draw, so there is nothing to release')
     }
-    if (isXrplConfigured() && (draw.escrow_sequence != null || (draw as any).lender_signed_blob)) {
-      const finish = await releaseDraw(draw as any, 'orchestrator')
+    // The lender's signature lives where no signed-in user can read or change it.
+    let toRelease: any = draw
+    if (tokenSettled) {
+      const { data: sig } = await supabase
+        .from('draw_signatures').select('txjson, signed_blob').eq('draw_request_id', drawId).maybeSingle()
+      toRelease = {
+        ...draw,
+        lender_sign_tx: sig?.txjson ?? null,
+        lender_signed_blob: sig?.signed_blob ?? null,
+        lender_wallet: (draw.projects as any)?.lenders?.xrp_address ?? null,
+      }
+    }
+    if (isXrplConfigured() && (draw.escrow_sequence != null || toRelease.lender_signed_blob)) {
+      const finish = await releaseDraw(toRelease, 'orchestrator')
       escrowFinishHash = finish.txnHash
       result.finishHash = escrowFinishHash
       console.log(`[Orchestrator] EscrowFinish OK — hash ${escrowFinishHash}`)
@@ -271,8 +284,8 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         user_id: borrowerRow.profile_id,
         type: 'draw_funded',
         title: 'Draw Release Recorded',
-        body: `Draw ${draw.request_number} for ${fmt(draw.amount)} was automatically released on the XRP Ledger test network — ` +
-              `inspection and lien waiver were both recorded (pilot: no funds were transferred).`,
+        body: `Draw ${draw.request_number} for ${fmt(draw.amount)} was automatically released on ${ledgerName()}: ` +
+              `inspection and lien waiver were both recorded.${pilotNote()}`,
         link: '/borrower',
       })
     }
@@ -286,7 +299,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         type: 'draw_auto_funded',
         title: '⬡ Draw Auto-Released',
         body: `Draw ${draw.request_number} for ${fmt(draw.amount)} on ${project?.name ?? 'a project'} was automatically released — ` +
-              `inspector credential and lien waiver NFTs both recorded on the XRP Ledger test network (pilot: no funds were transferred).`,
+              `inspector credential and lien waiver NFTs both recorded on ${ledgerName()}.${pilotNote()}`,
         link: '/lender/approvals',
       })
     }

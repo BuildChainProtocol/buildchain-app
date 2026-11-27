@@ -28,17 +28,17 @@ alter table public.settlement_requests enable row level security;
 create policy "Admins manage settlement requests" on public.settlement_requests
   for all using (exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'));
 
-create policy "Lenders manage their projects' settlement requests" on public.settlement_requests
-  for all using (exists (
-    select 1 from public.projects p join public.lenders l on l.id = p.lender_id
-    where p.id = settlement_requests.project_id and l.profile_id = auth.uid()))
-  with check (exists (
+-- A lender reads the requests on their own projects. Every write goes through
+-- the site's routes with the service key: the stored transaction is what
+-- BuildChain countersigns, so no signed-in user may change it.
+create policy "Lenders read their projects' settlement requests" on public.settlement_requests
+  for select using (exists (
     select 1 from public.projects p join public.lenders l on l.id = p.lender_id
     where p.id = settlement_requests.project_id and l.profile_id = auth.uid()));
 
-grant select, insert, update on public.settlement_requests to authenticated;
+revoke all on public.settlement_requests from anon, authenticated;
+grant select on public.settlement_requests to authenticated;
 grant all on public.settlement_requests to service_role;
-
 -- ── Protocol fee record ──────────────────────────────────────────────────────
 -- One row per released draw: what the fee is under the rate in force, and
 -- whether it is waived. A record only: nothing here charges anyone.

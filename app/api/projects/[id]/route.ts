@@ -53,7 +53,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   const { data, error } = await supabase
     .from('projects')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({
+      // How a project settles, its ledger account, its drawn total and its NFT
+      // fields are set by their own routes, never from this form.
+      ...Object.fromEntries(Object.entries(body ?? {}).filter(([k]) =>
+        !['id', 'settlement_method', 'loan_account', 'amount_drawn', 'loan_nft_token_id', 'loan_nft_mint_hash', 'loan_nft_burn_hash', 'created_at'].includes(k))),
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', params.id)
     .select()
     .single()

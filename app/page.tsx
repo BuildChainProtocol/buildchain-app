@@ -1419,6 +1419,8 @@ export default async function Home() {
                 ].map((s, i) => (
                   <span key={i} style={{ fontSize: 12, color: '#6b86a3' }}>{s}</span>
                 ))}
+                <Link href="/privacy" style={{ fontSize: 12, color: '#6b86a3', textDecoration: 'underline' }}>Privacy</Link>
+                <Link href="/terms" style={{ fontSize: 12, color: '#6b86a3', textDecoration: 'underline' }}>Terms</Link>
               </div>
             </div>
           </div>

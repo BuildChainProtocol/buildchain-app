@@ -41,6 +41,8 @@ function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 })
 }
 
+import { sameKey } from '@/lib/api-key'
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -52,7 +54,7 @@ export async function POST(
   if (!validKey) {
     return NextResponse.json({ error: 'BUILDINGBLOCK_API_KEY not configured on server' }, { status: 500 })
   }
-  if (!token || token !== validKey) return unauth('Invalid or missing API key')
+  if (!sameKey(token, validKey)) return unauth('Invalid or missing API key')
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let body: any
@@ -103,26 +105,35 @@ export async function POST(
     })
   }
 
+  // A funded or declined draw is final; a draw the lender has already locked
+  // by signature is decided in BuildChain.
+  if ((draw.status === 'funded' || draw.status === 'declined') && decision !== draw.status) {
+    return NextResponse.json({ error: 'draw_final', detail: `This draw is already ${draw.status} and can no longer be changed.` }, { status: 409 })
+  }
+  if ((draw as any).settlement_state === 'locked' || (draw as any).settlement_state === 'awaiting_lender_signature') {
+    return NextResponse.json({ error: 'signature_in_progress', detail: 'The lender is signing or has signed this draw in BuildChain.' }, { status: 409 })
+  }
+
   const updates: Record<string, unknown> = {
     status: decision === 'held' ? 'submitted' : decision,   // "held" keeps BC in submitted; BB tracks hold
     reviewed_at: new Date().toISOString(),
     reviewed_by_note: `Building Block: ${decided_by}`,
-    ...(decision === 'declined' ? { declined_by: decided_by, decline_reason: reason } : {}),
+    ...(decision === 'declined' ? { decline_reason: reason } : {}),
     ...(decision === 'held' ? { hold_reason: reason } : {}),
   }
 
   // ── APPROVE: trigger XRPL EscrowCreate ───────────────────────────────────
   if (decision === 'approved') {
-    updates.approved_by = decided_by
+    // Who approved is in reviewed_by_note: approved_by holds a BuildChain user id.
     try {
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
-      if (isXrplConfigured()) {
+      if (isXrplConfigured() && draw.escrow_sequence == null) {
         // Prefer gc_wallet (set by BB on submit) over the borrower's registered XRP address
         const gcWallet = (draw as any).gc_wallet ?? undefined
         const borrowerXrpAddress = gcWallet ?? ((draw.projects as any)?.borrowers?.xrp_address ?? undefined)
         const escrow = await createDrawEscrow({
           destinationAddress: borrowerXrpAddress,
-          drawAmountUsd: amount ?? draw.net_amount ?? draw.amount,
+          drawAmountUsd: draw.net_amount ?? draw.amount,
           drawRequestId: drawId,
           projectId: draw.project_id,
         })

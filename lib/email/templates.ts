@@ -4,7 +4,26 @@
  * Keep HTML inline-styled for maximum email client compatibility.
  */
 
+import { explorerTx, ledgerName, onTestNetwork } from '@/lib/network'
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.buildchain.finance'
+
+// Names, notes, reasons and file names come from people (some of them outside
+// the site, like an inspector). They are escaped before going into HTML.
+function esc(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+function unesc(value: string): string {
+  return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+}
+/** A copy of a template's options with every string escaped for HTML. */
+function safe<T>(options: T): T {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(options as Record<string, unknown>)) {
+    out[key] = typeof value === 'string' ? esc(value) : value
+  }
+  return out as T
+}
 
 const DARK    = '#0d1b2a'
 const NAVY    = '#0f2133'
@@ -40,7 +59,7 @@ function base(body: string): string {
         <tr><td style="padding-top:20px;text-align:center;">
           <p style="color:${MUTED};font-size:12px;margin:0;">
             BuildChain Protocol · Construction Loan Management<br/>
-            BuildChain is in pilot on the XRP Ledger test network. No real funds are moved.<br/>
+            ${onTestNetwork() ? 'BuildChain is in pilot on the XRP Ledger test network. No real funds are moved.<br/>' : ''}
             <a href="${APP_URL}" style="color:${MUTED};">buildchain.finance</a>
           </p>
         </td></tr>
@@ -83,7 +102,8 @@ interface DrawSubmittedOpts {
   drawId: string
 }
 
-export function drawSubmittedEmail(o: DrawSubmittedOpts) {
+export function drawSubmittedEmail(raw: DrawSubmittedOpts) {
+  const o = safe(raw)
   const url = `${APP_URL}/lender/approvals`
   const subject = `Action required: Draw request on ${o.projectName}`
   const html = base(`
@@ -100,10 +120,11 @@ export function drawSubmittedEmail(o: DrawSubmittedOpts) {
     ${btn('Review Draw Request', url)}
 
     <p style="color:${MUTED};font-size:12px;margin-top:20px;">
-      Logged in as ${o.lenderName}. Once approved, an escrow is created on the XRP Ledger test network.
+      Logged in as ${o.lenderName}. Once approved, the draw is locked on ${ledgerName()}.
     </p>
   `)
-  return { subject, html }
+  // The subject is plain text, not HTML.
+  return { subject: unesc(subject), html }
 }
 
 // ─── DRAW APPROVED → borrower ────────────────────────────────────────────────
@@ -116,12 +137,13 @@ interface DrawApprovedOpts {
   escrowTxnHash?: string | null
 }
 
-export function drawApprovedEmail(o: DrawApprovedOpts) {
+export function drawApprovedEmail(raw: DrawApprovedOpts) {
+  const o = safe(raw)
   const subject = `Draw approved — ${formatUSD(o.drawAmount)} on ${o.projectName}`
   const xrplLine = o.escrowTxnHash
     ? `<p style="color:${MUTED};font-size:12px;margin:12px 0 0;">
-         Test-network escrow created:
-         <a href="https://testnet.xrpl.org/transactions/${o.escrowTxnHash}" style="color:${GOLD};font-family:monospace;">
+         ${onTestNetwork() ? 'Test-network escrow' : 'Escrow'} created:
+         <a href="${explorerTx(o.escrowTxnHash)}" style="color:${GOLD};font-family:monospace;">
            ${o.escrowTxnHash.slice(0, 16)}…
          </a>
        </p>`
@@ -143,7 +165,8 @@ export function drawApprovedEmail(o: DrawApprovedOpts) {
     ${xrplLine}
     ${btn('View Project', `${APP_URL}/borrower`)}
   `)
-  return { subject, html }
+  // The subject is plain text, not HTML.
+  return { subject: unesc(subject), html }
 }
 
 // ─── DRAW DECLINED → borrower ────────────────────────────────────────────────
@@ -156,7 +179,8 @@ interface DrawDeclinedOpts {
   declineNotes?: string | null
 }
 
-export function drawDeclinedEmail(o: DrawDeclinedOpts) {
+export function drawDeclinedEmail(raw: DrawDeclinedOpts) {
+  const o = safe(raw)
   const subject = `Draw request declined — ${o.projectName}`
   const notesLine = o.declineNotes
     ? `<div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:8px;padding:12px 16px;margin-top:16px;">
@@ -181,7 +205,8 @@ export function drawDeclinedEmail(o: DrawDeclinedOpts) {
     ${notesLine}
     ${btn('View Project', `${APP_URL}/borrower`)}
   `)
-  return { subject, html }
+  // The subject is plain text, not HTML.
+  return { subject: unesc(subject), html }
 }
 
 // ─── DRAW FUNDED → borrower ──────────────────────────────────────────────────
@@ -195,23 +220,27 @@ interface DrawFundedOpts {
   escrowFinishHash?: string | null
 }
 
-export function drawFundedEmail(o: DrawFundedOpts) {
+export function drawFundedEmail(raw: DrawFundedOpts) {
+  const o = safe(raw)
   const pct = Math.round((o.totalDrawn / o.loanAmount) * 100)
-  const subject = `Draw release recorded — ${formatUSD(o.drawAmount)} on ${o.projectName} (pilot)`
+  const subject = onTestNetwork()
+    ? `Draw release recorded — ${formatUSD(o.drawAmount)} on ${o.projectName} (pilot)`
+    : `Draw released — ${formatUSD(o.drawAmount)} on ${o.projectName}`
   const hashLine = o.escrowFinishHash
     ? `<p style="color:${MUTED};font-size:12px;margin:12px 0 0;">
-         Test-network release TX:
-         <a href="https://testnet.xrpl.org/transactions/${o.escrowFinishHash}" style="color:${GOLD};font-family:monospace;">
+         ${onTestNetwork() ? 'Test-network release' : 'Release'} transaction:
+         <a href="${explorerTx(o.escrowFinishHash)}" style="color:${GOLD};font-family:monospace;">
            ${o.escrowFinishHash.slice(0, 16)}…
          </a>
        </p>`
     : ''
 
   const html = base(`
-    <h2 style="color:${GOLD};font-size:20px;font-weight:700;margin:0 0 8px;">Draw Release Recorded</h2>
+    <h2 style="color:${GOLD};font-size:20px;font-weight:700;margin:0 0 8px;">${onTestNetwork() ? 'Draw Release Recorded' : 'Draw Released'}</h2>
     <p style="color:${MUTED};font-size:14px;margin:0 0 24px;">
-      The escrow release for this draw was recorded on the XRP Ledger test network.
-      This is a pilot: no funds were transferred.
+      ${onTestNetwork()
+        ? 'The escrow release for this draw was recorded on the XRP Ledger test network. This is a pilot: no funds were transferred.'
+        : 'This draw was released on the XRP Ledger to the wallet on file. The transaction below is the record.'}
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${BORDER};">
@@ -223,7 +252,8 @@ export function drawFundedEmail(o: DrawFundedOpts) {
     ${hashLine}
     ${btn('View Project', `${APP_URL}/borrower`)}
   `)
-  return { subject, html }
+  // The subject is plain text, not HTML.
+  return { subject: unesc(subject), html }
 }
 
 // ─── INSPECTION PASSED → borrower ───────────────────────────────────────────
@@ -237,13 +267,14 @@ interface InspectionPassedOpts {
   phase?: string | null
 }
 
-export function inspectionPassedEmail(o: InspectionPassedOpts) {
+export function inspectionPassedEmail(raw: InspectionPassedOpts) {
+  const o = safe(raw)
   const subject = `Inspection passed — Draw #${o.drawNumber} on ${o.projectName}`
   const html = base(`
     <h2 style="color:#2ecc71;font-size:20px;font-weight:700;margin:0 0 8px;">✓ Inspection Passed</h2>
     <p style="color:${MUTED};font-size:14px;margin:0 0 24px;">
       The on-site inspection for Draw #${o.drawNumber} has been completed and approved.
-      An inspector credential has been recorded on the XRP Ledger test network.
+      An inspector credential has been recorded on ${ledgerName()}.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${BORDER};">
@@ -263,7 +294,8 @@ export function inspectionPassedEmail(o: InspectionPassedOpts) {
 
     ${btn('View Dashboard', `${APP_URL}/borrower`)}
   `)
-  return { subject, html }
+  // The subject is plain text, not HTML.
+  return { subject: unesc(subject), html }
 }
 
 // ─── INSPECTION FAILED → borrower ────────────────────────────────────────────
@@ -277,7 +309,8 @@ interface InspectionFailedOpts {
   notes?: string | null
 }
 
-export function inspectionFailedEmail(o: InspectionFailedOpts) {
+export function inspectionFailedEmail(raw: InspectionFailedOpts) {
+  const o = safe(raw)
   const subject = `Inspection not passed — Draw #${o.drawNumber} on ${o.projectName}`
   const notesLine = o.notes
     ? `<div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:8px;padding:12px 16px;margin-top:16px;">
@@ -307,7 +340,8 @@ export function inspectionFailedEmail(o: InspectionFailedOpts) {
 
     ${btn('View Dashboard', `${APP_URL}/borrower`)}
   `)
-  return { subject, html }
+  // The subject is plain text, not HTML.
+  return { subject: unesc(subject), html }
 }
 
 // ─── DOCUMENT UPLOADED → admin ───────────────────────────────────────────────
@@ -319,7 +353,8 @@ interface DocUploadedOpts {
   projectId: string
 }
 
-export function documentUploadedEmail(o: DocUploadedOpts) {
+export function documentUploadedEmail(raw: DocUploadedOpts) {
+  const o = safe(raw)
   const subject = `Document uploaded — ${o.projectName} needs review`
   const html = base(`
     <h2 style="color:${LIGHT};font-size:20px;font-weight:700;margin:0 0 8px;">New Document Uploaded</h2>
@@ -335,5 +370,6 @@ export function documentUploadedEmail(o: DocUploadedOpts) {
 
     ${btn('Review Document', `${APP_URL}/admin/projects/${o.projectId}?tab=documents`)}
   `)
-  return { subject, html }
+  // The subject is plain text, not HTML.
+  return { subject: unesc(subject), html }
 }

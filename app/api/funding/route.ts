@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { serviceClient } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { Wallet } from 'xrpl'
 import { createSignRequest, getSignResult, isXamanConfigured } from '@/lib/xaman'
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
     } finally { await client.disconnect() }
 
     const request = await createSignRequest({ txjson, submit: !multisign, multisign, instruction, identifier: `${kind}-${project.id}`.slice(0, 40) })
-    const { data: row, error } = await supabase.from('settlement_requests').insert({
+    const { data: row, error } = await serviceClient().from('settlement_requests').insert({
       project_id: project.id, draw_request_id: draw?.id ?? null, kind, amount, txjson, payload: request.uuid, requested_by: userId,
     }).select('id').single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -201,9 +202,12 @@ async function finish(supabase: any, requestId: string) {
     .select('*, projects ( id, loan_account, lenders ( xrp_address ) )').eq('id', requestId).single()
   if (!r) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
   if (r.state !== 'waiting') return NextResponse.json({ state: r.state, txnHash: r.txn_hash, error: r.error })
+  // The caller could read this request, so it is on one of their projects.
+  // Its state, and the draw's, are written with the service key.
+  const admin = serviceClient()
 
   const close = async (state: string, extra: Record<string, unknown> = {}) => {
-    await supabase.from('settlement_requests').update({ state, completed_at: new Date().toISOString(), ...extra }).eq('id', r.id).eq('state', 'waiting')
+    await admin.from('settlement_requests').update({ state, completed_at: new Date().toISOString(), ...extra }).eq('id', r.id).eq('state', 'waiting')
     return NextResponse.json({ state, ...('txn_hash' in extra ? { txnHash: extra.txn_hash } : {}), ...('error' in extra ? { error: extra.error } : {}) })
   }
   try {
@@ -218,6 +222,20 @@ async function finish(supabase: any, requestId: string) {
       if (!result.hex) return close('failed', { error: 'The wallet did not return the signed transaction' })
       const problems = verifyLenderSigned(result.hex, r.txjson, lender)
       if (problems.length) return close('failed', { error: `The signature does not match the request: ${problems.join('; ')}` })
+      if (r.kind === 'refund') {
+        // Draws may have been approved since this refund was opened: money
+        // committed to them cannot leave the loan account.
+        const { data: lockedDraws } = await admin.from('draw_requests')
+          .select('settlement_amount').eq('project_id', r.project_id).eq('settlement_state', 'locked')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const committed = (lockedDraws ?? []).reduce((sum: number, d: any) => sum + Number(d.settlement_amount ?? 0), 0)
+        const check = await getConnectedClient()
+        let balance = 0
+        try { balance = Number(await tokenBalance(check, r.projects?.loan_account, settlementToken()) ?? 0) } finally { await check.disconnect() }
+        if (Number(r.amount) > balance - committed) {
+          return close('failed', { error: `Not sent: ${dollars(committed)} is now committed to approved draws, which leaves ${dollars(Math.max(0, balance - committed))} free.` })
+        }
+      }
       const seed = process.env.XRPL_WALLET_SEED
       if (!seed) return close('failed', { error: 'BuildChain\'s signing wallet is not configured' })
       const client = await getConnectedClient()
@@ -235,13 +253,13 @@ async function finish(supabase: any, requestId: string) {
     }
 
     if (r.draw_request_id && r.kind === 'withdraw_release') {
-      await supabase.from('draw_requests').update({
-        status: 'submitted', settlement_state: null, lender_signed_blob: null, lender_sign_payload: null,
-        lender_sign_tx: null, release_ticket: null, approved_by: null,
+      await admin.from('draw_signatures').delete().eq('draw_request_id', r.draw_request_id)
+      await admin.from('draw_requests').update({
+        status: 'submitted', settlement_state: null, release_ticket: null, approved_by: null,
       }).eq('id', r.draw_request_id).eq('settlement_state', 'locked')
     }
     if (r.draw_request_id && r.kind === 'escrow_cancel') {
-      await supabase.from('draw_requests').update({
+      await admin.from('draw_requests').update({
         status: 'declined', settlement_state: null, decline_reason: 'The lender took back the escrow after its deadline passed.',
       }).eq('id', r.draw_request_id).eq('settlement_state', 'locked')
     }

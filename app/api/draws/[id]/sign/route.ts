@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { serviceClient } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { createSignRequest, getSignResult, isXamanConfigured } from '@/lib/xaman'
 import { confirmLenderSigning, isTokenMethod, prepareLenderSigning } from '@/lib/xrpl/release'
@@ -8,20 +9,25 @@ import { confirmLenderSigning, isTokenMethod, prepareLenderSigning } from '@/lib
 //   GET   has the lender signed? If so, check what they signed and lock the draw
 // A project on the pilot method (test_xrp) needs no signature: POST says so and
 // the screen goes straight to the ordinary approval.
+//
+// The caller's own session decides whether they may act on the draw (a lender
+// sees only draws on their projects). Everything is then written with the
+// service key: the database refuses these writes from a signed-in user, and
+// the sign request id and the signature are kept where no user can read them.
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const DRAW_SELECT = `
   id, status, amount, net_amount, request_number, project_id, gc_wallet,
   settlement_method, settlement_state, settlement_amount, settlement_payee,
-  lender_sign_payload, lender_sign_tx, release_ticket, escrow_txn_hash,
+  release_ticket, escrow_txn_hash,
   projects ( name, settlement_method, loan_account,
     lenders ( xrp_address, company_name ),
     borrowers ( xrp_address, company_name ) )
 `
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function load(id: string): Promise<{ supabase: any; draw: any } | NextResponse> {
+async function load(id: string): Promise<{ admin: any; draw: any } | NextResponse> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -33,7 +39,7 @@ async function load(id: string): Promise<{ supabase: any; draw: any } | NextResp
   // Row-level security limits a lender to draws on their own projects.
   const { data: draw, error } = await supabase.from('draw_requests').select(DRAW_SELECT).eq('id', id).single()
   if (error || !draw) return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
-  return { supabase, draw }
+  return { admin: serviceClient(), draw }
 }
 
 function summary(draw: any) {  // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -48,10 +54,12 @@ function summary(draw: any) {  // eslint-disable-line @typescript-eslint/no-expl
   }
 }
 
+const CLEAR = { settlement_state: null, release_ticket: null }
+
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   const loaded = await load(params.id)
   if (loaded instanceof NextResponse) return loaded
-  const { supabase, draw } = loaded
+  const { admin, draw } = loaded
 
   const method = draw.projects?.settlement_method ?? 'test_xrp'
   if (!isTokenMethod(method)) return NextResponse.json({ method: 'test_xrp', signatureNeeded: false })
@@ -76,14 +84,30 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const amountUsd = Number(draw.net_amount ?? draw.amount)
 
   try {
-    const { data: pending } = await supabase
-      .from('draw_requests').select('release_ticket')
-      .eq('project_id', draw.project_id).not('release_ticket', 'is', null)
-      .neq('settlement_state', 'released').neq('id', draw.id)
+    // A request that is still open on the lender's phone is reused, so two
+    // signable requests for one draw never exist at the same time.
+    if (draw.settlement_state === 'awaiting_lender_signature') {
+      const { data: open } = await admin.from('draw_signatures').select('payload').eq('draw_request_id', draw.id).maybeSingle()
+      if (open?.payload) {
+        const state = await getSignResult(open.payload)
+        if (!state.resolved && !state.expired) {
+          return NextResponse.json({ error: 'A signature request for this draw is already open in Xaman. Sign or decline it there, or wait for it to expire.' }, { status: 409 })
+        }
+      }
+    }
+
+    // Other draws on this loan that already hold a ticket or committed money.
+    const { data: others } = await admin
+      .from('draw_requests').select('release_ticket, settlement_amount, settlement_state')
+      .eq('project_id', draw.project_id).neq('id', draw.id)
+      .in('settlement_state', ['awaiting_lender_signature', 'locked'])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows: any[] = others ?? []
     const plan = await prepareLenderSigning({
       method, drawRequestId: draw.id, amountUsd, lenderWallet, payee,
       loanAccount: draw.projects?.loan_account,
-      ticketsInUse: (pending ?? []).map((p: { release_ticket: number }) => p.release_ticket),
+      ticketsInUse: rows.filter(r => r.release_ticket != null).map(r => Number(r.release_ticket)),
+      committedUsd: rows.filter(r => r.settlement_state === 'locked').reduce((sum, r) => sum + Number(r.settlement_amount ?? 0), 0),
     })
     const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amountUsd)
     const request = await createSignRequest({
@@ -95,13 +119,15 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         ? `Approve Draw ${draw.request_number} on ${draw.projects?.name}: ${dollars}. Your signature authorizes this release; it is paid only after inspection and lien waiver are both recorded.`
         : `Approve Draw ${draw.request_number} on ${draw.projects?.name}: lock ${dollars} in escrow. It is paid only after inspection and lien waiver are both recorded.`,
     })
-    const { error: saveErr } = await supabase.from('draw_requests').update({
+    const { error: sigErr } = await admin.from('draw_signatures').upsert({
+      draw_request_id: draw.id, payload: request.uuid, txjson: plan.txjson, signed_blob: null, updated_at: new Date().toISOString(),
+    }, { onConflict: 'draw_request_id' })
+    if (sigErr) return NextResponse.json({ error: sigErr.message }, { status: 500 })
+    const { error: saveErr } = await admin.from('draw_requests').update({
       settlement_method: method,
       settlement_state: 'awaiting_lender_signature',
       settlement_amount: amountUsd,
       settlement_payee: payee,
-      lender_sign_payload: request.uuid,
-      lender_sign_tx: plan.txjson,
       release_ticket: plan.releaseTicket,
     }).eq('id', draw.id)
     if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 500 })
@@ -120,27 +146,24 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const loaded = await load(params.id)
   if (loaded instanceof NextResponse) return loaded
-  const { supabase, draw } = loaded
+  const { admin, draw } = loaded
 
   if (draw.settlement_state === 'locked') return NextResponse.json({ state: 'locked', summary: summary(draw) })
-  if (draw.settlement_state !== 'awaiting_lender_signature' || !draw.lender_sign_payload) {
-    return NextResponse.json({ state: 'none' })
-  }
+  if (draw.settlement_state !== 'awaiting_lender_signature') return NextResponse.json({ state: 'none' })
+  const { data: sig } = await admin.from('draw_signatures').select('payload, txjson').eq('draw_request_id', draw.id).maybeSingle()
+  if (!sig?.payload) return NextResponse.json({ state: 'none' })
 
+  const reset = async () => {
+    await admin.from('draw_signatures').delete().eq('draw_request_id', draw.id)
+    await admin.from('draw_requests').update(CLEAR).eq('id', draw.id).eq('settlement_state', 'awaiting_lender_signature')
+  }
   try {
-    const result = await getSignResult(draw.lender_sign_payload)
-    const clear = { settlement_state: null, lender_sign_payload: null, lender_sign_tx: null, release_ticket: null }
+    const result = await getSignResult(sig.payload)
     if (!result.resolved) {
-      if (result.expired) {
-        await supabase.from('draw_requests').update(clear).eq('id', draw.id)
-        return NextResponse.json({ state: 'expired' })
-      }
+      if (result.expired) { await reset(); return NextResponse.json({ state: 'expired' }) }
       return NextResponse.json({ state: 'waiting' })
     }
-    if (!result.signed) {
-      await supabase.from('draw_requests').update(clear).eq('id', draw.id)
-      return NextResponse.json({ state: 'rejected' })
-    }
+    if (!result.signed) { await reset(); return NextResponse.json({ state: 'rejected' }) }
 
     const proof = await confirmLenderSigning({
       method: draw.settlement_method,
@@ -148,19 +171,26 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       amountUsd: Number(draw.settlement_amount),
       lenderWallet: draw.projects?.lenders?.xrp_address,
       payee: draw.settlement_payee,
-      requestedTx: draw.lender_sign_tx,
+      requestedTx: sig.txjson,
       signedBy: result.account, txid: result.txid, hex: result.hex,
     })
-    const { data: locked, error: saveErr } = await supabase.from('draw_requests').update({
+    if (proof.lenderSignedBlob) {
+      const { error: sigErr } = await admin.from('draw_signatures')
+        .update({ signed_blob: proof.lenderSignedBlob, updated_at: new Date().toISOString() }).eq('draw_request_id', draw.id)
+      if (sigErr) return NextResponse.json({ error: sigErr.message }, { status: 500 })
+    }
+    const { data: locked, error: saveErr } = await admin.from('draw_requests').update({
       settlement_state: 'locked',
       ...(proof.escrowOwner ? { escrow_owner: proof.escrowOwner } : {}),
       ...(proof.escrowSequence != null ? { escrow_sequence: proof.escrowSequence } : {}),
       ...(proof.escrowTxnHash ? { escrow_txn_hash: proof.escrowTxnHash } : {}),
-      ...(proof.lenderSignedBlob ? { lender_signed_blob: proof.lenderSignedBlob } : {}),
     }).eq('id', draw.id).eq('settlement_state', 'awaiting_lender_signature').select(DRAW_SELECT).single()
     if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 500 })
     return NextResponse.json({ state: 'locked', summary: summary(locked) })
   } catch (err) {
+    // Signed, but not what was asked for (or by another wallet): the request
+    // is spent, so clear it and let the lender start again.
+    await reset()
     const message = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ state: 'problem', error: message.slice(0, 300) }, { status: 409 })
   }

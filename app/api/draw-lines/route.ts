@@ -1,3 +1,4 @@
+import { serviceClient } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
@@ -35,9 +36,14 @@ export async function POST(req: NextRequest) {
   // Load prior draw totals per budget line item for this project
   const { data: draw } = await supabase
     .from('draw_requests')
-    .select('project_id, retainage_rate')
+    .select('project_id, retainage_rate, status')
     .eq('id', draw_request_id)
     .single()
+
+  if (!draw) return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+  if (!['draft', 'submitted', 'pending'].includes((draw as any).status)) {
+    return NextResponse.json({ error: 'The line items of a draw can no longer be changed once it is approved, funded or declined' }, { status: 409 })
+  }
 
   // Compute each row
   const rows = lines.map((line: any) => {
@@ -78,7 +84,7 @@ export async function POST(req: NextRequest) {
   const netTotal = rows.reduce((sum: number, r: any) => sum + r.current_payment_due, 0)
   const retainageTotal = rows.reduce((sum: number, r: any) => sum + r.retainage_amount, 0)
   const grossTotal = netTotal + retainageTotal
-  await supabase.from('draw_requests').update({
+  await serviceClient().from('draw_requests').update({
     amount: Math.round(grossTotal * 100) / 100,
     retainage_held: Math.round(retainageTotal * 100) / 100,
     net_amount: Math.round(netTotal * 100) / 100,

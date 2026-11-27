@@ -1,5 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { sameKey } from '@/lib/api-key'
+
+const SERVER_FIELDS = ['id', 'settlement_method', 'loan_account', 'amount_drawn', 'loan_nft_token_id', 'loan_nft_mint_hash', 'loan_nft_burn_hash', 'created_at']
+function withoutServerFields(body: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...(body ?? {}) }
+  for (const field of SERVER_FIELDS) delete out[field]
+  return out
+}
 
 // Node.js runtime required for XRPL (WebSocket + dynamic import of xrpl)
 export const runtime = 'nodejs'
@@ -12,7 +20,7 @@ export async function GET(request: NextRequest) {
   if (bbKey) {
     const authHeader = request.headers.get('authorization') ?? ''
     const incomingKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (incomingKey === bbKey) {
+    if (sameKey(incomingKey, bbKey)) {
       // Valid BB key — return a lightweight health response rather than all project data
       return NextResponse.json({ ok: true, service: 'buildchain', authenticated: 'api_key' })
     }
@@ -47,7 +55,9 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('projects')
-    .insert({ ...body, loan_number: loanNumber })
+    // How a project settles, its ledger account, its drawn total and its NFT
+    // fields are set by their own routes, never from this form.
+    .insert({ ...withoutServerFields(body), loan_number: loanNumber })
     .select()
     .single()
 

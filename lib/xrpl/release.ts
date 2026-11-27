@@ -15,7 +15,7 @@ import { getConnectedClient } from './client'
 import { escrowConditionFor, finishDrawEscrow, isTestnet } from './escrow'
 import {
   buildLenderEscrowCreate, buildReleasePayment, countersignAndSubmit, finishTokenEscrow,
-  issuerAllowsEscrow, loanTickets, tokenBalance, usdValue, verifyLenderEscrow,
+  issuerAllowsEscrow, loanTickets, tokenAmount, tokenBalance, usdValue, verifyLenderEscrow,
   verifyLenderSignedRelease, verifyLoanAccount,
 } from './settlement'
 import type { TokenSpec } from './settlement'
@@ -88,6 +88,8 @@ export async function prepareLenderSigning(o: {
   loanAccount?: string | null
   /** tickets already promised to other pending draws on this loan */
   ticketsInUse?: number[]
+  /** dollars already committed to other approved draws on this loan */
+  committedUsd?: number
 }): Promise<SigningPlan> {
   assertNetworkAllowed()
   const token = settlementToken()
@@ -124,8 +126,12 @@ export async function prepareLenderSigning(o: {
     })
     if (problems.length) throw new Error(`The loan account is not ready: ${problems.join('; ')}`)
     const balance = Number(await tokenBalance(client, o.loanAccount, token) ?? 0)
-    if (balance < o.amountUsd) {
-      throw new Error(`The loan account holds ${balance.toFixed(2)}, less than this draw. The lender needs to deposit first.`)
+    const free = balance - (o.committedUsd ?? 0)
+    if (free < o.amountUsd) {
+      throw new Error(
+        `The loan account holds ${balance.toFixed(2)}` +
+        ((o.committedUsd ?? 0) > 0 ? `, of which ${(o.committedUsd ?? 0).toFixed(2)} is committed to other approved draws` : '') +
+        `. That is not enough for this draw; the lender needs to deposit first.`)
     }
     const used = new Set(o.ticketsInUse ?? [])
     const ticket = (await loanTickets(client, o.loanAccount)).find(t => !used.has(t))
@@ -212,7 +218,13 @@ export async function releaseDraw(draw: {
   settlement_method?: string | null
   escrow_sequence?: number | null
   escrow_owner?: string | null
+  settlement_amount?: number | string | null
+  settlement_payee?: string | null
+  /** two_signature, from draw_signatures: what the lender was asked to sign, and their signature */
+  lender_sign_tx?: Tx | null
   lender_signed_blob?: string | null
+  /** the lender's registered wallet */
+  lender_wallet?: string | null
 }, trigger: 'manual' | 'orchestrator'): Promise<{ txnHash: string }> {
   const method = (draw.settlement_method ?? 'test_xrp') as SettlementMethod
 
@@ -232,7 +244,25 @@ export async function releaseDraw(draw: {
     return { txnHash: done.hash }
   }
 
-  if (!draw.lender_signed_blob) throw new Error('The lender has not signed this draw\'s release')
+  if (!draw.lender_signed_blob || !draw.lender_sign_tx || !draw.lender_wallet) {
+    throw new Error('The lender has not signed this draw\'s release')
+  }
+  // BuildChain's signature is the last lock, so nothing is taken on trust at
+  // this point: the stored request must be this draw's payment (payee and
+  // amount as recorded on the draw, in the settlement token), and the signed
+  // transaction must be exactly that request, signed by the lender alone.
+  const requested = draw.lender_sign_tx
+  const amount = requested.Amount as { currency?: string; issuer?: string; value?: string } | undefined
+  const token = settlementToken()
+  const cents = (v: unknown) => Math.round(Number(v) * 100)
+  if (requested.TransactionType !== 'Payment' || requested.Destination !== draw.settlement_payee ||
+      !amount || typeof amount !== 'object' || amount.issuer !== token.issuer ||
+      amount.currency !== tokenAmount(token, 1).currency ||
+      !Number.isFinite(Number(amount.value)) || cents(amount.value) !== cents(draw.settlement_amount)) {
+    throw new Error('The signed release on file is not this draw\'s payment, so it was not released')
+  }
+  const problems = verifyLenderSignedRelease(draw.lender_signed_blob, requested, draw.lender_wallet)
+  if (problems.length) throw new Error(`The lender's signature no longer matches the draw: ${problems.join('; ')}`)
   const done = await withClient(client => countersignAndSubmit(client, platformWallet(), draw.lender_signed_blob as string))
   return { txnHash: done.hash }
 }

@@ -1,3 +1,4 @@
+import { sameKey } from '@/lib/api-key'
 /**
  * POST /api/buildingblock/ensure-project
  *
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   const token = auth.replace('Bearer ', '').trim()
   const validKey = process.env.BUILDINGBLOCK_API_KEY
   if (!validKey) return NextResponse.json({ error: 'BUILDINGBLOCK_API_KEY not configured' }, { status: 500 })
-  if (!token || token !== validKey) return unauthorized('Invalid API key')
+  if (!sameKey(token, validKey)) return unauthorized('Invalid API key')
 
   // ── Parse body ──────────────────────────────────────────────────────────────
   let body: any

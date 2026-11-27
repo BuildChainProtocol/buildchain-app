@@ -72,7 +72,9 @@ export interface BuildingBlockWebhookPayload {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function isConfigured(): boolean {
-  return !!process.env.BUILDINGBLOCK_WEBHOOK_URL
+  // Without the shared secret a webhook could not be signed, and an unsigned
+  // one must never be sent.
+  return !!process.env.BUILDINGBLOCK_WEBHOOK_URL && !!process.env.BUILDINGBLOCK_WEBHOOK_SECRET
 }
 
 function sign(unixSeconds: number, rawBody: string): string {

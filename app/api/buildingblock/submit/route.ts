@@ -1,3 +1,4 @@
+import { sameKey } from '@/lib/api-key'
 /**
  * POST /api/buildingblock/submit
  *
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
   if (!validKey) {
     return NextResponse.json({ error: 'BUILDINGBLOCK_API_KEY not configured on server' }, { status: 500 })
   }
-  if (!token || token !== validKey) return unauthorized('Invalid or missing API key')
+  if (!sameKey(token, validKey)) return unauthorized('Invalid or missing API key')
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let body: any

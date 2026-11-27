@@ -5,6 +5,9 @@ import { waitUntil } from '@vercel/functions'
 import { sendEmail } from '@/lib/email/send'
 import { drawApprovedEmail, drawDeclinedEmail, drawFundedEmail } from '@/lib/email/templates'
 import { isTokenMethod } from '@/lib/xrpl/release'
+import { serviceClient } from '@/lib/supabase/service'
+import { bearer, sameKey } from '@/lib/api-key'
+import { ledgerName, pilotNote } from '@/lib/network'
 
 // Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
 export const runtime = 'nodejs'
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   //  - Supabase session → use session client (RLS applies)
   const auth = request.headers.get('authorization') || ''
   const bbKey = process.env.BUILDINGBLOCK_API_KEY
-  const isBB = !!bbKey && auth === `Bearer ${bbKey}`
+  const isBB = sameKey(bearer(auth), bbKey)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let supabase: any
@@ -98,6 +101,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   // ── State guards ────────────────────────────────────────────────────────
+  // The caller may act on this draw (row-level security let them read it and
+  // their role is checked above). The database accepts changes to a draw's
+  // state only from the server, so the writes below use the service key.
+  const admin = serviceClient()
+
   // A funded or declined draw is final. Approving twice would lock a second
   // escrow, so a repeat approval returns the draw as it is.
   if (body.status && (draw.status === 'funded' || draw.status === 'declined') && body.status !== draw.status) {
@@ -132,7 +140,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     // Pilot method: BuildChain's test wallet creates the escrow.
-    if (!tokenSettled) try {
+    // A draw that was held and is approved again keeps the escrow it has.
+    if (!tokenSettled && draw.escrow_sequence == null) try {
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
       if (isXrplConfigured()) {
         // Prefer gc_wallet (set by BB on submit) over the borrower's registered XRP address
@@ -228,7 +237,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const { recordFeeAccrual } = await import('@/lib/fees')
       await recordFeeAccrual(draw as any)
     }
-    await supabase.rpc('increment_amount_drawn', {
+    await admin.rpc('increment_amount_drawn', {
       p_project_id: draw.project_id,
       p_amount: draw.amount,
     })
@@ -245,7 +254,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   // Apply updates
-  const { data: updated, error } = await supabase
+  const { data: updated, error } = await admin
     .from('draw_requests')
     .update(updates)
     .eq('id', params.id)
@@ -428,7 +437,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         funded: {
           type: 'draw_funded',
           title: 'Draw Release Recorded',
-          body: `Draw ${updated.request_number} for ${fmt(draw.amount)} was released on the XRP Ledger test network (pilot: no funds were transferred).`,
+          body: `Draw ${updated.request_number} for ${fmt(draw.amount)} was released on ${ledgerName()}.${pilotNote()}`,
         },
       }
       const notif = notifMap[body.status]
@@ -470,7 +479,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           })
 
           // Store NFT fields on draw record
-          await supabase
+          await admin
             .from('draw_requests')
             .update({
               lien_waiver_nft_id:        nft.nftTokenId,

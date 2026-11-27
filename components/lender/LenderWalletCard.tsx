@@ -25,7 +25,7 @@ export default function LenderWalletCard() {
     if (json.state === 'waiting') { setState('waiting'); return }
     if (json.state === 'rejected') setNote('The request was declined in Xaman.')
     if (json.state === 'expired') setNote('The request expired.')
-    if (json.state === 'connected') { setQr(null); setNote('') }
+    if (json.state === 'connected') { setQr(null); setNote(json.error || '') }
     setState(json.wallet ? 'connected' : json.available ? 'none' : 'unavailable')
   }, [])
 

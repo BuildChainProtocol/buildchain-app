@@ -47,10 +47,30 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 4000) : null)
+  const amount = num(body?.amount)
+  if (typeof body?.project_id !== 'string' || !amount) {
+    return NextResponse.json({ error: 'A draw needs a project and a positive amount' }, { status: 400 })
+  }
+  const net = num(body?.net_amount)
+  const netAmount = net && net <= amount ? net : amount
+
   const { data, error } = await supabase
     .from('draw_requests')
     .insert({
-      ...body,
+      // Only the request itself comes from the borrower. Flags, escrow, NFT,
+      // settlement and payee fields are set by the server alone.
+      project_id: body?.project_id,
+      amount,
+      net_amount: netAmount,
+      retainage_rate: num(body?.retainage_rate),
+      retainage_held: num(body?.retainage_held),
+      phase: text(body?.phase),
+      purpose: text(body?.purpose),
+      description: text(body?.description),
+      inspection_done: false,
+      lien_waiver: false,
       submitted_by: user.id,
       status: 'submitted',
       submitted_at: new Date().toISOString(),

@@ -17,7 +17,7 @@ In Building Block's `.env` (or Fly.io secrets):
 
 ```
 BUILDCHAIN_URL=https://buildchain-app.vercel.app
-BUILDCHAIN_API_KEY=D1KuGEixs6cBQJRLC0zg9MyjhvUb032pqe5Pwkr4
+BUILDCHAIN_API_KEY=<the shared key: set it in Fly and Vercel, never in a file>
 BUILDCHAIN_LOAN_NUMBER=<the loan_number of the project in BuildChain>
 ```
 
@@ -228,7 +228,7 @@ If this file doesn't exist yet, create it with this shape:
 
 ```
 fly secrets set BUILDCHAIN_URL=https://buildchain-app.vercel.app
-fly secrets set BUILDCHAIN_API_KEY=D1KuGEixs6cBQJRLC0zg9MyjhvUb032pqe5Pwkr4
+fly secrets set BUILDCHAIN_API_KEY=<the shared key: set it in Fly and Vercel, never in a file>
 fly secrets set BUILDCHAIN_LOAN_NUMBER=<loan_number from BuildChain admin>
 fly deploy
 ```

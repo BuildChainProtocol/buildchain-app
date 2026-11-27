@@ -122,6 +122,13 @@ export default function SignupPage() {
               style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
               {loading ? 'Creating account…' : 'Create Account'}
             </button>
+            <p className="text-xs text-center" style={{ color: 'var(--bc-muted)' }}>
+              By creating an account you agree to the{' '}
+              <Link href="/terms" className="underline" style={{ color: 'var(--bc-gold)' }}>Terms of Service</Link>{' '}
+              and the{' '}
+              <Link href="/privacy" className="underline" style={{ color: 'var(--bc-gold)' }}>Privacy Policy</Link>.
+              BuildChain is in pilot on the XRP Ledger test network.
+            </p>
           </form>
 
           <div className="mt-6 pt-6 border-t text-center text-sm" style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
