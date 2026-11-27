@@ -343,11 +343,12 @@ export async function submitMultisigned(client: Client, signedBlobs: string[]): 
 }
 
 /**
- * The lender's signature over a release, as it comes back from the lender's
- * wallet. Checks that what was signed is exactly the payment BuildChain asked
- * for, signed by the lender and nobody else. Returns every problem found.
+ * A lender's signature over a loan-account transaction, as it comes back from
+ * the lender's wallet. Checks that what was signed is exactly the transaction
+ * BuildChain asked for, nothing added, signed by the lender and nobody else.
+ * Returns every problem found.
  */
-export function verifyLenderSignedRelease(signedBlob: string, expected: Tx, lender: string): string[] {
+export function verifyLenderSigned(signedBlob: string, expected: Tx, lender: string): string[] {
   let tx: Tx
   try { tx = decode(signedBlob) as Tx } catch { return ['The signed transaction could not be read'] }
   const problems: string[] = []
@@ -357,28 +358,39 @@ export function verifyLenderSignedRelease(signedBlob: string, expected: Tx, lend
       : v && typeof v === 'object'
         ? Object.keys(v as Tx).sort().reduce((acc: Tx, k) => { acc[k] = canon((v as Tx)[k]); return acc }, {})
         : v
-  const same = (a: unknown, b: unknown) => JSON.stringify(canon(a)) === JSON.stringify(canon(b))
-  for (const field of ['TransactionType', 'Account', 'Destination', 'Sequence', 'TicketSequence', 'Fee', 'Memos']) {
-    if (!same(tx[field], expected[field])) problems.push(`${field} is not what was requested`)
-  }
-  // The ledger's encoding drops trailing zeros ("61500.50" comes back as
-  // "61500.5"), so the amount is compared as a number of cents.
-  const got = tx.Amount as { currency?: string; issuer?: string; value?: string } | string | undefined
-  const want = expected.Amount as { currency: string; issuer: string; value: string }
+  const same = (x: unknown, y: unknown) => JSON.stringify(canon(x)) === JSON.stringify(canon(y))
   const cents = (v?: string) => Math.round(Number(v) * 100)
-  if (!got || typeof got === 'string' || got.currency !== want.currency || got.issuer !== want.issuer ||
-      !Number.isFinite(Number(got.value)) || cents(got.value) !== cents(want.value) ||
-      Math.abs(Number(got.value) - Number(want.value)) > 1e-9) {
-    problems.push('Amount is not what was requested')
+
+  for (const field of Object.keys(expected)) {
+    const want = expected[field]
+    const got = tx[field]
+    if (field === 'Amount' && want && typeof want === 'object') {
+      // The ledger's encoding drops trailing zeros ("61500.50" comes back as
+      // "61500.5"), so a token amount is compared as a number of cents.
+      const w = want as { currency: string; issuer: string; value: string }
+      const g = got as { currency?: string; issuer?: string; value?: string } | string | undefined
+      if (!g || typeof g === 'string' || g.currency !== w.currency || g.issuer !== w.issuer ||
+          !Number.isFinite(Number(g.value)) || cents(g.value) !== cents(w.value) ||
+          Math.abs(Number(g.value) - Number(w.value)) > 1e-9) {
+        problems.push('Amount is not what was requested')
+      }
+    } else if (!same(got, want)) {
+      problems.push(`${field} is not what was requested`)
+    }
   }
-  for (const field of ['SendMax', 'Paths', 'DeliverMin', 'LastLedgerSequence', 'Flags', 'DestinationTag']) {
-    if (tx[field] !== undefined && tx[field] !== 0) problems.push(`Unexpected ${field}`)
+  for (const field of Object.keys(tx)) {
+    if (field in expected || field === 'Signers') continue
+    if (field === 'Flags' && (tx.Flags === 0 || tx.Flags === undefined)) continue
+    problems.push(`Unexpected ${field}`)
   }
   if (tx.SigningPubKey !== '') problems.push('Not a multi-signature transaction')
   const signers = (tx.Signers as Array<{ Signer: { Account: string } }> | undefined) ?? []
   if (signers.length !== 1 || signers[0].Signer.Account !== lender) problems.push('It is not signed by the lender alone')
   return problems
 }
+
+/** The same check, under the name the release path uses. */
+export const verifyLenderSignedRelease = verifyLenderSigned
 
 /**
  * BuildChain's half of a release: add its signature to the payment the
@@ -390,4 +402,78 @@ export async function countersignAndSubmit(client: Client, buildchain: Wallet, l
   delete tx.Signers
   delete tx.TxnSignature
   return submitMultisigned(client, [lenderSignedBlob, signAsSigner(buildchain, tx)])
+}
+
+// ── Deposits and take-backs ───────────────────────────────────────────────────
+
+/** The lender's deposit into a two-signature loan account. Signed and submitted from the lender's wallet. */
+export function buildDeposit(o: { lender: string; loanAccount: string; token: TokenSpec; usd: number }): Tx {
+  return {
+    TransactionType: 'Payment',
+    Account: o.lender,
+    Destination: o.loanAccount,
+    Amount: tokenAmount(o.token, o.usd),
+    Memos: memo({ platform: 'BuildChain', event: 'loan_deposit', usd: usdValue(o.usd) }),
+  }
+}
+
+/**
+ * Method A take-back: once an escrow's CancelAfter has passed without a
+ * release, the lender cancels it and the funds return to the lender's wallet.
+ * The ledger enforces the date; BuildChain cannot stop or delay this.
+ */
+export function buildEscrowCancel(o: { lender: string; sequence: number }): Tx {
+  return { TransactionType: 'EscrowCancel', Account: o.lender, Owner: o.lender, OfferSequence: o.sequence }
+}
+
+/** Method B take-back: money goes from the loan account back to the lender. Needs both signatures, like a release. */
+export function buildRefundPayment(o: {
+  loanAccount: string; lender: string; token: TokenSpec; usd: number; ticketSequence: number; fee?: string
+}): Tx {
+  return {
+    TransactionType: 'Payment',
+    Account: o.loanAccount,
+    Destination: o.lender,
+    Amount: tokenAmount(o.token, o.usd),
+    Sequence: 0,
+    TicketSequence: o.ticketSequence,
+    Fee: o.fee ?? '1000',
+    SigningPubKey: '',
+    Memos: memo({ platform: 'BuildChain', event: 'loan_refund', usd: usdValue(o.usd) }),
+  }
+}
+
+/**
+ * Method B: withdraw a release the lender already signed (the draw was
+ * declined or changed). A transaction that does nothing is signed by both
+ * and uses up the release's ticket, after which the earlier signature can
+ * never be used: the ledger itself refuses it.
+ */
+export function buildVoidTicket(o: { loanAccount: string; ticketSequence: number; drawRequestId?: string; fee?: string }): Tx {
+  return {
+    TransactionType: 'AccountSet',
+    Account: o.loanAccount,
+    Sequence: 0,
+    TicketSequence: o.ticketSequence,
+    Fee: o.fee ?? '1000',
+    SigningPubKey: '',
+    Memos: memo({ platform: 'BuildChain', event: 'release_withdrawn', drid: o.drawRequestId ?? null }),
+  }
+}
+
+/**
+ * The final result of a transaction the lender's wallet submitted, once it is
+ * in a validated ledger ('tesSUCCESS' when it did what it said). Null when it
+ * has not been validated in time.
+ */
+export async function validatedResult(client: Client, hash: string): Promise<string | null> {
+  for (let i = 0; i < 20; i++) {
+    try {
+      const res = await client.request({ command: 'tx', transaction: hash })
+      const r = res.result as unknown as { validated?: boolean; meta?: Tx }
+      if (r.validated) return String(r.meta?.TransactionResult)
+    } catch { /* not validated yet */ }
+    await new Promise(res => setTimeout(res, 1500))
+  }
+  return null
 }

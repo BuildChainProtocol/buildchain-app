@@ -223,7 +223,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       )
     }
 
-    // The release went through (or no escrow applies): count it as drawn
+    // The release went through (or no escrow applies): record its fee line and count it as drawn
+    {
+      const { recordFeeAccrual } = await import('@/lib/fees')
+      await recordFeeAccrual(draw as any)
+    }
     await supabase.rpc('increment_amount_drawn', {
       p_project_id: draw.project_id,
       p_amount: draw.amount,

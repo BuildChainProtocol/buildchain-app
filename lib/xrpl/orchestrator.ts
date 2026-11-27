@@ -84,7 +84,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
   const { data: draw, error } = await supabase
     .from('draw_requests')
     .select(`
-      id, status, amount, net_amount, request_number, project_id,
+      id, status, amount, net_amount, settlement_amount, request_number, project_id,
       inspection_done, lien_waiver,
       lien_waiver_nft_id,
       escrow_sequence, escrow_txn_hash,
@@ -301,6 +301,10 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     })
 
     result.escrowFinished = true
+    {
+      const { recordFeeAccrual } = await import('@/lib/fees')
+      await recordFeeAccrual(draw as any)
+    }
     console.log(`[Orchestrator] ✓ Draw ${drawId} auto-funded successfully`)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

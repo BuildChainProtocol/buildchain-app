@@ -6,6 +6,7 @@ const lenderNav = [
   { href: '/lender', label: 'Portfolio', group: 'Overview' },
   { href: '/lender/loans', label: 'My Loans', group: 'Lending' },
   { href: '/lender/approvals', label: 'Approvals', group: 'Lending', badge: 0 },
+  { href: '/lender/funding', label: 'Funding', group: 'Lending' },
   { href: '/lender/documents', label: 'Documents', group: 'Lending' },
 ]
 

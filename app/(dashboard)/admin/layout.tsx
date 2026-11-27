@@ -7,6 +7,7 @@ const adminNav = [
   { href: '/admin/projects', label: 'Projects', group: 'Lending' },
   { href: '/admin/draws', label: 'Draw Requests', group: 'Lending', badge: 0 },
   { href: '/admin/documents', label: 'Documents', group: 'Lending' },
+  { href: '/admin/fees', label: 'Protocol Fees', group: 'Lending' },
   { href: '/admin/lenders', label: 'Lenders', group: 'Directory' },
   { href: '/admin/borrowers', label: 'Borrowers', group: 'Directory' },
 ]

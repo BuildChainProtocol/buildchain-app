@@ -146,6 +146,29 @@ async function main() {
   ok('loan account holds the remainder', Number(await S.tokenBalance(client, loan.address, token)) === 200000 - draw3)
   await expectRefused('the same signed release cannot be replayed', () => S.submitMultisigned(client, [lenderSig, bcSig]))
 
+  // Take-backs on the loan account.
+  console.log('\nMethod B — refunds and withdrawn releases')
+  const lenderBefore = Number(await S.tokenBalance(client, lender.address, token))
+  const refund = S.buildRefundPayment({ loanAccount: loan.address, lender: lender.address, token, usd: 25000,
+    ticketSequence: setup.ticketSequences[1] })
+  const refundSig = S.signAsSigner(lender, refund)
+  ok('the lender\'s refund signature matches the refund', S.verifyLenderSigned(refundSig, refund, lender.address).length === 0)
+  await S.countersignAndSubmit(client, bc, refundSig)
+  ok('the lender got 25,000.00 back from the loan account',
+    Number(await S.tokenBalance(client, lender.address, token)) === lenderBefore + 25000)
+
+  const withdrawn = S.buildReleasePayment({ loanAccount: loan.address, payee: payee.address, token, usd: 5000,
+    ticketSequence: setup.ticketSequences[2], drawRequestId: 'proof-draw-4' })
+  const withdrawnSig = S.signAsSigner(lender, withdrawn)          // the lender approved, then the draw is declined
+  const voidTx = S.buildVoidTicket({ loanAccount: loan.address, ticketSequence: setup.ticketSequences[2], drawRequestId: 'proof-draw-4' })
+  const voidSig = S.signAsSigner(lender, voidTx)
+  ok('the lender\'s withdrawal signature matches', S.verifyLenderSigned(voidSig, voidTx, lender.address).length === 0)
+  ok('a release signature cannot pass as a withdrawal', S.verifyLenderSigned(withdrawnSig, voidTx, lender.address).length > 0)
+  await S.countersignAndSubmit(client, bc, voidSig)
+  await expectRefused('after a withdrawal, the earlier release signature is dead', () => S.countersignAndSubmit(client, bc, withdrawnSig))
+  ok('the withdrawn draw\'s money is still in the loan account',
+    Number(await S.tokenBalance(client, loan.address, token)) === 200000 - draw3 - 25000)
+
   await client.disconnect()
   console.log(`\nAll ${passed} checks passed on the XRPL test network.`)
 }
