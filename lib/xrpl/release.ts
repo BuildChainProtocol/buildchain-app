@@ -147,6 +147,14 @@ export async function prepareLenderSigning(o: {
   })
 }
 
+/**
+ * What the lender signed is definitely not what was asked (wrong wallet,
+ * wrong transaction, or the ledger refused it). Any OTHER error while
+ * confirming a signature is treated as "not ready yet": the signature may be
+ * perfectly good, so it must never be thrown away because of a network blip.
+ */
+export class SigningMismatch extends Error {}
+
 export interface SigningProof {
   escrowOwner?: string
   escrowSequence?: number
@@ -172,13 +180,13 @@ export async function confirmLenderSigning(o: {
   hex: string | null
 }): Promise<SigningProof> {
   if (o.signedBy !== o.lenderWallet) {
-    throw new Error('The request was signed by a different wallet than the lender\'s registered wallet')
+    throw new SigningMismatch('The request was signed by a different wallet than the lender\'s registered wallet')
   }
 
   if (o.method === 'two_signature') {
     if (!o.hex) throw new Error('The wallet did not return the signed transaction')
     const problems = verifyLenderSignedRelease(o.hex, o.requestedTx, o.lenderWallet)
-    if (problems.length) throw new Error(`The signed release does not match the draw: ${problems.join('; ')}`)
+    if (problems.length) throw new SigningMismatch(`The signed release does not match the draw: ${problems.join('; ')}`)
     return { lenderSignedBlob: o.hex }
   }
 
@@ -197,14 +205,14 @@ export async function confirmLenderSigning(o: {
     if (!found) throw new Error('The escrow transaction is not on the ledger yet. Try again in a moment.')
     const txj = (found.tx_json ?? found) as Tx
     const meta = found.meta as Tx | undefined
-    if (meta?.TransactionResult !== 'tesSUCCESS') throw new Error(`The escrow transaction failed: ${String(meta?.TransactionResult)}`)
+    if (meta?.TransactionResult !== 'tesSUCCESS') throw new SigningMismatch(`The escrow transaction failed on the ledger: ${String(meta?.TransactionResult)}`)
     const sequence = Number(txj.Sequence)
     const problems = await verifyLenderEscrow(client, {
       owner: o.lenderWallet, sequence, payee: o.payee, token, usd: o.amountUsd,
       condition: escrowConditionFor(o.drawRequestId).condition,
       minCancelAfter: new Date(Date.now() + 24 * 60 * 60 * 1000),
     })
-    if (problems.length) throw new Error(`The escrow does not match the draw: ${problems.join('; ')}`)
+    if (problems.length) throw new SigningMismatch(`The escrow does not match the draw: ${problems.join('; ')}`)
     return { escrowOwner: o.lenderWallet, escrowSequence: sequence, escrowTxnHash: o.txid as string }
   })
 }

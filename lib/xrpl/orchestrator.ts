@@ -229,7 +229,8 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     // Step (d): Increment project.amount_drawn
     await supabase.rpc('increment_amount_drawn', {
       p_project_id: draw.project_id,
-      p_amount: draw.amount,
+      // A dollar-token draw counts what the lender signed for and the ledger paid.
+      p_amount: tokenSettled ? Number((draw as any).settlement_amount ?? draw.amount) : draw.amount,
     })
 
     // ── Fetch updated project amount for emails ──────────────────────────────

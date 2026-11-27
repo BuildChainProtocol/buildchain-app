@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { serviceClient } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { createSignRequest, getSignResult, isXamanConfigured } from '@/lib/xaman'
-import { confirmLenderSigning, isTokenMethod, prepareLenderSigning } from '@/lib/xrpl/release'
+import { confirmLenderSigning, isTokenMethod, prepareLenderSigning, SigningMismatch } from '@/lib/xrpl/release'
 
 // The lender approves a dollar-token draw by signing it in their own wallet.
 //   POST  build the transaction, check it can settle, open a Xaman sign request
@@ -22,7 +22,7 @@ const DRAW_SELECT = `
   settlement_method, settlement_state, settlement_amount, settlement_payee,
   release_ticket, escrow_txn_hash,
   projects ( name, settlement_method, loan_account,
-    lenders ( xrp_address, company_name ),
+    lenders ( xrp_address, company_name, profile_id ),
     borrowers ( xrp_address, company_name ) )
 `
 
@@ -39,6 +39,12 @@ async function load(id: string): Promise<{ admin: any; draw: any } | NextRespons
   // Row-level security limits a lender to draws on their own projects.
   const { data: draw, error } = await supabase.from('draw_requests').select(DRAW_SELECT).eq('id', id).single()
   if (error || !draw) return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+  // Being able to read the draw is not enough (its borrower can too): only an
+  // admin or this project's own lender approves it.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((profile as any).role !== 'admin' && (draw as any).projects?.lenders?.profile_id !== user.id) {
+    return NextResponse.json({ error: 'Only this loan\'s lender can approve its draws' }, { status: 403 })
+  }
   return { admin: serviceClient(), draw }
 }
 
@@ -93,6 +99,15 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         if (!state.resolved && !state.expired) {
           return NextResponse.json({ error: 'A signature request for this draw is already open in Xaman. Sign or decline it there, or wait for it to expire.' }, { status: 409 })
         }
+        // Already signed (the tab was closed, or confirming was interrupted):
+        // never ask for a second signature. For an escrow that would lock the
+        // money twice. Hand back to the status check, which confirms this one.
+        if (state.resolved && state.signed) {
+          return NextResponse.json({
+            method, signatureNeeded: true, state: 'checking', qrPng: null, url: null, cancelAfter: null,
+            summary: summary(draw),
+          })
+        }
       }
     }
 
@@ -103,11 +118,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       .in('settlement_state', ['awaiting_lender_signature', 'locked'])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows: any[] = others ?? []
+    // Draws out for signature count as committed too, so two approvals signed
+    // side by side cannot promise the same money.
     const plan = await prepareLenderSigning({
       method, drawRequestId: draw.id, amountUsd, lenderWallet, payee,
       loanAccount: draw.projects?.loan_account,
       ticketsInUse: rows.filter(r => r.release_ticket != null).map(r => Number(r.release_ticket)),
-      committedUsd: rows.filter(r => r.settlement_state === 'locked').reduce((sum, r) => sum + Number(r.settlement_amount ?? 0), 0),
+      committedUsd: rows.reduce((sum, r) => sum + Number(r.settlement_amount ?? 0), 0),
     })
     const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amountUsd)
     const request = await createSignRequest({
@@ -153,10 +170,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const { data: sig } = await admin.from('draw_signatures').select('payload, txjson').eq('draw_request_id', draw.id).maybeSingle()
   if (!sig?.payload) return NextResponse.json({ state: 'none' })
 
+  // Clear the request only if this call is the one that moved the draw out of
+  // "awaiting": a draw another call has just locked keeps its signature.
   const reset = async () => {
-    await admin.from('draw_signatures').delete().eq('draw_request_id', draw.id)
-    await admin.from('draw_requests').update(CLEAR).eq('id', draw.id).eq('settlement_state', 'awaiting_lender_signature')
+    const { data: cleared } = await admin.from('draw_requests').update(CLEAR)
+      .eq('id', draw.id).eq('settlement_state', 'awaiting_lender_signature').select('id')
+    if (cleared?.length) await admin.from('draw_signatures').delete().eq('draw_request_id', draw.id).eq('payload', sig.payload)
   }
+  if (['declined', 'funded'].includes(draw.status)) { await reset(); return NextResponse.json({ state: 'none' }) }
   try {
     const result = await getSignResult(sig.payload)
     if (!result.resolved) {
@@ -188,10 +209,17 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 500 })
     return NextResponse.json({ state: 'locked', summary: summary(locked) })
   } catch (err) {
-    // Signed, but not what was asked for (or by another wallet): the request
-    // is spent, so clear it and let the lender start again.
-    await reset()
     const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ state: 'problem', error: message.slice(0, 300) }, { status: 409 })
+    if (err instanceof SigningMismatch) {
+      // Signed, but definitely not what was asked for (or by another wallet,
+      // or refused by the ledger): the request is spent, so clear it.
+      await reset()
+      return NextResponse.json({ state: 'problem', error: message.slice(0, 300) }, { status: 409 })
+    }
+    // Anything else (the wallet service or the ledger did not answer, or the
+    // transaction is not in a validated ledger yet) says nothing about the
+    // signature. Keep it and let the screen ask again.
+    console.warn('[sign] could not confirm yet:', message.slice(0, 200))
+    return NextResponse.json({ state: 'waiting', note: 'Still confirming with the ledger' })
   }
 }

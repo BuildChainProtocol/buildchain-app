@@ -50,8 +50,13 @@ export default function LenderFundingPage() {
   // While a request is open on the lender's phone, ask every 3 seconds.
   useEffect(() => {
     if (!open || outcome) return
+    let busy = false   // one status check at a time
     const id = setInterval(async () => {
-      const res = await fetch(`/api/funding?request=${open.requestId}`)
+      if (busy) return
+      busy = true
+      let res: Response
+      try { res = await fetch(`/api/funding?request=${open.requestId}`) } catch { busy = false; return }
+      busy = false
       const json = await res.json().catch(() => ({}))
       if (json.state && json.state !== 'waiting') { setOutcome(json); load() }
     }, 3000)

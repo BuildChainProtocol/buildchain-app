@@ -221,6 +221,16 @@ async function finish(supabase: any, requestId: string) {
     const lender = r.projects?.lenders?.xrp_address
     if (result.account !== lender) return close('failed', { error: 'Signed by a different wallet than the lender\'s registered wallet' })
 
+    // Claim the request before acting on it. The screen asks every few
+    // seconds; without this, two checks could each countersign and the second
+    // would record a failure for something that succeeded.
+    const { data: claimed } = await admin.from('settlement_requests')
+      .update({ completed_at: new Date().toISOString() })
+      .eq('id', r.id).eq('state', 'waiting')
+      .or(`completed_at.is.null,completed_at.lt.${new Date(Date.now() - 2 * 60 * 1000).toISOString()}`)
+      .select('id')
+    if (!claimed?.length) return NextResponse.json({ state: 'waiting' })
+
     let hash: string | null = result.txid
     if (r.kind === 'refund' || r.kind === 'withdraw_release') {
       if (!result.hex) return close('failed', { error: 'The wallet did not return the signed transaction' })
@@ -252,7 +262,11 @@ async function finish(supabase: any, requestId: string) {
       const client = await getConnectedClient()
       let outcome: string | null
       try { outcome = await validatedResult(client, hash) } finally { await client.disconnect() }
-      if (outcome === null) return NextResponse.json({ state: 'waiting' })
+      if (outcome === null) {
+        // Not validated yet: give the claim back so the next check can look again.
+        await admin.from('settlement_requests').update({ completed_at: null }).eq('id', r.id).eq('state', 'waiting')
+        return NextResponse.json({ state: 'waiting' })
+      }
       if (outcome !== 'tesSUCCESS') return close('failed', { txn_hash: hash, error: `The ledger refused it: ${outcome}` })
     }
 
@@ -273,6 +287,13 @@ async function finish(supabase: any, requestId: string) {
     })
     return close('done', { txn_hash: hash })
   } catch (err) {
-    return close('failed', { error: err instanceof Error ? err.message.slice(0, 300) : 'Ledger error' })
+    const message = err instanceof Error ? err.message : 'Ledger error'
+    // The ledger refusing the transaction is final. Anything else (no answer
+    // from the wallet service or the ledger) is not: release the claim and
+    // let the next check try again, so a success is never recorded as a failure.
+    if (/^te[cfm][A-Z_]|: te[cfm][A-Z_]/.test(message)) return close('failed', { error: message.slice(0, 300) })
+    await admin.from('settlement_requests').update({ completed_at: null }).eq('id', r.id).eq('state', 'waiting')
+    console.warn('[funding] could not finish yet:', message.slice(0, 200))
+    return NextResponse.json({ state: 'waiting' })
   }
 }

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { serviceClient } from '@/lib/supabase/service'
 import { sendEmail } from '@/lib/email/send'
 import { documentUploadedEmail } from '@/lib/email/templates'
 
@@ -35,8 +36,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing file or project_id' }, { status: 400 })
   }
 
-  // Upload to Supabase Storage
-  const fileName = `${projectId}/${Date.now()}-${file.name}`
+  // The caller must be able to see this project (its lender, its borrower or
+  // an admin), and a document slot being filled must belong to it.
+  const { data: visible } = await supabase.from('projects').select('id').eq('id', projectId).maybeSingle()
+  if (!visible) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  if (documentId) {
+    const { data: slot } = await supabase.from('documents').select('id, project_id').eq('id', documentId).maybeSingle()
+    if (!slot || (slot as any).project_id !== projectId) {
+      return NextResponse.json({ error: 'That document slot is not on this project' }, { status: 400 })
+    }
+  }
+  if (file.size > 25 * 1024 * 1024) {
+    return NextResponse.json({ error: 'The file is larger than 25 MB' }, { status: 400 })
+  }
+
+  // Upload to Supabase Storage. The stored name keeps only safe characters.
+  const safeName = file.name.replace(/[^A-Za-z0-9._ -]/g, '_').replace(/\.{2,}/g, '.').slice(-120) || 'file'
+  const fileName = `${projectId}/${Date.now()}-${safeName}`
   const { data: uploadData, error: uploadError } = await supabase.storage
     .from('documents')
     .upload(fileName, file, { contentType: file.type })
@@ -45,7 +61,10 @@ export async function POST(request: NextRequest) {
 
   // Update or create document record
   if (documentId) {
-    const { data, error } = await supabase
+    // A required-document slot is created by an admin, so its uploader could
+    // never update it under the caller's own access. The checks above stand
+    // in for that; the slot is filled with the service key.
+    const { data, error } = await serviceClient()
       .from('documents')
       .update({
         storage_path: uploadData.path,

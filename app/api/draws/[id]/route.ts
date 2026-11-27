@@ -92,12 +92,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // Fetch the draw before we mutate anything
   const { data: draw, error: fetchError } = await supabase
     .from('draw_requests')
-    .select('*, projects(name, borrower_id, settlement_method, borrowers(xrp_address))')
+    .select('*, projects(name, borrower_id, settlement_method, borrowers(xrp_address), lenders(profile_id))')
     .eq('id', params.id)
     .single()
 
   if (fetchError || !draw) {
     return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+  }
+  // Being able to read the draw is not enough (its borrower can too): only an
+  // admin or this project's own lender decides it.
+  if (profile.role !== 'admin' && (draw.projects as any)?.lenders?.profile_id !== user.id) {
+    return NextResponse.json({ error: 'Only this loan\'s lender can decide its draws' }, { status: 403 })
   }
 
   // ── State guards ────────────────────────────────────────────────────────
@@ -118,7 +123,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Only an approved draw can be funded' }, { status: 409 })
   }
 
+  // A draw the lender has locked by signature is undone on the Funding page
+  // (withdraw the approval, or take back the escrow), not by a status click:
+  // the signature or the escrow would otherwise outlive the decision.
+  if ((body.status === 'declined' || body.status === 'held') && (draw as any).settlement_state === 'locked') {
+    return NextResponse.json(
+      { error: 'This draw is locked by the lender\'s signature. Withdraw the approval or take back the escrow on the Funding page first.' },
+      { status: 409 }
+    )
+  }
+  // A signature request still out for this draw is cancelled with it.
+  if ((body.status === 'declined' || body.status === 'held') && (draw as any).settlement_state === 'awaiting_lender_signature') {
+    await admin.from('draw_signatures').delete().eq('draw_request_id', params.id)
+  }
+
   const updates: Record<string, unknown> = {
+    ...((body.status === 'declined' || body.status === 'held') && (draw as any).settlement_state === 'awaiting_lender_signature'
+      ? { settlement_state: null, release_ticket: null } : {}),
     ...(body.status ? { status: body.status } : {}),
     ...(body.lien_waiver ? { lien_waiver: true } : {}),
     ...(body.status === 'declined' && body.decline_reason ? { decline_reason: body.decline_reason } : {}),

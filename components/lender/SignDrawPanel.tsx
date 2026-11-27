@@ -54,8 +54,9 @@ export default function SignDrawPanel({ drawId, onApprove, onClose }: {
       if (!done.current) { done.current = true; onApprove() }
       return
     }
-    setSummary(json.summary); setQr(json.qrPng); setLink(json.url); setCancelAfter(json.cancelAfter ?? null)
-    setPhase('waiting')
+    setSummary(json.summary); setQr(json.qrPng ?? null); setLink(json.url ?? null); setCancelAfter(json.cancelAfter ?? null)
+    // Already signed earlier: go straight to confirming it, never to a second signature.
+    setPhase(json.state === 'checking' ? 'checking' : 'waiting')
   }, [drawId, onApprove])
 
   useEffect(() => {
@@ -68,8 +69,13 @@ export default function SignDrawPanel({ drawId, onApprove, onClose }: {
   useEffect(() => {
     if (phase !== 'waiting' && phase !== 'checking') return
     let stop = false
+    let busy = false   // one status check at a time
     const tick = async () => {
-      const res = await fetch(`/api/draws/${drawId}/sign`)
+      if (busy) return
+      busy = true
+      let res: Response
+      try { res = await fetch(`/api/draws/${drawId}/sign`) } catch { busy = false; return }
+      busy = false
       const json = await res.json().catch(() => ({}))
       if (stop) return
       if (json.state === 'locked') {
@@ -122,7 +128,7 @@ export default function SignDrawPanel({ drawId, onApprove, onClose }: {
             <p className="text-sm mt-4" style={{ color: 'var(--bc-muted)' }}>
               {needsWallet
                 ? 'Connect your wallet at the top of this page, then approve again.'
-                : 'Nothing was signed and nothing moved. You can close this and try again.'}
+                : 'Nothing new was recorded. You can close this and try again.'}
             </p>
             <div className="mt-6 flex gap-3">
               {!needsWallet && (
@@ -202,16 +208,18 @@ export default function SignDrawPanel({ drawId, onApprove, onClose }: {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={qr} alt="QR code to open this request in Xaman" width={188} height={188} className="rounded-md border bg-white p-2" style={{ borderColor: 'var(--bc-border)' }} />
                   )}
-                  <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--bc-text)' }}>
-                    <Smartphone size={14} /> Scan with Xaman
-                  </div>
+                  {qr && (
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--bc-text)' }}>
+                      <Smartphone size={14} /> Scan with Xaman
+                    </div>
+                  )}
                   {link && (
                     <a href={link} target="_blank" rel="noopener noreferrer" className="mt-1 text-xs underline" style={{ color: 'var(--bc-blue)' }}>
                       On your phone? Open in Xaman
                     </a>
                   )}
                   <div className="mt-4 flex items-center gap-1.5 text-xs" style={{ color: 'var(--bc-muted)' }}>
-                    <Loader2 size={12} className="animate-spin" /> Waiting for your signature
+                    <Loader2 size={12} className="animate-spin" /> {phase === 'checking' ? 'Confirming your signature on the ledger' : 'Waiting for your signature'}
                   </div>
                 </>
               )}

@@ -36,13 +36,13 @@ export async function POST(req: NextRequest) {
   // Load prior draw totals per budget line item for this project
   const { data: draw } = await supabase
     .from('draw_requests')
-    .select('project_id, retainage_rate, status')
+    .select('project_id, retainage_rate, status, settlement_state')
     .eq('id', draw_request_id)
     .single()
 
   if (!draw) return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
-  if (!['draft', 'submitted', 'pending'].includes((draw as any).status)) {
-    return NextResponse.json({ error: 'The line items of a draw can no longer be changed once it is approved, funded or declined' }, { status: 409 })
+  if (!['draft', 'submitted', 'pending'].includes((draw as any).status) || (draw as any).settlement_state) {
+    return NextResponse.json({ error: 'The line items of a draw can no longer be changed once the lender is signing it, or it is approved, funded or declined' }, { status: 409 })
   }
 
   // Compute each row

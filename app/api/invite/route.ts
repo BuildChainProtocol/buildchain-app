@@ -77,6 +77,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Link the invited account to its lender or borrower record. The sign-up
+  // trigger cannot be relied on for this (the invitation is stamped on the
+  // account after the trigger has already run), and a public sign-up is
+  // never linked by email at all.
+  if (data.user?.id && (role === 'lender' || role === 'borrower')) {
+    const { error: linkErr } = await admin
+      .from(role === 'lender' ? 'lenders' : 'borrowers')
+      .update({ profile_id: data.user.id })
+      .eq('email', email).is('profile_id', null)
+    if (linkErr) console.warn('[invite] could not link the record:', linkErr.message)
+  }
+
   // Log the invite
   await supabase.from('activity_log').insert({
     project_id: null,

@@ -114,6 +114,11 @@ export async function POST(
     return NextResponse.json({ error: 'signature_in_progress', detail: 'The lender is signing or has signed this draw in BuildChain.' }, { status: 409 })
   }
 
+  // Holding an approved draw would un-approve it while its escrow stays on the ledger.
+  if (decision === 'held' && draw.status === 'approved') {
+    return NextResponse.json({ error: 'already_approved', detail: 'This draw is already approved and its escrow exists; it can no longer be put on hold.' }, { status: 409 })
+  }
+
   const updates: Record<string, unknown> = {
     status: decision === 'held' ? 'submitted' : decision,   // "held" keeps BC in submitted; BB tracks hold
     reviewed_at: new Date().toISOString(),
@@ -168,7 +173,9 @@ export async function POST(
   }
 
   // ── Audit log ─────────────────────────────────────────────────────────────
-  await supabase.from('activity_log').insert({
+  {
+    // The query builder has no .catch: awaiting it returns { error }.
+    const { error: logErr } = await supabase.from('activity_log').insert({
     project_id: updated.project_id,
     user_id: null,
     action: `draw_${decision}_via_building_block`,
@@ -185,7 +192,9 @@ export async function POST(
         ? { xrpl_escrow_hash: updated.escrow_txn_hash, xrpl_sequence: updated.escrow_sequence }
         : {}),
     },
-  }).catch((e: any) => console.warn('[BB decision] audit log failed (non-fatal):', e))
+  })
+    if (logErr) console.warn('[BB decision] activity log insert failed:', logErr.message)
+  }
 
   // ── Webhook back to BB (fire-and-forget) ──────────────────────────────────
   if (decision === 'approved') {
