@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { formatCurrency, timeAgo } from '@/lib/utils'
 import SignDrawPanel from '@/components/lender/SignDrawPanel'
 import LenderWalletCard from '@/components/lender/LenderWalletCard'
 
-type TabKey = 'submitted' | 'approved' | 'declined'
+type TabKey = 'submitted' | 'held' | 'approved' | 'funded' | 'declined'
 
 interface DrawLineItem {
   id: string
@@ -41,32 +41,73 @@ interface Draw {
   id: string
   request_number: string
   amount: number
+  net_amount: number | null
+  retainage_held: number | null
   phase: string
   purpose: string
   description: string
+  // Set when an inspection passes
   inspection_done: boolean
+  // The contractor's statement that its lien waivers are signed. It is not the
+  // lender's confirmation: that is lien_waiver_nft_id.
   lien_waiver: boolean
   submitted_at: string
   reviewed_at: string | null
   funded_at: string | null
   status: string
+  hold_reason: string | null
+  decline_reason: string | null
+  settlement_method: string | null
+  settlement_state: string | null
   escrow_txn_hash: string | null
   escrow_finish_hash: string | null
   nft_token_id: string | null
   nft_mint_hash: string | null
-  // XRPL NFT columns from Migration 012 (Patent §IV + §III)
+  // Present once the lender has confirmed the lien waivers and the ledger record exists
   lien_waiver_nft_id: string | null
   lien_waiver_nft_minted_at: string | null
-  // Verification Receipt — written by orchestrator when dual-condition satisfied (Patent §V)
+  // Written when both conditions were recorded and the draw was released
   verification_receipt: VerificationReceipt | null
-  projects: { name: string; loan_number: string; loan_amount: number; amount_drawn: number }
+  projects: { name: string; loan_number: string; loan_amount: number; amount_drawn: number; settlement_method?: string | null }
 }
 
+interface ConditionsResult {
+  ok: boolean
+  inspection: { passed: boolean; recorded: boolean }
+  lienWaiver: { confirmed: boolean; recorded: boolean }
+  released: boolean
+  reason?: string
+}
+
+// The pilot runs on the XRP Ledger test network. Every explorer link on this page starts here.
 const XRPL_EXPLORER = 'https://testnet.xrpl.org'
+
+// What each tab asks the server for
+const TAB_STATUS: Record<TabKey, string> = {
+  submitted: 'submitted,pending',
+  held: 'held',
+  approved: 'approved',
+  funded: 'funded',
+  declined: 'declined',
+}
+
+const TABS: { key: TabKey; label: string; badge: string; badgeCls: string; emptyTitle: string; emptyMsg: string }[] = [
+  { key: 'submitted', label: 'Pending Review', badge: 'Awaiting Review', badgeCls: 'badge-yellow', emptyTitle: 'Nothing awaiting review', emptyMsg: 'No pending draw requests.' },
+  { key: 'held', label: 'On hold', badge: 'On hold', badgeCls: 'badge-gray', emptyTitle: 'No draws on hold', emptyMsg: 'Draws you put on hold appear here with the reason.' },
+  { key: 'approved', label: 'Approved', badge: 'Approved', badgeCls: 'badge-green', emptyTitle: 'No approved draws waiting on release', emptyMsg: 'Approved draws appear here until they are released.' },
+  { key: 'funded', label: 'Released', badge: 'Released', badgeCls: 'badge-blue', emptyTitle: 'No released draws yet', emptyMsg: 'Released draws appear here with their ledger records.' },
+  { key: 'declined', label: 'Declined', badge: 'Declined', badgeCls: 'badge-red', emptyTitle: 'No declined draws', emptyMsg: 'No declined draws.' },
+]
+
+const EMPTY: Record<TabKey, Draw[]> = { submitted: [], held: [], approved: [], funded: [], declined: [] }
+
+const isTokenMethod = (method: string | null | undefined) => method === 'token_escrow' || method === 'two_signature'
+const longDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+const shortHash = (h: string) => `${h.slice(0, 10)}…${h.slice(-6)}`
 
 export default function LenderApprovalsPage() {
   const [tab, setTab] = useState<TabKey>('submitted')
-  const [draws, setDraws] = useState<Record<TabKey, Draw[]>>({ submitted: [], approved: [], declined: [] })
+  const [draws, setDraws] = useState<Record<TabKey, Draw[]>>(EMPTY)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
@@ -74,92 +115,162 @@ export default function LenderApprovalsPage() {
   const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null)
   const [drawLines, setDrawLines] = useState<Record<string, DrawLineItem[]>>({})
   const [drawWaivers, setDrawWaivers] = useState<Record<string, LienWaiver[]>>({})
+  const [detailError, setDetailError] = useState<Record<string, string>>({})
   const [detailLoading, setDetailLoading] = useState<string | null>(null)
-  const [declineModal, setDeclineModal] = useState<Draw | null>(null)
-  const [declineReason, setDeclineReason] = useState('')
+  // One modal asks for the reason for a decline or a hold
+  const [reasonModal, setReasonModal] = useState<{ draw: Draw; mode: 'decline' | 'hold' } | null>(null)
+  const [reasonText, setReasonText] = useState('')
   const [lienWaiverLoading, setLienWaiverLoading] = useState<string | null>(null)
+  // Draws whose lien waivers this lender confirmed in this visit (the ledger record follows shortly)
+  const [waiverSent, setWaiverSent] = useState<Record<string, boolean>>({})
+  const [checkLoading, setCheckLoading] = useState<string | null>(null)
+  const [checkNote, setCheckNote] = useState<Record<string, string>>({})
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchAll() }, [])
 
-  async function fetchAll() {
-    setLoading(true)
-    const [sub, app, dec] = await Promise.all([
-      fetch('/api/draws?status=submitted').then(r => r.json()),
-      fetch('/api/draws?status=approved').then(r => r.json()),
-      fetch('/api/draws?status=declined').then(r => r.json()),
-    ])
-    setDraws({
-      submitted: sub.data || [],
-      approved: app.data || [],
-      declined: dec.data || [],
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 5000)
+  }
+
+  async function fetchAll(silent = false) {
+    if (!silent) setLoading(true)
+    const keys = Object.keys(TAB_STATUS) as TabKey[]
+    const results = await Promise.all(keys.map(async key => {
+      try {
+        const res = await fetch(`/api/draws?status=${TAB_STATUS[key]}`, { cache: 'no-store' })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) return { key, data: null as Draw[] | null, error: json.error || `Request failed (${res.status})` }
+        return { key, data: (json.data || []) as Draw[], error: '' }
+      } catch {
+        return { key, data: null as Draw[] | null, error: 'The server could not be reached' }
+      }
+    }))
+    setDraws(prev => {
+      const next = { ...prev }
+      for (const r of results) if (r.data) next[r.key] = r.data
+      return next
     })
+    const failed = results.find(r => r.error)
+    if (failed) setErrorMsg(`Draws could not be loaded: ${failed.error}`)
     setLoading(false)
   }
 
   async function toggleDrawDetail(drawId: string) {
     if (expandedDrawId === drawId) { setExpandedDrawId(null); return }
     setExpandedDrawId(drawId)
-    if (drawLines[drawId]) return  // already loaded
+    if (drawLines[drawId] && !detailError[drawId]) return  // already loaded
     setDetailLoading(drawId)
-    const [linesRes, waiversRes] = await Promise.all([
-      fetch(`/api/draw-lines?draw_request_id=${drawId}`).then(r => r.json()),
-      fetch(`/api/lien-waivers?draw_request_id=${drawId}`).then(r => r.json()),
-    ])
-    setDrawLines(prev => ({ ...prev, [drawId]: linesRes.data || [] }))
-    setDrawWaivers(prev => ({ ...prev, [drawId]: waiversRes.data || [] }))
+    try {
+      const [linesRes, waiversRes] = await Promise.all([
+        fetch(`/api/draw-lines?draw_request_id=${drawId}`),
+        fetch(`/api/lien-waivers?draw_request_id=${drawId}`),
+      ])
+      const linesJson = await linesRes.json().catch(() => ({}))
+      const waiversJson = await waiversRes.json().catch(() => ({}))
+      const problem = !linesRes.ok
+        ? `Line items could not be loaded: ${linesJson.error || linesRes.status}`
+        : !waiversRes.ok
+          ? `Lien waivers could not be loaded: ${waiversJson.error || waiversRes.status}`
+          : ''
+      setDetailError(prev => ({ ...prev, [drawId]: problem }))
+      setDrawLines(prev => ({ ...prev, [drawId]: linesRes.ok ? linesJson.data || [] : [] }))
+      setDrawWaivers(prev => ({ ...prev, [drawId]: waiversRes.ok ? waiversJson.data || [] : [] }))
+    } catch {
+      setDetailError(prev => ({ ...prev, [drawId]: 'The details could not be loaded: the server could not be reached' }))
+    }
     setDetailLoading(null)
   }
 
-  // Confirm lien waiver received — triggers NFT mint (taxon 2) + orchestrator (Patent §IV + §V)
+  // The lender's own confirmation that the lien waivers are in hand. The server
+  // records it on the ledger and releases the draw once the inspection has passed too.
   async function confirmLienWaiver(id: string) {
     setLienWaiverLoading(id)
     setErrorMsg('')
-    const res = await fetch(`/api/draws/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lien_waiver: true }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      setToast({ msg: '⬡ Lien waiver confirmed — minting on-ledger NFT…', ok: true })
-      setTimeout(() => setToast(null), 5000)
-      fetchAll()
-    } else {
-      setErrorMsg(json.error || `Lien waiver confirmation failed (${res.status})`)
+    try {
+      const res = await fetch(`/api/draws/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lien_waiver: true }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setWaiverSent(prev => ({ ...prev, [id]: true }))
+        setCheckNote(prev => ({ ...prev, [id]: '' }))
+        showToast('Lien waiver confirmation saved. It is being recorded on the ledger.')
+        fetchAll(true)
+      } else {
+        setErrorMsg(json.error || `Lien waiver confirmation failed (${res.status})`)
+      }
+    } catch {
+      setErrorMsg('Lien waiver confirmation failed: the server could not be reached')
     }
     setLienWaiverLoading(null)
+  }
+
+  // Retries any missing ledger record for an approved draw and attempts release
+  async function checkAgain(id: string) {
+    setCheckLoading(id)
+    setErrorMsg('')
+    try {
+      const res = await fetch(`/api/draws/${id}/conditions`, { method: 'POST' })
+      const json: Partial<ConditionsResult> & { error?: string } = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErrorMsg(json.error || `The check failed (${res.status})`)
+      } else if (json.released) {
+        setCheckNote(prev => ({ ...prev, [id]: '' }))
+        showToast('Draw released. It is now under Released.')
+      } else {
+        setCheckNote(prev => ({ ...prev, [id]: json.reason || 'Not released yet.' }))
+      }
+    } catch {
+      setErrorMsg('The check failed: the server could not be reached')
+    }
+    await fetchAll(true)
+    setCheckLoading(null)
   }
 
   // The draw whose approval is open for signing (dollar-token loans sign in Xaman).
   const [signDrawId, setSignDrawId] = useState<string | null>(null)
 
-  async function act(id: string, status: string, decline_reason?: string) {
+  async function act(id: string, status: 'approved' | 'held' | 'declined' | 'submitted', reason?: string) {
     setActionLoading(id + status)
     setErrorMsg('')
-    const res = await fetch(`/api/draws/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, ...(decline_reason ? { decline_reason } : {}) }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      setToast({ msg: status === 'approved' ? '⬡ Draw approved — XRPL record created' : `Draw ${status}`, ok: true })
-      setTimeout(() => setToast(null), 4000)
-      fetchAll()
-    } else {
-      setErrorMsg(json.error || `Request failed (${res.status})`)
+    try {
+      const res = await fetch(`/api/draws/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          ...(status === 'declined' && reason ? { decline_reason: reason } : {}),
+          ...(status === 'held' && reason ? { hold_reason: reason } : {}),
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok) {
+        // Only say the ledger holds a record when the returned draw carries one
+        const msg =
+          status === 'approved' ? (json.data?.escrow_txn_hash ? 'Draw approved and recorded on the XRP Ledger' : 'Draw approved')
+          : status === 'held' ? 'Draw put on hold'
+          : status === 'submitted' ? 'Draw taken off hold. It is back under Pending Review.'
+          : 'Draw declined'
+        showToast(msg)
+        fetchAll(true)
+      } else {
+        setErrorMsg(json.error || `Request failed (${res.status})`)
+      }
+    } catch {
+      setErrorMsg('Request failed: the server could not be reached')
     }
     setActionLoading(null)
   }
 
-  const tabs: { key: TabKey; label: string; emptyIcon: string; emptyMsg: string }[] = [
-    { key: 'submitted', label: 'Pending Review', emptyIcon: '✅', emptyMsg: 'No pending draw requests.' },
-    { key: 'approved', label: 'Approved', emptyIcon: '⬡', emptyMsg: 'Approved draws will appear here with their XRPL records.' },
-    { key: 'declined', label: 'Declined', emptyIcon: '—', emptyMsg: 'No declined draws.' },
-  ]
+  function closeReasonModal() { setReasonModal(null); setReasonText('') }
 
   const current = draws[tab]
-  const activeTab = tabs.find(t => t.key === tab)!
+  const activeTab = TABS.find(t => t.key === tab)!
+  const holdMode = reasonModal?.mode === 'hold'
 
   return (
     <div>
@@ -173,57 +284,77 @@ export default function LenderApprovalsPage() {
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
           style={{ background: toast.ok ? 'var(--bc-gold)' : '#c0392b', color: '#fff' }}>
-          {toast.ok ? '✓' : '✗'} {toast.msg}
+          {toast.msg}
         </div>
       )}
 
-      {/* Decline reason modal */}
-      {declineModal && (
+      {/* Reason modal: decline or hold */}
+      {reasonModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-          onClick={() => { setDeclineModal(null); setDeclineReason('') }}>
+          onClick={closeReasonModal}>
           <div className="rounded-xl border w-full max-w-md" onClick={e => e.stopPropagation()}
             style={{ background: 'var(--bc-navy)', borderColor: 'var(--bc-border)' }}>
             <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
               <div>
-                <div className="font-bold">Decline Draw Request</div>
+                <div className="font-bold">{holdMode ? 'Put Draw On Hold' : 'Decline Draw Request'}</div>
                 <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>
-                  {declineModal.request_number} · {formatCurrency(declineModal.amount)}
+                  {reasonModal.draw.request_number} · {formatCurrency(reasonModal.draw.amount)}
                 </div>
               </div>
-              <button onClick={() => { setDeclineModal(null); setDeclineReason('') }}
+              <button onClick={closeReasonModal} aria-label="Close"
                 className="text-lg" style={{ color: 'var(--bc-muted)' }}>✕</button>
             </div>
             <div className="p-5 space-y-4">
               <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>
-                The borrower will receive an email with this reason. Be specific — they need to know what to correct.
+                {holdMode
+                  ? 'The draw stays open and is not declined. The contractor is told it is on hold and sees this reason. You can take it off hold at any time.'
+                  : 'The borrower will receive an email with this reason. Be specific: they need to know what to correct.'}
               </p>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>
-                  Decline Reason *
+                  {holdMode ? 'Reason for the hold *' : 'Decline Reason *'}
                 </label>
                 <textarea
-                  value={declineReason}
-                  onChange={e => setDeclineReason(e.target.value)}
+                  value={reasonText}
+                  onChange={e => setReasonText(e.target.value)}
                   rows={3}
-                  placeholder="e.g. Inspection not yet completed. Please schedule and submit inspector report before resubmitting."
+                  placeholder={holdMode
+                    ? 'e.g. Waiting on the revised inspection report for the framing line.'
+                    : 'e.g. Inspection not yet completed. Please schedule and submit inspector report before resubmitting.'}
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none"
                   style={{ background: 'rgba(13,27,42,0.05)', border: '1px solid var(--bc-border)', color: 'var(--bc-text)' }}
                 />
               </div>
               <div className="flex gap-3 pt-1">
-                <button
-                  onClick={async () => {
-                    const reason = declineReason.trim() || 'Draw request did not meet approval requirements.'
-                    setDeclineModal(null)
-                    setDeclineReason('')
-                    await act(declineModal.id, 'declined', reason)
-                  }}
-                  disabled={actionLoading === declineModal.id + 'declined'}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-bold"
-                  style={{ background: 'rgba(231,76,60,0.15)', color: '#c0392b', border: '1px solid rgba(231,76,60,0.3)' }}>
-                  {actionLoading === declineModal.id + 'declined' ? 'Declining…' : '✗ Confirm Decline'}
-                </button>
-                <button onClick={() => { setDeclineModal(null); setDeclineReason('') }}
+                {holdMode ? (
+                  <button
+                    onClick={async () => {
+                      const { draw } = reasonModal
+                      const reason = reasonText.trim()
+                      if (!reason) return
+                      closeReasonModal()
+                      await act(draw.id, 'held', reason)
+                    }}
+                    disabled={!reasonText.trim() || !!actionLoading}
+                    className="flex-1 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50"
+                    style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
+                    Put on hold
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      const { draw } = reasonModal
+                      const reason = reasonText.trim() || 'Draw request did not meet approval requirements.'
+                      closeReasonModal()
+                      await act(draw.id, 'declined', reason)
+                    }}
+                    disabled={!!actionLoading}
+                    className="flex-1 py-2.5 rounded-lg text-sm font-bold"
+                    style={{ background: 'rgba(231,76,60,0.15)', color: '#c0392b', border: '1px solid rgba(231,76,60,0.3)' }}>
+                    Confirm Decline
+                  </button>
+                )}
+                <button onClick={closeReasonModal}
                   className="px-4 py-2.5 rounded-lg text-sm font-semibold border"
                   style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
                   Cancel
@@ -245,7 +376,7 @@ export default function LenderApprovalsPage() {
 
       {/* Tab bar */}
       <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-xl" style={{ background: 'rgba(13,27,42,0.04)', border: '1px solid var(--bc-border)' }}>
-        {tabs.map(t => {
+        {TABS.map(t => {
           const count = draws[t.key].length
           const isActive = tab === t.key
           return (
@@ -281,19 +412,23 @@ export default function LenderApprovalsPage() {
         <div className="p-8 text-center" style={{ color: 'var(--bc-muted)' }}>Loading…</div>
       ) : current.length === 0 ? (
         <div className="rounded-xl border p-12 text-center" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
-          <div className="text-4xl mb-3">{activeTab.emptyIcon}</div>
-          <p className="font-semibold mb-1">
-            {tab === 'submitted' ? 'All caught up!' : tab === 'approved' ? 'No approved draws yet' : 'No declined draws'}
-          </p>
+          <p className="font-semibold mb-1">{activeTab.emptyTitle}</p>
           <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>{activeTab.emptyMsg}</p>
         </div>
       ) : (
         <div className="space-y-4">
           {current.map(draw => {
-            const ltv = draw.projects
-              ? Math.round((draw.projects.amount_drawn + draw.amount) / draw.projects.loan_amount * 100)
-              : 0
-            const hasXrplRecords = draw.escrow_txn_hash || draw.nft_token_id || draw.lien_waiver_nft_id
+            const loan = draw.projects?.loan_amount ?? 0
+            const drawnBefore = draw.projects?.amount_drawn ?? 0
+            // A released draw is already counted in the amount drawn; the others are not yet
+            const counted = tab === 'funded'
+            const showAfter = tab === 'submitted' || tab === 'held' || tab === 'approved'
+            const drawnTotal = counted || !showAfter ? drawnBefore : drawnBefore + draw.amount
+            const drawnPct = draw.projects && loan > 0 ? Math.round(drawnTotal / loan * 100) : null
+            const hasXrplRecords = draw.escrow_txn_hash || draw.nft_token_id || draw.lien_waiver_nft_id || draw.escrow_finish_hash
+            const tokenSettled = isTokenMethod(draw.settlement_method ?? draw.projects?.settlement_method)
+            const waiverRecorded = !!draw.lien_waiver_nft_id
+            const bothRecorded = draw.inspection_done && waiverRecorded
 
             return (
               <div key={draw.id} className="rounded-xl border overflow-hidden" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
@@ -308,16 +443,36 @@ export default function LenderApprovalsPage() {
                       {draw.projects?.name} · {draw.projects?.loan_number} ·{' '}
                       {tab === 'submitted'
                         ? `Submitted ${draw.submitted_at ? timeAgo(draw.submitted_at) : 'recently'}`
-                        : `Reviewed ${draw.reviewed_at ? timeAgo(draw.reviewed_at) : 'recently'}`
+                        : tab === 'held'
+                          ? `Put on hold ${draw.reviewed_at ? timeAgo(draw.reviewed_at) : 'recently'}`
+                          : tab === 'funded'
+                            ? (draw.funded_at ? `Released ${longDate(draw.funded_at)}` : 'Released')
+                            : `Reviewed ${draw.reviewed_at ? timeAgo(draw.reviewed_at) : 'recently'}`
                       }
                     </div>
                   </div>
-                  <span className={`badge self-start sm:self-auto ${tab === 'submitted' ? 'badge-yellow' : tab === 'approved' ? 'badge-green' : 'badge-red'}`}>
-                    {tab === 'submitted' ? 'Awaiting Review' : tab === 'approved' ? 'Approved' : 'Declined'}
+                  <span className={`badge self-start sm:self-auto ${activeTab.badgeCls}`}>
+                    {activeTab.badge}
                   </span>
                 </div>
 
                 <div className="px-5 py-4">
+                  {/* Hold reason */}
+                  {tab === 'held' && (
+                    <div className="text-sm p-3 rounded-lg mb-4" style={{ background: 'rgba(13,27,42,0.03)', border: '1px solid var(--bc-border)' }}>
+                      <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--bc-muted)' }}>Reason for the hold</span>
+                      <div className="mt-1">{draw.hold_reason || 'No reason was recorded.'}</div>
+                    </div>
+                  )}
+
+                  {/* Decline reason */}
+                  {tab === 'declined' && draw.decline_reason && (
+                    <div className="text-sm p-3 rounded-lg mb-4" style={{ background: 'rgba(13,27,42,0.03)', border: '1px solid var(--bc-border)' }}>
+                      <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--bc-muted)' }}>Decline reason</span>
+                      <div className="mt-1">{draw.decline_reason}</div>
+                    </div>
+                  )}
+
                   {/* Draw details grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
                     <div className="space-y-2 text-sm">
@@ -327,44 +482,60 @@ export default function LenderApprovalsPage() {
                       </div>
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>Amount</span>
-                        <span className="font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(draw.amount)}</span>
+                        <span className="font-bold bc-figure" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(draw.amount)}</span>
                       </div>
+                      {draw.net_amount != null && draw.net_amount !== draw.amount && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--bc-muted)' }}>Net of retainage</span>
+                          <span className="font-semibold bc-figure">{formatCurrency(draw.net_amount)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--bc-muted)' }}>Inspection</span>
-                        <span>{draw.inspection_done ? '✅ Done' : '⏳ Pending'}</span>
+                        <span>{draw.inspection_done ? 'Passed' : 'Not yet passed'}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span style={{ color: 'var(--bc-muted)' }}>Lien Waiver</span>
-                        <span>{draw.lien_waiver ? '✅ Attached' : '❌ Missing'}</span>
+                      <div className="flex justify-between gap-3">
+                        <span style={{ color: 'var(--bc-muted)' }}>Lien waivers</span>
+                        <span className="text-right">
+                          {waiverRecorded
+                            ? 'Confirmed and recorded'
+                            : draw.lien_waiver ? 'Contractor reports them signed' : 'Not reported signed'}
+                        </span>
                       </div>
                     </div>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span style={{ color: 'var(--bc-muted)' }}>LTV After Draw</span>
-                        <span className={`font-bold ${ltv > 80 ? 'text-red-700' : 'text-green-700'}`}>{ltv}%</span>
+                        <span style={{ color: 'var(--bc-muted)' }}>{showAfter ? 'Drawn after this draw' : 'Drawn to date'}</span>
+                        {drawnPct == null
+                          ? <span className="font-bold">—</span>
+                          : <span className={`font-bold ${drawnPct > 100 ? 'text-red-700' : ''}`}>{drawnPct}% of loan</span>}
                       </div>
                       <div className="flex justify-between">
-                        <span style={{ color: 'var(--bc-muted)' }}>Remaining After</span>
+                        <span style={{ color: 'var(--bc-muted)' }}>{showAfter ? 'Remaining after' : 'Remaining'}</span>
                         <span className="font-semibold text-green-700">
-                          {draw.projects ? formatCurrency(draw.projects.loan_amount - draw.projects.amount_drawn - draw.amount) : '—'}
+                          {draw.projects ? formatCurrency(loan - drawnTotal) : '—'}
                         </span>
                       </div>
                       {tab === 'approved' && (
                         <div className="flex justify-between">
                           <span style={{ color: 'var(--bc-muted)' }}>Status</span>
-                          <span className="text-amber-700 font-semibold">
-                            {draw.funded_at ? '✅ Funded' : '⏳ Pending release'}
-                          </span>
+                          <span className="text-amber-700 font-semibold">Waiting on release</span>
+                        </div>
+                      )}
+                      {tab === 'funded' && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--bc-muted)' }}>Released</span>
+                          <span className="font-semibold">{draw.funded_at ? longDate(draw.funded_at) : '—'}</span>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* XRPL Records — shown on Approved tab */}
-                  {tab === 'approved' && hasXrplRecords && (
+                  {/* Ledger records: approved and released draws */}
+                  {(tab === 'approved' || tab === 'funded') && hasXrplRecords && (
                     <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(201,164,87,0.05)', border: '1px solid rgba(201,164,87,0.15)' }}>
                       <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--bc-gold-ink)' }}>
-                        ⬡ On-chain records
+                        Ledger records
                       </p>
                       <div className="space-y-1.5">
                         {draw.escrow_txn_hash && (
@@ -373,7 +544,7 @@ export default function LenderApprovalsPage() {
                             <a href={`${XRPL_EXPLORER}/transactions/${draw.escrow_txn_hash}`}
                               target="_blank" rel="noopener noreferrer"
                               className="font-mono hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>
-                              {draw.escrow_txn_hash.slice(0, 10)}…{draw.escrow_txn_hash.slice(-6)} ↗
+                              {shortHash(draw.escrow_txn_hash)} ↗
                             </a>
                           </div>
                         )}
@@ -383,7 +554,17 @@ export default function LenderApprovalsPage() {
                             <a href={`${XRPL_EXPLORER}/nft/${draw.nft_token_id}`}
                               target="_blank" rel="noopener noreferrer"
                               className="font-mono hover:underline" style={{ color: 'var(--bc-gold-ink)' }}>
-                              {draw.nft_token_id.slice(0, 10)}…{draw.nft_token_id.slice(-6)} ↗
+                              {shortHash(draw.nft_token_id)} ↗
+                            </a>
+                          </div>
+                        )}
+                        {draw.lien_waiver_nft_id && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span style={{ color: 'var(--bc-muted)' }}>Lien waiver record</span>
+                            <a href={`${XRPL_EXPLORER}/nft/${draw.lien_waiver_nft_id}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="font-mono hover:underline" style={{ color: '#15803d' }}>
+                              {shortHash(draw.lien_waiver_nft_id)} ↗
                             </a>
                           </div>
                         )}
@@ -393,26 +574,16 @@ export default function LenderApprovalsPage() {
                             <a href={`${XRPL_EXPLORER}/transactions/${draw.escrow_finish_hash}`}
                               target="_blank" rel="noopener noreferrer"
                               className="font-mono hover:underline" style={{ color: '#15803d' }}>
-                              {draw.escrow_finish_hash.slice(0, 10)}…{draw.escrow_finish_hash.slice(-6)} ↗
+                              {shortHash(draw.escrow_finish_hash)} ↗
                             </a>
                           </div>
-                        )}
-                        {draw.lien_waiver_nft_id && (
-                          <div className="flex items-center justify-between text-xs">
-                            <span style={{ color: 'var(--bc-muted)' }}>Lien Waiver NFT (§IV)</span>
-                            <a href={`${XRPL_EXPLORER}/nft/${draw.lien_waiver_nft_id}`}
-                              target="_blank" rel="noopener noreferrer"
-                              className="font-mono hover:underline" style={{ color: '#15803d' }}>
-                              {draw.lien_waiver_nft_id.slice(0, 10)}…{draw.lien_waiver_nft_id.slice(-6)} ↗
-                            </a>
-                          </div>
-                        )}
-                        {!draw.escrow_txn_hash && !draw.nft_token_id && !draw.lien_waiver_nft_id && (
-                          <p className="text-xs" style={{ color: 'var(--bc-muted)' }}>
-                            XRPL integration pending configuration
-                          </p>
                         )}
                       </div>
+                      {!tokenSettled && (
+                        <p className="text-xs mt-2" style={{ color: 'var(--bc-muted)' }}>
+                          Pilot on the XRP Ledger test network: the escrow holds 1 test XRP from BuildChain&apos;s test wallet. No dollars move.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -435,6 +606,8 @@ export default function LenderApprovalsPage() {
                       <div className="mt-3 rounded-xl border overflow-hidden" style={{ borderColor: 'var(--bc-border)' }}>
                         {detailLoading === draw.id ? (
                           <div className="p-4 text-xs text-center" style={{ color: 'var(--bc-muted)' }}>Loading…</div>
+                        ) : detailError[draw.id] ? (
+                          <div className="p-4 text-xs" style={{ color: '#c0392b' }}>{detailError[draw.id]}</div>
                         ) : (
                           <>
                             {/* G703 Line Items */}
@@ -486,26 +659,29 @@ export default function LenderApprovalsPage() {
                               <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--bc-muted)' }}>Lien Waivers</p>
                               {drawWaivers[draw.id]?.length > 0 ? (
                                 <div className="space-y-1.5">
-                                  {drawWaivers[draw.id].map(wv => (
-                                    <div key={wv.id} className="flex items-center justify-between text-xs py-1">
-                                      <div>
-                                        <span className="font-semibold">{wv.sub_name}</span>
-                                        {wv.sub_code && <span className="ml-1.5" style={{ color: 'var(--bc-muted)' }}>{wv.sub_code}</span>}
-                                        <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{ background: 'rgba(13,27,42,0.06)', color: 'var(--bc-muted)' }}>
-                                          {wv.waiver_type.replace(/_/g, ' ')}
-                                        </span>
+                                  {drawWaivers[draw.id].map(wv => {
+                                    const signed = wv.status === 'signed' || wv.status === 'issued'
+                                    return (
+                                      <div key={wv.id} className="flex items-center justify-between text-xs py-1">
+                                        <div>
+                                          <span className="font-semibold">{wv.sub_name}</span>
+                                          {wv.sub_code && <span className="ml-1.5" style={{ color: 'var(--bc-muted)' }}>{wv.sub_code}</span>}
+                                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{ background: 'rgba(13,27,42,0.06)', color: 'var(--bc-muted)' }}>
+                                            {wv.waiver_type.replace(/_/g, ' ')}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <span style={{ color: 'var(--bc-muted)' }}>{formatCurrency(wv.through_amount)}</span>
+                                          <span style={{ color: signed ? '#15803d' : '#c0392b' }}>
+                                            {signed ? 'Signed' : 'Not signed yet'}
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-3">
-                                        <span style={{ color: 'var(--bc-muted)' }}>{formatCurrency(wv.through_amount)}</span>
-                                        <span style={{ color: wv.status === 'signed' || wv.status === 'issued' ? '#15803d' : '#c0392b' }}>
-                                          {wv.status === 'signed' || wv.status === 'issued' ? '✅ Signed' : '⏳ Pending'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
+                                    )
+                                  })}
                                 </div>
                               ) : (
-                                <p className="text-xs" style={{ color: '#c0392b' }}>⚠️ No lien waivers on file — required before approval.</p>
+                                <p className="text-xs" style={{ color: 'var(--bc-muted)' }}>No lien waivers are on file for this draw yet.</p>
                               )}
                             </div>
                           </>
@@ -516,107 +692,174 @@ export default function LenderApprovalsPage() {
 
                   {/* Pending action buttons */}
                   {tab === 'submitted' && (() => {
-                    const waivers = drawWaivers[draw.id] || []
-                    const allWaiversSigned = waivers.length > 0 && waivers.every(w => w.status === 'signed' || w.status === 'issued')
-                    const blockApprove = !draw.inspection_done || !draw.lien_waiver
+                    const openItems = !draw.inspection_done || !draw.lien_waiver
                     return (
                     <div className="space-y-3">
-                      {blockApprove && (
-                        <div className="flex gap-3 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.2)' }}>
-                          {!draw.inspection_done && <span style={{ color: '#c0392b' }}>⚠️ Inspection not confirmed</span>}
-                          {!draw.lien_waiver && <span style={{ color: '#c0392b' }}>⚠️ Lien waiver missing</span>}
-                          <span style={{ color: 'var(--bc-muted)' }}>— You can still approve with override</span>
+                      {openItems && (
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(13,27,42,0.03)', border: '1px solid var(--bc-border)', color: 'var(--bc-muted)' }}>
+                          {!draw.inspection_done && <span>The inspection has not passed yet.</span>}
+                          {!draw.lien_waiver && <span>The contractor has not reported its lien waivers signed.</span>}
+                          <span>You can approve now; the draw is released only after both are recorded.</span>
                         </div>
                       )}
                       <div className="flex flex-wrap gap-3 items-center">
                         <button onClick={() => setSignDrawId(draw.id)}
-                          disabled={actionLoading === draw.id + 'approved'}
+                          disabled={!!actionLoading}
                           className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
-                          style={{ background: blockApprove ? 'rgba(201,164,87,0.4)' : 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
+                          style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
                           {actionLoading === draw.id + 'approved' ? 'Recording approval…' : 'Approve Draw'}
                         </button>
-                        <button onClick={() => { setDeclineModal(draw); setDeclineReason('') }}
+                        <button onClick={() => { setReasonModal({ draw, mode: 'hold' }); setReasonText('') }}
+                          disabled={!!actionLoading}
+                          className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
+                          style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-text)' }}>
+                          {actionLoading === draw.id + 'held' ? 'Putting on hold…' : 'Hold'}
+                        </button>
+                        <button onClick={() => { setReasonModal({ draw, mode: 'decline' }); setReasonText('') }}
                           disabled={!!actionLoading}
                           className="px-4 py-2 rounded-lg text-sm font-bold border transition-all"
                           style={{ background: 'rgba(231,76,60,0.1)', color: '#c0392b', borderColor: 'rgba(231,76,60,0.3)' }}>
-                          ✗ Decline
+                          {actionLoading === draw.id + 'declined' ? 'Declining…' : 'Decline'}
                         </button>
-                        <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
-                          Releases once the inspection and lien waiver are both recorded
-                        </span>
                       </div>
+                      <p className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                        {tokenSettled
+                          ? 'You approve by signing in your wallet. The draw is released once the inspection and the lien waivers are both recorded.'
+                          : 'Approving records the draw on the XRP Ledger test network: 1 test XRP is locked from BuildChain’s test wallet and no dollars move. It is released once the inspection and the lien waivers are both recorded.'}
+                      </p>
                     </div>
                     )
                   })()}
 
-                  {/* ── Dual-Condition Verification Panel (Patent §V) ──────────────── */}
+                  {/* On hold: take it off hold */}
+                  {tab === 'held' && (
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <button onClick={() => act(draw.id, 'submitted')}
+                        disabled={!!actionLoading}
+                        className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
+                        style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
+                        {actionLoading === draw.id + 'submitted' ? 'Taking off hold…' : 'Take off hold'}
+                      </button>
+                      <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
+                        The draw goes back to Pending Review, where you can approve or decline it.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Release conditions: approved, not yet released */}
                   {tab === 'approved' && !draw.funded_at && (
                     <div className="rounded-lg p-3 mt-1" style={{ background: 'rgba(13,27,42,0.02)', border: '1px solid var(--bc-border)' }}>
                       <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: 'var(--bc-muted)' }}>
-                        ⬡ Auto-Release Conditions (Patent §V)
+                        Release conditions
                       </p>
                       <div className="space-y-2.5">
-                        {/* Condition 1 — Inspector Credential */}
+                        {/* Condition 1: inspection */}
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>① Inspector Credential</span>
+                          <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>1. Inspection</span>
                           {draw.inspection_done ? (
-                            <span className="text-xs font-semibold" style={{ color: '#15803d' }}>✅ Verified on-ledger</span>
+                            <span className="text-xs font-semibold" style={{ color: '#15803d' }}>Passed</span>
                           ) : (
-                            <span className="text-xs" style={{ color: '#c0392b' }}>⏳ Awaiting inspection pass</span>
+                            <span className="text-xs font-semibold" style={{ color: '#b45309' }}>Not yet passed</span>
                           )}
                         </div>
-                        {/* Condition 2 — Lien Waiver NFT */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>② Lien Waiver NFT</span>
-                          {draw.lien_waiver ? (
-                            <span className="text-xs font-semibold" style={{ color: '#15803d' }}>
-                              ✅ Confirmed{draw.lien_waiver_nft_id ? ' · on-ledger' : ''}
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => confirmLienWaiver(draw.id)}
-                              disabled={lienWaiverLoading === draw.id}
-                              className="px-3 py-1 rounded-lg text-xs font-bold transition-all"
-                              style={{
-                                background: lienWaiverLoading === draw.id ? 'rgba(201,164,87,0.4)' : 'var(--bc-gold)',
-                                color: 'var(--bc-dark)',
-                                opacity: lienWaiverLoading === draw.id ? 0.7 : 1,
-                              }}>
-                              {lienWaiverLoading === draw.id ? '⬡ Minting…' : '✓ Confirm Lien Waiver Received'}
-                            </button>
+                        {/* Condition 2: the lender's confirmation of the lien waivers */}
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>2. Lien waivers</span>
+                            {waiverRecorded ? (
+                              <span className="text-xs font-semibold" style={{ color: '#15803d' }}>Confirmed and recorded</span>
+                            ) : (
+                              <span className="flex flex-wrap items-center justify-end gap-2">
+                                <span className="text-xs font-semibold" style={{ color: '#b45309' }}>
+                                  {waiverSent[draw.id] ? 'Confirmed by you; not recorded on the ledger yet' : 'Not confirmed'}
+                                </span>
+                                <button
+                                  onClick={() => confirmLienWaiver(draw.id)}
+                                  disabled={lienWaiverLoading === draw.id}
+                                  className="px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                                  style={{
+                                    background: waiverSent[draw.id] ? 'transparent' : 'var(--bc-gold)',
+                                    border: waiverSent[draw.id] ? '1px solid var(--bc-border)' : '1px solid transparent',
+                                    color: waiverSent[draw.id] ? 'var(--bc-text)' : 'var(--bc-dark)',
+                                    opacity: lienWaiverLoading === draw.id ? 0.7 : 1,
+                                  }}>
+                                  {lienWaiverLoading === draw.id
+                                    ? 'Saving…'
+                                    : waiverSent[draw.id] ? 'Confirm again' : 'Confirm lien waivers received'}
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                          {!waiverRecorded && (
+                            <p className="text-xs mt-1" style={{ color: 'var(--bc-muted)' }}>
+                              {waiverSent[draw.id]
+                                ? 'Your confirmation is saved. The ledger record usually follows within a minute: use Check again below.'
+                                : draw.lien_waiver
+                                  ? 'The contractor reports its lien waivers are signed. Confirm you have them to record this on the ledger.'
+                                  : 'The contractor has not reported its lien waivers signed. Confirm once you have them: this is your own confirmation and it is recorded on the ledger.'}
+                            </p>
                           )}
                         </div>
                       </div>
                       {/* Status line */}
-                      {draw.inspection_done && draw.lien_waiver ? (
-                        <div className="mt-2.5 pt-2 border-t text-xs font-semibold" style={{ borderColor: 'var(--bc-border)', color: '#15803d' }}>
-                          Both conditions met — orchestrator is processing auto-release…
-                        </div>
-                      ) : (
-                        <div className="mt-2.5 pt-2 border-t text-xs" style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-muted)' }}>
-                          Both conditions required simultaneously to trigger automatic escrow release
-                        </div>
+                      <div className="mt-2.5 pt-2 border-t flex flex-wrap items-center justify-between gap-2 text-xs" style={{ borderColor: 'var(--bc-border)' }}>
+                        {bothRecorded ? (
+                          <span className="font-semibold" style={{ color: '#15803d' }}>
+                            Both conditions are recorded. Processing release.
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--bc-muted)' }}>
+                            The draw is released once the inspection has passed and your lien waiver confirmation is recorded.
+                          </span>
+                        )}
+                        {(bothRecorded || waiverSent[draw.id]) && (
+                          <button
+                            onClick={() => checkAgain(draw.id)}
+                            disabled={checkLoading === draw.id}
+                            className="px-3 py-1 rounded-lg text-xs font-bold border"
+                            style={{ borderColor: 'var(--bc-border)', color: 'var(--bc-text)', opacity: checkLoading === draw.id ? 0.7 : 1 }}>
+                            {checkLoading === draw.id ? 'Checking…' : 'Check again'}
+                          </button>
+                        )}
+                      </div>
+                      {checkNote[draw.id] && (
+                        <p className="text-xs mt-2" style={{ color: '#b45309' }}>
+                          Not released: {checkNote[draw.id]}
+                        </p>
                       )}
                     </div>
                   )}
 
-                  {tab === 'approved' && draw.funded_at && draw.verification_receipt && (
+                  {/* Released */}
+                  {tab === 'funded' && (
                     <div className="rounded-lg px-3 py-2 mt-1" style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)' }}>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold" style={{ color: '#15803d' }}>
-                          ⬡ Dual-condition auto-released
-                        </span>
-                        <span style={{ color: 'var(--bc-muted)' }}>
-                          {timeAgo(draw.verification_receipt.verified_at)} · {draw.verification_receipt.patent_ref}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {tab === 'approved' && draw.funded_at && !draw.verification_receipt && (
-                    <div className="flex items-center gap-2 text-xs pt-1" style={{ color: '#15803d' }}>
-                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#15803d' }}></span>
-                      Funded {timeAgo(draw.funded_at)}
+                      {draw.verification_receipt ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="font-bold" style={{ color: '#15803d' }}>
+                            Released automatically: inspection and lien waivers both recorded
+                          </span>
+                          <span style={{ color: 'var(--bc-muted)' }}>
+                            Verified {timeAgo(draw.verification_receipt.verified_at)} · {draw.verification_receipt.patent_ref}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-xs font-bold" style={{ color: '#15803d' }}>
+                          Released{draw.funded_at ? ` ${timeAgo(draw.funded_at)}` : ''}
+                        </div>
+                      )}
+                      <p className="text-xs mt-1" style={{ color: 'var(--bc-muted)' }}>
+                        {draw.escrow_finish_hash ? (
+                          <>
+                            Ledger transaction:{' '}
+                            <a href={`${XRPL_EXPLORER}/transactions/${draw.escrow_finish_hash}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="font-mono hover:underline" style={{ color: 'var(--bc-blue)' }}>
+                              {shortHash(draw.escrow_finish_hash)} ↗
+                            </a>
+                          </>
+                        ) : 'No ledger release transaction is recorded for this draw.'}
+                        {!tokenSettled && ' Pilot on the XRP Ledger test network: no dollars moved.'}
+                      </p>
                     </div>
                   )}
                 </div>

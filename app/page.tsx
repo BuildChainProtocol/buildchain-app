@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import AuthHashForward from '@/components/shared/AuthHashForward'
 import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
 
 export default async function Home() {
@@ -18,6 +19,7 @@ export default async function Home() {
 
   return (
     <>
+      <AuthHashForward />
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 

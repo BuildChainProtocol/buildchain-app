@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { BuildChainLogo } from '@/components/shared/BuildChainLogo'
+import AuthHashForward from '@/components/shared/AuthHashForward'
 
 // BUILD_ID — bump this any time you deploy so you can confirm which
 // version is live: look for it in the bottom-right corner of the page.
@@ -103,7 +104,11 @@ export default function LoginPage({
             >
               Sign In
             </button>
+            <div className="text-center">
+              <Link href="/auth/forgot" className="text-sm hover:underline" style={{ color: 'var(--bc-muted)' }}>Forgot your password?</Link>
+            </div>
           </form>
+          <AuthHashForward />
 
           <div
             className="mt-6 pt-6 border-t text-center text-sm"

@@ -37,12 +37,34 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  const [toastOk, setToastOk] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  const showToast = (msg: string, ok = true) => {
+    setToast(msg); setToastOk(ok)
+    setTimeout(() => setToast(''), ok ? 3000 : 8000)
+  }
+
+  /** Reads the server's own error message from a failed response. */
+  async function errorFrom(res: Response, fallback: string): Promise<string> {
+    const json = await res.json().catch(() => ({}))
+    return json?.error ?? `${fallback} (${res.status})`
+  }
 
   async function load() {
-    const res = await fetch(`/api/budget-lines?project_id=${projectId}`)
-    const json = await res.json()
-    setLines(json.data || [])
+    try {
+      const res = await fetch(`/api/budget-lines?project_id=${projectId}`)
+      if (!res.ok) {
+        setLoadError(await errorFrom(res, 'The budget could not be loaded'))
+        setLoading(false)
+        return
+      }
+      const json = await res.json()
+      setLoadError('')
+      setLines(json.data || [])
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'The budget could not be loaded')
+    }
     setLoading(false)
   }
 
@@ -52,33 +74,52 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
 
   async function saveLine() {
     if (!form.line_no || !form.description || !form.scheduled_value) return
+    const value = parseFloat(form.scheduled_value)
+    if (!Number.isFinite(value)) { showToast('Scheduled value must be a number', false); return }
     setSaving(true)
-    if (editId) {
-      await fetch(`/api/budget-lines/${editId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, scheduled_value: parseFloat(form.scheduled_value), sort_order: lines.length }),
-      })
+    const wasEdit = !!editId
+    try {
+      const res = wasEdit
+        ? await fetch(`/api/budget-lines/${editId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...form, scheduled_value: value, sort_order: lines.length }),
+          })
+        : await fetch('/api/budget-lines', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_id: projectId, ...form, scheduled_value: value, sort_order: lines.length }),
+          })
+      if (!res.ok) {
+        // Keep the form open with what was typed so it can be corrected.
+        showToast(await errorFrom(res, wasEdit ? 'The line could not be updated' : 'The line could not be added'), false)
+        return
+      }
       setEditId(null)
-    } else {
-      await fetch('/api/budget-lines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, ...form, scheduled_value: parseFloat(form.scheduled_value), sort_order: lines.length }),
-      })
+      setForm(emptyLine)
+      setAdding(false)
+      await load()
+      showToast(wasEdit ? 'Line updated' : 'Line added')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'The line could not be saved', false)
+    } finally {
+      setSaving(false)
     }
-    setForm(emptyLine)
-    setAdding(false)
-    setSaving(false)
-    await load()
-    showToast(editId ? 'Line updated' : 'Line added')
   }
 
   async function deleteLine(id: string) {
     if (!window.confirm('Remove this budget line?')) return
-    await fetch(`/api/budget-lines/${id}`, { method: 'DELETE' })
-    await load()
-    showToast('Line removed')
+    try {
+      const res = await fetch(`/api/budget-lines/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        showToast(await errorFrom(res, 'The line could not be removed'), false)
+        return
+      }
+      await load()
+      showToast('Line removed')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'The line could not be removed', false)
+    }
   }
 
   function startEdit(line: BudgetLine) {
@@ -102,7 +143,7 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
     <div>
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
-          style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>✓ {toast}</div>
+          style={{ background: toastOk ? 'var(--bc-gold)' : '#c0392b', color: toastOk ? 'var(--bc-dark)' : '#fff' }}>{toast}</div>
       )}
 
       {/* Header */}
@@ -171,6 +212,8 @@ export default function BudgetTab({ projectId, readOnly = false }: BudgetTabProp
       {/* SOV Table */}
       {loading ? (
         <div className="text-sm py-8 text-center" style={{ color: 'var(--bc-muted)' }}>Loading…</div>
+      ) : loadError ? (
+        <div className="text-sm py-8 text-center" style={{ color: '#c0392b' }}>{loadError}</div>
       ) : lines.length === 0 ? (
         <div className="text-center py-10 rounded-xl border border-dashed" style={{ borderColor: 'var(--bc-border)' }}>
           <div className="text-3xl mb-2">📋</div>

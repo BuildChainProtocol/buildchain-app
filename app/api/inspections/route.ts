@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { sendEmail } from '@/lib/email/send'
 
 export const runtime = 'nodejs'
 
@@ -78,9 +77,8 @@ export async function POST(request: NextRequest) {
   const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   const project = (draw as any)?.projects
 
-  try {
-    await sendEmail({
-      to: inspector_email,
+  const emailMessage = {
+    to: [inspector_email],
       subject: `Inspection Request — ${project?.name ?? 'BuildChain Project'} · ${draw?.request_number ?? ''}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0d1b2a; color: #e8edf2; padding: 32px; border-radius: 12px;">
@@ -120,22 +118,43 @@ export async function POST(request: NextRequest) {
           </a>
 
           <p style="color: #6b8198; font-size: 12px; margin-top: 24px;">
-            This link is unique to you and expires with the inspection request.
+            This link is unique to you.
             If you have questions, reply to this email.
           </p>
         </div>
       `,
-    })
-  } catch (emailErr) {
-    console.warn('[Inspections] Email send failed (non-fatal):', emailErr)
   }
 
+  // Send it here rather than through lib/email/send.ts: that helper returns
+  // nothing, so the admin could not be told whether the email actually went.
+  let emailSent = false
+  let emailError: string | null = null
+  const apiKey = process.env.RESEND_API_KEY
+  const from = process.env.EMAIL_FROM
+  if (!apiKey || !from || apiKey === 're_your_key_here') {
+    emailError = 'Email is not configured on this server'
+  } else {
+    try {
+      const { Resend } = await import('resend')
+      const { error: sendErr } = await new Resend(apiKey).emails.send({ from, ...emailMessage })
+      if (sendErr) emailError = sendErr.message ?? 'The email service refused the message'
+      else emailSent = true
+    } catch (emailErr) {
+      emailError = emailErr instanceof Error ? emailErr.message : String(emailErr)
+    }
+  }
+  if (!emailSent) console.warn('[Inspections] Email not sent (non-fatal):', emailError)
+
   // Log to activity
-  await supabase.from('activity_log').insert({
+  const { error: logErr } = await supabase.from('activity_log').insert({
     action: 'inspection_assigned',
     user_id: user.id,
-    details: { inspector_name, inspector_email, draw_request_id, inspection_id: inspection.id },
-  }).throwOnError().then(() => {}).catch(() => {})
+    details: { inspector_name, inspector_email, draw_request_id, inspection_id: inspection.id, email_sent: emailSent },
+  })
+  if (logErr) console.warn('[Inspections] inspection_assigned was not logged:', logErr.message)
 
-  return NextResponse.json({ data: inspection }, { status: 201 })
+  return NextResponse.json(
+    { data: inspection, email_sent: emailSent, email_error: emailSent ? null : emailError, inspect_url: portalUrl },
+    { status: 201 }
+  )
 }

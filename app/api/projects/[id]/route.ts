@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       *,
       borrowers(id, company_name, contact_name, email, phone, rating, license_number, license_state),
       lenders(id, company_name, contact_name, email, phone, max_ltv, loan_types),
-      draw_requests(id, request_number, amount, phase, purpose, status, submitted_at, funded_at, escrow_txn_hash, escrow_finish_hash),
+      draw_requests(id, request_number, amount, net_amount, phase, purpose, status, submitted_at, funded_at, escrow_txn_hash, escrow_finish_hash, inspection_done, lien_waiver, lien_waiver_nft_id, verification_receipt, settlement_method, settlement_state, hold_reason),
       documents(id, name, doc_type, status, required, file_name, file_size, storage_path, uploaded_at)
     `)
     .eq('id', params.id)

@@ -1,12 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
 import { timeAgo } from '@/lib/utils'
+import DocumentReviewButtons from '@/components/admin/DocumentReviewButtons'
 
 export default async function AdminDocumentsPage() {
   const supabase = createClient()
-  const { data: documents } = await supabase
+  // documents has two links to profiles (uploaded_by and reviewed_by), so the
+  // embed must say which one it means or the whole query fails.
+  const { data: documents, error: queryError } = await supabase
     .from('documents')
-    .select('*, projects(name, loan_number), profiles(full_name)')
+    .select('*, projects(name, loan_number), uploader:profiles!uploaded_by(full_name)')
     .order('created_at', { ascending: false })
+
+  if (queryError) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold mb-4">Documents</h1>
+        <div className="rounded-xl border p-5 text-sm" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)', color: '#c0392b' }}>
+          The documents could not be loaded: {queryError.message}
+        </div>
+      </div>
+    )
+  }
 
   const byStatus = {
     required: documents?.filter(d => d.status === 'required') || [],
@@ -80,7 +94,7 @@ export default async function AdminDocumentsPage() {
           <div className="divide-y" style={{ borderColor: '#edf0f4' }}>
             {[...byStatus.overdue, ...byStatus.uploaded].map(doc => {
               const project = doc.projects as { name: string; loan_number: string } | null
-              const uploader = doc.profiles as { full_name: string } | null
+              const uploader = (doc as any).uploader as { full_name: string } | null
               return (
                 <div key={doc.id} className="px-5 py-3 flex items-center justify-between hover:bg-slate-900/[0.02]">
                   <div className="flex items-center gap-3">
@@ -96,6 +110,13 @@ export default async function AdminDocumentsPage() {
                   <div className="flex items-center gap-3">
                     <span className={`badge ${statusBadge[doc.status]}`}>{statusLabel[doc.status]}</span>
                     {doc.uploaded_at && <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>{timeAgo(doc.uploaded_at)}</span>}
+                    {doc.storage_path && (
+                      <a href={`/api/documents/${doc.id}/view`} target="_blank" rel="noopener noreferrer"
+                        className="text-xs font-medium hover:underline" style={{ color: 'var(--bc-blue)' }}>
+                        View
+                      </a>
+                    )}
+                    <DocumentReviewButtons docId={doc.id} status={doc.status} />
                   </div>
                 </div>
               )
@@ -121,7 +142,7 @@ export default async function AdminDocumentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--bc-border)' }}>
-                  {['Document', 'Project', 'Type', 'Size', 'Uploaded', 'Status'].map(h => (
+                  {['Document', 'Project', 'Type', 'Size', 'Uploaded', 'Status', 'Review'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--bc-muted)' }}>{h}</th>
                   ))}
                 </tr>
@@ -151,6 +172,17 @@ export default async function AdminDocumentsPage() {
                         <span className={`badge ${statusBadge[doc.status] || 'badge-gray'}`}>
                           {statusLabel[doc.status] || doc.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {doc.storage_path && (
+                            <a href={`/api/documents/${doc.id}/view`} target="_blank" rel="noopener noreferrer"
+                              className="text-xs font-medium hover:underline" style={{ color: 'var(--bc-blue)' }}>
+                              View
+                            </a>
+                          )}
+                          <DocumentReviewButtons docId={doc.id} status={doc.status} />
+                        </div>
                       </td>
                     </tr>
                   )

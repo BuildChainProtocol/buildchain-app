@@ -88,7 +88,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       id, status, amount, net_amount, settlement_amount, request_number, project_id,
       inspection_done, lien_waiver,
       lien_waiver_nft_id,
-      escrow_sequence, escrow_txn_hash,
+      escrow_sequence, escrow_txn_hash, escrow_finish_after,
       settlement_method, settlement_state, settlement_payee, escrow_owner,
       payees,
       inspections!draw_request_id ( id, status, credential_nft_id ),
@@ -214,7 +214,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     }
 
     // Step (c): Update draw → 'funded'
-    await supabase
+    const { data: nowFunded } = await supabase
       .from('draw_requests')
       .update({
         status: 'funded',
@@ -225,6 +225,14 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       })
       .eq('id', drawId)
       .eq('status', 'approved') // Guard: only update if still approved (prevents double-fund race)
+      .select('id')
+
+    // Another check released this draw at the same moment and has already
+    // counted it and told everyone: do not count or announce it twice.
+    if (!nowFunded?.length) {
+      result.escrowFinished = true
+      return result
+    }
 
     // Step (d): Increment project.amount_drawn
     await supabase.rpc('increment_amount_drawn', {
@@ -322,6 +330,13 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     console.log(`[Orchestrator] ✓ Draw ${drawId} auto-funded successfully`)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    // Two checks can race: the loser finds the escrow already finished. If the
+    // draw is funded by now, that is a success, not a failure to report.
+    const { data: after } = await supabase.from('draw_requests').select('status').eq('id', drawId).single()
+    if (after?.status === 'funded') {
+      result.escrowFinished = true
+      return result
+    }
     console.error('[Orchestrator] Auto-fund failed:', message)
     result.reason = `Release failed: ${message}`
 

@@ -46,6 +46,10 @@ const WAIVER_TYPES = [
   { value: 'unconditional_final', label: 'Unconditional Final' },
 ]
 
+// Totals are shown to the cent, so the contractor sees exactly the figures the server stores
+const money = (n: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+
 const emptyWaiver: LienWaiverEntry = { sub_name: '', sub_code: '', trade: '', waiver_type: 'conditional_partial', through_amount: '', signed_by: '' }
 
 export default function SubmitDrawPage() {
@@ -59,9 +63,11 @@ export default function SubmitDrawPage() {
   const [loadingSOV, setLoadingSOV] = useState(false)
   const [success, setSuccess] = useState(false)
   const [hasSov, setHasSov] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  // The draw was submitted, but some of what goes with it was not saved
+  const [partialErrors, setPartialErrors] = useState<string[]>([])
   const [form, setForm] = useState({
     project_id: '', amount: '', phase: '', description: '',
-    inspection_done: false, lien_waiver: false,
   })
 
   // Load projects
@@ -97,9 +103,14 @@ export default function SubmitDrawPage() {
 
   const selectedProject = projects.find(p => p.id === form.project_id)
   const available = selectedProject ? selectedProject.loan_amount - selectedProject.amount_drawn : 0
-  const retainageRate = selectedProject?.retainage_rate ?? 0.10
+  // The server (POST /api/draw-lines) treats a missing or zero rate as 10%, so this page does too.
+  const retainageRate = Number(selectedProject?.retainage_rate) || 0.10
+  const round2 = (n: number) => Math.round(n * 100) / 100
 
-  // Compute G703 totals from draw lines
+  // Compute G703 totals from draw lines, with the same formula the server uses
+  // when it recomputes the draw: retainage = round(period x rate, 2), payment
+  // due = period - retainage. Stored materials are recorded on the line but are
+  // not part of this draw's payment.
   const lineEntries = budgetLines.map(bl => {
     const dl = drawLines[bl.id] || { work_completed_prev: 0, work_completed_period: '', materials_stored: '' }
     const period = parseFloat(dl.work_completed_period as string) || 0
@@ -107,15 +118,18 @@ export default function SubmitDrawPage() {
     const prev = dl.work_completed_prev || 0
     const total = prev + period + stored
     const pct = bl.scheduled_value > 0 ? (total / bl.scheduled_value) * 100 : 0
-    const retainage = period * retainageRate
-    const due = period - retainage
+    const retainage = round2(period * retainageRate)
+    const due = round2(period - retainage)
     return { ...bl, period, stored, prev, total, pct, retainage, due }
   })
 
-  const totalGross = lineEntries.reduce((s, l) => s + l.period + l.stored, 0)
-  const totalRetainage = lineEntries.reduce((s, l) => s + l.retainage, 0)
-  const totalNet = totalGross - totalRetainage
+  const totalRetainage = round2(lineEntries.reduce((s, l) => s + l.retainage, 0))
+  const totalNet = round2(lineEntries.reduce((s, l) => s + l.due, 0))
+  const totalGross = round2(totalNet + totalRetainage)
+  const totalStored = lineEntries.reduce((s, l) => s + l.stored, 0)
   const hasLineItems = lineEntries.some(l => l.period > 0 || l.stored > 0)
+  // A draw needs work this period: stored materials alone are not paid in a draw
+  const hasPeriodWork = totalGross > 0
 
   // Simple form mode: amount check
   const simpleAmount = parseFloat(form.amount) || 0
@@ -134,55 +148,69 @@ export default function SubmitDrawPage() {
     setLienWaivers(w => w.map((wv, idx) => idx === i ? { ...wv, [field]: value } : wv))
   }
 
+  // Reads a failed response's { error } (or falls back to the status code)
+  async function errorOf(res: Response): Promise<string> {
+    const json = await res.json().catch(() => ({}))
+    return (json && typeof json.error === 'string' && json.error) || `the server answered ${res.status}`
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (overLimit) return
     setLoading(true)
+    setSubmitError('')
+    setPartialErrors([])
 
-    // Step 1: Create the draw request
-    const drawAmount = hasSov ? totalGross : simpleAmount
-    const res = await fetch('/api/draws', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        project_id: form.project_id,
-        amount: drawAmount,
-        phase: form.phase || 'Multi-phase',
-        purpose: form.description || 'Draw request',
-        description: form.description,
-        inspection_done: form.inspection_done,
-        lien_waiver: lienWaivers.length > 0,
-        retainage_rate: retainageRate,
-        retainage_held: hasSov ? totalRetainage : 0,
-        net_amount: hasSov ? totalNet : drawAmount,
-      }),
-    })
-
-    if (!res.ok) { setLoading(false); return }
-    const { data: draw } = await res.json()
-
-    // Step 2: Save draw line items if SOV exists
-    if (hasSov && hasLineItems) {
-      const lines = lineEntries
-        .filter(l => l.period > 0 || l.stored > 0)
-        .map(l => ({
-          budget_line_item_id: l.id,
-          scheduled_value: l.scheduled_value,
-          work_completed_prev: l.prev,
-          work_completed_period: l.period,
-          materials_stored: l.stored,
-        }))
-      await fetch('/api/draw-lines', {
+    try {
+      // Step 1: Create the draw request
+      const drawAmount = hasSov ? totalGross : simpleAmount
+      const res = await fetch('/api/draws', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draw_request_id: draw.id, lines }),
+        body: JSON.stringify({
+          project_id: form.project_id,
+          amount: drawAmount,
+          phase: form.phase || 'Multi-phase',
+          purpose: form.description || 'Draw request',
+          description: form.description,
+          retainage_rate: retainageRate,
+          retainage_held: hasSov ? totalRetainage : 0,
+          net_amount: hasSov ? totalNet : drawAmount,
+        }),
       })
-    }
 
-    // Step 3: Save lien waivers
-    if (lienWaivers.length > 0) {
-      await Promise.all(lienWaivers.filter(w => w.sub_name).map(w =>
-        fetch('/api/lien-waivers', {
+      if (!res.ok) {
+        setSubmitError(`The draw request was not submitted: ${await errorOf(res)}`)
+        setLoading(false)
+        return
+      }
+      const { data: draw } = await res.json()
+
+      // The draw now exists. Anything below that fails is reported, not hidden.
+      const problems: string[] = []
+
+      // Step 2: Save draw line items if SOV exists
+      if (hasSov && hasLineItems) {
+        const lines = lineEntries
+          .filter(l => l.period > 0 || l.stored > 0)
+          .map(l => ({
+            budget_line_item_id: l.id,
+            scheduled_value: l.scheduled_value,
+            work_completed_prev: l.prev,
+            work_completed_period: l.period,
+            materials_stored: l.stored,
+          }))
+        const linesRes = await fetch('/api/draw-lines', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draw_request_id: draw.id, lines }),
+        })
+        if (!linesRes.ok) problems.push(`The line items were not saved: ${await errorOf(linesRes)}`)
+      }
+
+      // Step 3: Save lien waivers
+      const waiverResults = await Promise.all(lienWaivers.filter(w => w.sub_name).map(async w => {
+        const r = await fetch('/api/lien-waivers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -192,22 +220,33 @@ export default function SubmitDrawPage() {
             through_amount: parseFloat(w.through_amount) || 0,
           }),
         })
-      ))
-    }
-
-    // Step 4: Upload supporting documents
-    if (files.length > 0 && draw?.id) {
-      await Promise.all(files.map(file => {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('project_id', form.project_id)
-        fd.append('draw_request_id', draw.id)
-        return fetch('/api/documents', { method: 'POST', body: fd })
+        return r.ok ? '' : `The lien waiver for ${w.sub_name} was not saved: ${await errorOf(r)}`
       }))
-    }
+      problems.push(...waiverResults.filter(Boolean))
 
-    setSuccess(true)
-    setTimeout(() => router.push('/borrower'), 2000)
+      // Step 4: Upload supporting documents
+      if (files.length > 0 && draw?.id) {
+        const fileResults = await Promise.all(files.map(async file => {
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('project_id', form.project_id)
+          fd.append('draw_request_id', draw.id)
+          const r = await fetch('/api/documents', { method: 'POST', body: fd })
+          return r.ok ? '' : `${file.name} was not uploaded: ${await errorOf(r)}`
+        }))
+        problems.push(...fileResults.filter(Boolean))
+      }
+
+      setSuccess(true)
+      if (problems.length > 0) {
+        // Stay on the page so the contractor can read what is missing
+        setPartialErrors(problems)
+      } else {
+        setTimeout(() => router.push('/borrower'), 2000)
+      }
+    } catch {
+      setSubmitError('The server could not be reached. Check your connection, then look at your draw list before trying again: the draw may already have been submitted.')
+    }
     setLoading(false)
   }
 
@@ -220,10 +259,29 @@ export default function SubmitDrawPage() {
   if (success) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="text-5xl mb-4">✅</div>
-          <h2 className="text-xl font-bold mb-2">Draw Request Submitted!</h2>
-          <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>Your lender has been notified. Redirecting…</p>
+        <div className="text-center max-w-lg">
+          <h2 className="text-xl font-bold mb-2">Draw request submitted</h2>
+          {partialErrors.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>Your lender has been notified. Redirecting…</p>
+          ) : (
+            <>
+              <p className="text-sm mb-3" style={{ color: 'var(--bc-muted)' }}>
+                The draw reached your lender, but not everything that goes with it was saved:
+              </p>
+              <div className="rounded-xl border p-4 text-sm text-left space-y-1.5"
+                style={{ background: 'rgba(231,76,60,0.06)', borderColor: 'rgba(231,76,60,0.3)', color: '#c0392b' }}>
+                {partialErrors.map((p, i) => <div key={i}>{p}</div>)}
+              </div>
+              <p className="text-sm mt-3" style={{ color: 'var(--bc-muted)' }}>
+                Do not submit the draw again. Tell your lender what is missing so it can be added.
+              </p>
+              <button type="button" onClick={() => router.push('/borrower')}
+                className="mt-4 px-5 py-2.5 rounded-lg text-sm font-bold"
+                style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
+                Go to my draws
+              </button>
+            </>
+          )}
         </div>
       </div>
     )
@@ -320,12 +378,12 @@ export default function SubmitDrawPage() {
                 <tfoot style={{ background: 'rgba(13,27,42,0.03)', borderTop: '1px solid var(--bc-border)' }}>
                   <tr>
                     <td colSpan={3} className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--bc-muted)' }}>TOTALS</td>
-                    <td className="px-2 py-3 text-right text-xs font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(totalGross)}</td>
-                    <td />
+                    <td className="px-2 py-3 text-right text-xs font-bold" style={{ color: 'var(--bc-gold-ink)' }}>{money(totalGross)}</td>
+                    <td className="px-2 py-3 text-right text-xs" style={{ color: 'var(--bc-muted)' }}>{totalStored > 0 ? money(totalStored) : ''}</td>
                     <td />
                     <td className="px-4 py-3 text-right text-xs">
-                      <div className="font-bold" style={{ color: 'var(--bc-text)' }}>{formatCurrency(totalNet)}</div>
-                      <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>−{formatCurrency(totalRetainage)} retainage</div>
+                      <div className="font-bold" style={{ color: 'var(--bc-text)' }}>{money(totalNet)}</div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>−{money(totalRetainage)} retainage</div>
                     </td>
                   </tr>
                 </tfoot>
@@ -439,11 +497,9 @@ export default function SubmitDrawPage() {
 
         {/* Inspection + Files */}
         <div className="rounded-xl border p-5 space-y-4" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <input type="checkbox" checked={form.inspection_done} onChange={e => setForm(f => ({ ...f, inspection_done: e.target.checked }))}
-              className="w-4 h-4 rounded accent-[var(--bc-gold)]" />
-            <span className="text-sm font-medium">Third-party inspection completed</span>
-          </label>
+          <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>
+            Inspection: the lender&apos;s inspector confirms the work. There is nothing for you to mark here.
+          </p>
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>Supporting Documents</label>
@@ -470,23 +526,38 @@ export default function SubmitDrawPage() {
 
         {/* Summary + Submit */}
         {hasSov && (
-          <div className="rounded-xl border p-4 flex items-center justify-between" style={{ background: 'rgba(201,164,87,0.06)', borderColor: 'rgba(201,164,87,0.2)' }}>
+          <div className="rounded-xl border p-4" style={{ background: 'rgba(201,164,87,0.06)', borderColor: 'rgba(201,164,87,0.2)' }}>
             <div className="text-sm">
               <span style={{ color: 'var(--bc-muted)' }}>Gross draw: </span>
-              <span className="font-bold">{formatCurrency(totalGross)}</span>
+              <span className="font-bold bc-figure">{money(totalGross)}</span>
               <span className="mx-2" style={{ color: 'var(--bc-muted)' }}>·</span>
               <span style={{ color: 'var(--bc-muted)' }}>Retainage ({Math.round(retainageRate * 100)}%): </span>
-              <span className="font-bold" style={{ color: '#c0392b' }}>−{formatCurrency(totalRetainage)}</span>
+              <span className="font-bold bc-figure" style={{ color: '#c0392b' }}>−{money(totalRetainage)}</span>
               <span className="mx-2" style={{ color: 'var(--bc-muted)' }}>·</span>
-              <span style={{ color: 'var(--bc-muted)' }}>Net release: </span>
-              <span className="font-bold text-base" style={{ color: 'var(--bc-gold-ink)' }}>{formatCurrency(totalNet)}</span>
+              <span style={{ color: 'var(--bc-muted)' }}>Net payment due: </span>
+              <span className="font-bold text-base bc-figure" style={{ color: 'var(--bc-gold-ink)' }}>{money(totalNet)}</span>
             </div>
+            <p className="text-xs mt-1.5" style={{ color: 'var(--bc-muted)' }}>
+              Stored materials are recorded but not paid in this draw.
+              {totalStored > 0 ? ` You entered ${money(totalStored)} of stored materials.` : ''}
+            </p>
+            {hasLineItems && !hasPeriodWork && (
+              <p className="text-xs mt-1.5" style={{ color: '#c0392b' }}>
+                Enter work completed this period on at least one line: a draw cannot be made of stored materials alone.
+              </p>
+            )}
+          </div>
+        )}
+
+        {submitError && (
+          <div role="alert" className="rounded-xl border p-4 text-sm" style={{ background: 'rgba(231,76,60,0.08)', borderColor: 'rgba(231,76,60,0.3)', color: '#c0392b' }}>
+            {submitError}
           </div>
         )}
 
         <div className="flex gap-3">
           <button type="submit"
-            disabled={loading || overLimit || !form.project_id || (hasSov && !hasLineItems) || (!hasSov && !form.amount)}
+            disabled={loading || overLimit || !form.project_id || (hasSov && !hasPeriodWork) || (!hasSov && !form.amount)}
             className="px-6 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
             style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)' }}>
             {loading ? 'Submitting…' : 'Submit Draw Request'}

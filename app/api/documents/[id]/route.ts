@@ -15,10 +15,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   const body = await request.json()
-  const allowedStatuses = ['approved', 'rejected', 'pending_review', 'required']
+  const allowedStatuses = ['approved', 'rejected', 'required']
 
-  if (body.status && !allowedStatuses.includes(body.status)) {
-    return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+  if (!body?.status || !allowedStatuses.includes(body.status)) {
+    return NextResponse.json({ error: `status must be one of: ${allowedStatuses.join(', ')}` }, { status: 400 })
   }
 
   const { data, error } = await supabase

@@ -32,7 +32,8 @@ export default async function LenderDashboard() {
   const totalCommitted = projects.reduce((s, p) => s + p.loan_amount, 0)
   const totalDrawn = projects.reduce((s, p) => s + p.amount_drawn, 0)
   const pendingAmount = pendingDraws.reduce((s, d) => s + d.amount, 0)
-  const avgLtv = projects.length ? Math.round(totalDrawn / totalCommitted * 100) : 0
+  // Share of the committed loan amounts drawn so far (not a loan-to-value figure)
+  const portfolioDrawn = totalCommitted > 0 ? Math.round(totalDrawn / totalCommitted * 100) : null
 
   const stageBadge: Record<string, string> = {
     active: 'badge-green', approved: 'badge-blue', review: 'badge-yellow',
@@ -50,7 +51,7 @@ export default async function LenderDashboard() {
         <StatCard label="Active Loans" value={projects.filter(p => p.stage === 'active').length} icon="🏦" sub={`${projects.length} total`} />
         <StatCard label="Total Committed" value={formatCurrency(totalCommitted)} icon="💵" iconBg="rgba(201,164,87,0.15)" sub={`${formatCurrency(totalDrawn)} drawn`} />
         <StatCard label="Pending Approvals" value={pendingDraws.length} icon="⏳" iconBg="rgba(201,164,87,0.15)" sub={pendingAmount > 0 ? `${formatCurrency(pendingAmount)} awaiting` : 'None'} subColor={pendingAmount > 0 ? 'orange' : 'default'} />
-        <StatCard label="Avg Portfolio LTV" value={`${avgLtv}%`} icon="📊" iconBg="rgba(46,204,113,0.15)" sub={avgLtv < 80 ? '✓ Within policy' : '⚠ High LTV'} subColor={avgLtv < 80 ? 'green' : 'orange'} />
+        <StatCard label="Portfolio drawn" value={portfolioDrawn == null ? '—' : `${portfolioDrawn}%`} icon="📊" iconBg="rgba(46,204,113,0.15)" sub={portfolioDrawn == null ? 'No loan amounts yet' : `${formatCurrency(totalDrawn)} of ${formatCurrency(totalCommitted)}`} />
       </div>
 
       <div className="space-y-4">

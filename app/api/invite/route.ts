@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       full_name: name || '',
       company_name: company || '',
     },
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.buildchain.finance'}/login`,
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.buildchain.finance'}/auth/accept`,
   })
 
   if (error) {

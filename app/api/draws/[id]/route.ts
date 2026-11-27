@@ -50,7 +50,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 // The only draw statuses a lender or admin may set through this route.
-const SETTABLE_STATUSES = new Set(['approved', 'held', 'declined', 'funded'])
+// 'submitted' is accepted only to take a held draw off hold.
+const SETTABLE_STATUSES = new Set(['approved', 'held', 'declined', 'funded', 'submitted'])
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -118,6 +119,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
   if (body.status === 'approved' && draw.status === 'approved') {
     return NextResponse.json({ data: draw })
+  }
+  if (body.status === 'submitted' && draw.status !== 'held') {
+    return NextResponse.json({ error: 'Only a draw that is on hold can be returned to review' }, { status: 409 })
+  }
+  if (body.status === 'held' && !['submitted', 'pending'].includes(draw.status)) {
+    return NextResponse.json({ error: 'Only a draw awaiting review can be put on hold' }, { status: 409 })
   }
   if (body.status === 'funded' && draw.status !== 'approved' && draw.status !== 'funded') {
     return NextResponse.json({ error: 'Only an approved draw can be funded' }, { status: 409 })
@@ -488,7 +495,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         const { isXrplConfigured, mintLienWaiverNFT } = await import('@/lib/xrpl/escrow')
         const { runOrchestrator } = await import('@/lib/xrpl/orchestrator')
 
-        if (isXrplConfigured()) {
+        if ((draw as any).lien_waiver_nft_id) {
+          // Confirmed and recorded before: nothing to record again, just re-check release.
+          console.log('[Draws] Lien waiver already recorded — checking release')
+        } else if (isXrplConfigured()) {
           // Mint Lien Waiver NFT (XLS-20, taxon 2) — Patent §IV
           const nft = await mintLienWaiverNFT({
             drawRequestId: params.id,

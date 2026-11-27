@@ -18,7 +18,7 @@ export default async function LenderLoansPage() {
   const { data: lender } = await supabase
     .from('lenders')
     .select('id, company_name')
-    .eq('profile_id', user?.id)
+    .eq('profile_id', user?.id ?? '')
     .single()
 
   const { data: projects } = await supabase
@@ -35,6 +35,21 @@ export default async function LenderLoansPage() {
     const draws = p.draw_requests as { id: string; status: string; amount: number }[] | null || []
     return s + draws.filter(d => ['submitted', 'pending'].includes(d.status)).length
   }, 0) || 0
+
+  // What approving does depends on how the loans with a draw waiting settle.
+  // Pilot loans lock 1 test XRP from BuildChain's test wallet: no dollars move.
+  const waitingMethods = new Set(
+    (projects || [])
+      .filter(p => ((p.draw_requests as { status: string }[] | null) || []).some(d => ['submitted', 'pending'].includes(d.status)))
+      .map(p => (p.settlement_method as string | null) ?? 'test_xrp')
+  )
+  const anyPilot = waitingMethods.has('test_xrp')
+  const anyToken = waitingMethods.has('token_escrow') || waitingMethods.has('two_signature')
+  const approveNote = anyPilot && anyToken
+    ? 'Approving a pilot loan’s draw records it on the XRP Ledger test network. On the other loans you approve by signing in your wallet.'
+    : anyToken
+      ? 'You approve each draw by signing it in your wallet.'
+      : 'Approving records the draw on the XRP Ledger test network. No dollars move.'
 
   return (
     <div>
@@ -69,7 +84,7 @@ export default async function LenderLoansPage() {
             <span className="text-xl">⏳</span>
             <div>
               <div className="font-bold text-sm" style={{ color: 'var(--bc-gold-ink)' }}>{pendingDraws} draw request{pendingDraws !== 1 ? 's' : ''} need{pendingDraws === 1 ? 's' : ''} your review</div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>Approve to create XRPL escrow and lock funds on-chain</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--bc-muted)' }}>{approveNote}</div>
             </div>
           </div>
           <Link href="/lender/approvals"

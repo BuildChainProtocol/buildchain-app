@@ -28,7 +28,7 @@ export default function NewProjectPage() {
     name: '',
     address: '',
     city: '',
-    state: 'TX',
+    state: 'AZ',
     zip: '',
     property_type: 'single_family',
     borrower_id: '',

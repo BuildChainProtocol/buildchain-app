@@ -25,12 +25,15 @@ interface Draw {
   description: string | null
   status: string
   decline_reason: string | null
+  hold_reason: string | null
   submitted_at: string | null
   funded_at: string | null
-  // Verification flags
+  // Set when an inspection passes
   inspection_done: boolean
+  // The contractor's own statement that its lien waivers are signed.
+  // It is not the lender's confirmation: that is lien_waiver_nft_id.
   lien_waiver: boolean
-  // XRPL on-ledger state (Migration 012)
+  // Present once the lender has confirmed the waivers and the ledger record exists
   lien_waiver_nft_id: string | null
   lien_waiver_nft_minted_at: string | null
   escrow_txn_hash: string | null
@@ -51,12 +54,14 @@ function timeAgo(iso: string): string {
 }
 
 // Status values must match the draw_requests.status CHECK constraint in the DB:
-// ('draft','submitted','pending','approved','funded','declined')
+// ('draft','submitted','pending','approved','held','funded','declined', ...)
 // 'pending' and 'submitted' are both shown as "Submitted" to the borrower.
+// A held draw is still with the lender (step 1) but is shown as "On hold".
 const STATUS: Record<string, { label: string; color: string; bg: string; step: number }> = {
   draft:     { label: 'Draft',      color: 'var(--bc-muted)',  bg: 'rgba(107,129,152,0.12)', step: 0 },
   pending:   { label: 'Submitted',  color: '#b45309',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
   submitted: { label: 'Submitted',  color: '#b45309',  bg: 'rgba(243,156,18,0.12)',  step: 1 },
+  held:      { label: 'On hold',    color: '#b45309',  bg: 'rgba(107,129,152,0.14)', step: 1 },
   approved:  { label: 'Approved',   color: '#15803d',  bg: 'rgba(46,204,113,0.12)',  step: 2 },
   funded:    { label: 'Funded',     color: '#15803d',  bg: 'rgba(39,174,96,0.18)',   step: 3 },
   declined:  { label: 'Declined',   color: '#c0392b',  bg: 'rgba(231,76,60,0.12)',   step: -1 },
@@ -64,8 +69,10 @@ const STATUS: Record<string, { label: string; color: string; bg: string; step: n
 
 // 3-step real pipeline: Submitted (step 1) → Approved (step 2) → Funded (step 3)
 const PIPELINE = ['Submitted', 'Approved', 'Funded']
-const FILTERS  = ['All', 'Submitted', 'Approved', 'Funded', 'Declined']
+const FILTERS  = ['All', 'Submitted', 'On hold', 'Approved', 'Funded', 'Declined']
 const POLL_MS  = 30_000
+// The pilot runs on the XRP Ledger test network. Every explorer link in this file starts here.
+const XRPL_EXPLORER = 'https://testnet.xrpl.org'
 
 export default function BorrowerDrawsSection() {
   const [draws, setDraws]         = useState<Draw[]>([])
@@ -73,14 +80,18 @@ export default function BorrowerDrawsSection() {
   const [filter, setFilter]       = useState('All')
   const [lastAt, setLastAt]       = useState<Date | null>(null)
   const [refreshing, setRefresh]  = useState(false)
+  const [loadError, setLoadError] = useState('')
   const timerRef                  = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchDraws = useCallback(async (silent = false) => {
     if (!silent) setRefresh(true)
     try {
       const res  = await fetch('/api/draws?mine=true', { cache: 'no-store' })
-      const json = await res.json()
-      if (json.data) { setDraws(json.data); setLastAt(new Date()) }
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && json.data) { setDraws(json.data); setLastAt(new Date()); setLoadError('') }
+      else setLoadError(json.error || `Your draws could not be loaded (${res.status})`)
+    } catch {
+      setLoadError('Your draws could not be loaded: the server could not be reached')
     } finally {
       setLoading(false)
       setRefresh(false)
@@ -162,6 +173,13 @@ export default function BorrowerDrawsSection() {
         ))}
       </div>
 
+      {loadError && (
+        <div role="alert" className="rounded-xl border p-3 mb-4 text-sm"
+          style={{ background: 'rgba(231,76,60,0.08)', borderColor: 'rgba(231,76,60,0.3)', color: '#c0392b' }}>
+          {loadError}
+        </div>
+      )}
+
       {/* Content */}
       {loading ? (
         <div className="rounded-xl border p-10 text-center text-sm"
@@ -184,7 +202,9 @@ export default function BorrowerDrawsSection() {
             const step        = cfg.step
             const isDeclined  = draw.status === 'declined'
             const isDraft     = draw.status === 'draft'
+            const isHeld      = draw.status === 'held'
             const showPipeline = !isDeclined && !isDraft && step > 0
+            const waiverRecorded = !!draw.lien_waiver_nft_id
             const displayAmt  = draw.net_amount ?? draw.amount
 
             return (
@@ -262,6 +282,16 @@ export default function BorrowerDrawsSection() {
                   </div>
                 )}
 
+                {/* On hold banner */}
+                {isHeld && (
+                  <div className="mb-3 px-3 py-2 rounded-lg text-xs font-medium"
+                    style={{ background: 'rgba(243,156,18,0.08)', color: '#b45309', border: '1px solid rgba(243,156,18,0.25)' }}>
+                    {draw.hold_reason
+                      ? <><span className="opacity-70">Your lender put this draw on hold: </span>{draw.hold_reason}</>
+                      : 'Your lender put this draw on hold and gave no reason. Contact your lender for details.'}
+                  </div>
+                )}
+
                 {/* Declined banner */}
                 {isDeclined && (
                   <div className="mb-3 px-3 py-2 rounded-lg text-xs font-medium"
@@ -294,40 +324,44 @@ export default function BorrowerDrawsSection() {
                   <div className="rounded-lg border p-3"
                     style={{ background: 'rgba(45,125,210,0.04)', borderColor: 'rgba(45,125,210,0.2)' }}>
                     <div className="text-xs font-bold mb-2" style={{ color: 'var(--bc-blue)' }}>
-                      ⬡ On-Chain Verification (patent pending)
+                      Release conditions (patent pending)
                     </div>
                     <div className="space-y-1.5">
-                      {/* Condition 1: Inspector Credential */}
-                      <div className="flex items-center justify-between text-xs">
-                        <span style={{ color: 'var(--bc-muted)' }}>① Inspector Credential</span>
+                      {/* Condition 1: inspection */}
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span style={{ color: 'var(--bc-muted)' }}>1. Inspection</span>
                         {draw.inspection_done ? (
-                          <span style={{ color: '#15803d' }}>✅ Verified</span>
+                          <span style={{ color: '#15803d' }}>Passed</span>
                         ) : (
-                          <span style={{ color: 'var(--bc-muted)' }}>⏳ Awaiting inspection</span>
+                          <span style={{ color: 'var(--bc-muted)' }}>Not yet passed</span>
                         )}
                       </div>
-                      {/* Condition 2: Lien Waiver NFT */}
-                      <div className="flex items-center justify-between text-xs">
-                        <span style={{ color: 'var(--bc-muted)' }}>② Lien Waiver NFT</span>
-                        {draw.lien_waiver_nft_id ? (
-                          <span style={{ color: '#15803d' }}>✅ On-ledger</span>
+                      {/* Condition 2: the lender's confirmation of the lien waivers */}
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span style={{ color: 'var(--bc-muted)' }}>2. Lien waivers</span>
+                        {waiverRecorded ? (
+                          <span style={{ color: '#15803d' }}>Confirmed by your lender and recorded</span>
                         ) : draw.lien_waiver ? (
-                          <span style={{ color: '#b45309' }}>⏳ Confirmed — minting NFT…</span>
+                          <span className="text-right" style={{ color: '#b45309' }}>Reported signed; waiting for your lender to confirm</span>
                         ) : (
-                          <span style={{ color: 'var(--bc-muted)' }}>⏳ Awaiting lender confirmation</span>
+                          <span className="text-right" style={{ color: 'var(--bc-muted)' }}>Not confirmed by your lender</span>
                         )}
                       </div>
                     </div>
-                    {draw.inspection_done && draw.lien_waiver && (
-                      <div className="mt-2 text-xs font-semibold" style={{ color: '#b45309' }}>
-                        Both conditions met — orchestrator processing auto-release…
+                    {draw.inspection_done && waiverRecorded ? (
+                      <div className="mt-2 text-xs font-semibold" style={{ color: '#15803d' }}>
+                        Both conditions are recorded. Processing release.
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs" style={{ color: 'var(--bc-muted)' }}>
+                        The draw is released once the inspection has passed and your lender has confirmed the lien waivers.
                       </div>
                     )}
                     {draw.escrow_txn_hash && (
                       <div className="mt-2 text-xs" style={{ color: 'var(--bc-muted)' }}>
                         Escrow:{' '}
                         <a
-                          href={`https://testnet.xrpl.org/transactions/${draw.escrow_txn_hash}`}
+                          href={`${XRPL_EXPLORER}/transactions/${draw.escrow_txn_hash}`}
                           target="_blank" rel="noopener noreferrer"
                           className="font-mono" style={{ color: 'var(--bc-blue)' }}>
                           {draw.escrow_txn_hash.slice(0, 10)}…

@@ -225,6 +225,7 @@ export async function releaseDraw(draw: {
   id: string
   settlement_method?: string | null
   escrow_sequence?: number | null
+  escrow_finish_after?: string | null
   escrow_owner?: string | null
   settlement_amount?: number | string | null
   settlement_payee?: string | null
@@ -238,6 +239,11 @@ export async function releaseDraw(draw: {
 
   if (method === 'test_xrp') {
     if (draw.escrow_sequence == null) throw new Error('This draw has no escrow to release')
+    // The escrow cannot be finished before its hold period ends (30 seconds by
+    // default). Both conditions can be met sooner than that: wait it out
+    // rather than fail, since nothing would try again.
+    const wait = draw.escrow_finish_after ? new Date(draw.escrow_finish_after).getTime() + 4000 - Date.now() : 0
+    if (wait > 0 && wait <= 45000) await new Promise(res => setTimeout(res, wait))
     return finishDrawEscrow({ escrowSequence: draw.escrow_sequence, drawRequestId: draw.id, trigger })
   }
 

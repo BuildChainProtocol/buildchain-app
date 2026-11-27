@@ -54,7 +54,9 @@ export async function POST(req: NextRequest) {
     const scheduled = parseFloat(line.scheduled_value) || 0
     const pct = scheduled > 0 ? Math.round((total / scheduled) * 10000) / 100 : 0
     const balance = scheduled - total
-    const retainage_rate = parseFloat(draw?.retainage_rate) || 0.10
+    // A rate of 0 is a real choice (no retainage); only a missing rate falls back to 10%.
+    const parsedRate = parseFloat(draw?.retainage_rate)
+    const retainage_rate = Number.isFinite(parsedRate) && parsedRate >= 0 && parsedRate < 1 ? parsedRate : 0.10
     const retainage_amount = Math.round(period * retainage_rate * 100) / 100
     const current_payment_due = Math.round((period - retainage_amount) * 100) / 100
 

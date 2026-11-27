@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('draw_requests')
-    .select(`*, projects(name, loan_number, borrower_id, lender_id, loan_amount, amount_drawn)`)
+    .select(`*, projects(name, loan_number, borrower_id, lender_id, loan_amount, amount_drawn, settlement_method)`)
     .order('created_at', { ascending: false })
 
   // mine=true → filter to this user's borrower projects only
@@ -32,7 +32,12 @@ export async function GET(request: NextRequest) {
   }
 
   if (projectId) query = query.eq('project_id', projectId)
-  if (status) query = query.eq('status', status)
+  // status may be one value or a comma-separated list (e.g. status=submitted,pending)
+  if (status) {
+    const wanted = status.split(',').map(s => s.trim()).filter(Boolean)
+    if (wanted.length === 1) query = query.eq('status', wanted[0])
+    else if (wanted.length > 1) query = query.in('status', wanted)
+  }
 
   const { data, error } = await query
 

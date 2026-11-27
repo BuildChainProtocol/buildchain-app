@@ -4,7 +4,7 @@
  * Every released draw gets one row in fee_accruals: the fee under the rate in
  * force (0.30% of the amount released unless PROTOCOL_FEE_BPS says otherwise)
  * and whether it is waived. Fees are waived unless PROTOCOL_FEES_ACTIVE is
- * 'true', and always on the test network. This is a record for a statement;
+ * 'true', always on the test network, and on a lender's first real draw. This is a record for a statement;
  * it charges no one.
  */
 
@@ -40,7 +40,16 @@ export async function recordFeeAccrual(draw: {
     const released = Number(draw.settlement_amount ?? draw.net_amount ?? draw.amount)
     const testnet = isTestnet()
     const active = process.env.PROTOCOL_FEES_ACTIVE === 'true'
-    const waived = testnet || !active
+    // "The first draw is free": the first real (mainnet) draw released for a
+    // lender carries no fee. Counted per lender, so it is the first draw of
+    // that lender's first loan.
+    let firstDraw = false
+    if (!testnet && active && project?.lender_id) {
+      const { count } = await supabase.from('fee_accruals').select('id', { count: 'exact', head: true })
+        .eq('lender_id', project.lender_id).eq('network', 'mainnet').neq('draw_request_id', draw.id)
+      firstDraw = (count ?? 0) === 0
+    }
+    const waived = testnet || !active || firstDraw
     await supabase.from('fee_accruals').upsert({
       draw_request_id: draw.id,
       project_id: draw.project_id,
@@ -50,7 +59,7 @@ export async function recordFeeAccrual(draw: {
       rate_bps: feeRateBps(),
       fee_amount: feeFor(released),
       waived,
-      waiver_reason: testnet ? 'Pilot on the test network: no funds moved' : !active ? 'Fees not yet in force' : null,
+      waiver_reason: testnet ? 'Pilot on the test network: no funds moved' : !active ? 'Fees not yet in force' : firstDraw ? 'First draw free' : null,
       settlement_method: draw.settlement_method ?? 'test_xrp',
       network: testnet ? 'testnet' : 'mainnet',
     }, { onConflict: 'draw_request_id', ignoreDuplicates: true })

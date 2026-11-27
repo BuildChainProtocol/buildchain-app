@@ -12,8 +12,28 @@ export async function GET() {
     .order('company_name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  // Admins also see which account each record is linked to. Nobody else gets
+  // this field: the lookup runs only for an admin, with the admin's own session.
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if ((me as { role?: string } | null)?.role === 'admin') {
+    const rows = (data ?? []) as { profile_id: string | null }[]
+    const ids = rows.map(r => r.profile_id).filter((v): v is string => !!v)
+    const emailById = new Map<string, string | null>()
+    if (ids.length > 0) {
+      const { data: accounts } = await supabase.from('profiles').select('id, email').in('id', ids)
+      for (const a of (accounts ?? []) as { id: string; email: string | null }[]) emailById.set(a.id, a.email)
+    }
+    return NextResponse.json({
+      data: rows.map(r => ({ ...r, account_email: r.profile_id ? emailById.get(r.profile_id) ?? null : null })),
+    })
+  }
+
   return NextResponse.json({ data })
 }
+
+// The values the borrowers.rating check constraint allows (migration 001).
+const RATINGS = ['preferred', 'standard', 'new', 'probation']
 
 export async function POST(request: NextRequest) {
   const supabase = createClient()
@@ -34,7 +54,7 @@ export async function POST(request: NextRequest) {
       phone: body.phone || null,
       license_number: body.license_number || null,
       license_state: body.license_state || null,
-      rating: body.rating || 'B',
+      rating: RATINGS.includes(body.rating) ? body.rating : 'new',
       active: true,
     })
     .select()

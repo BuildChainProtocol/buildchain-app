@@ -34,6 +34,9 @@ export default function ProfilePage() {
     phone: '',
     xrp_address: '',
   })
+  // The wallet as the server last reported it, to tell whether the field was changed
+  const [savedWallet, setSavedWallet] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
   const [pwError, setPwError] = useState('')
 
@@ -71,6 +74,7 @@ export default function ProfilePage() {
       phone: p.phone || '',
       xrp_address: xrpAddress,
     })
+    setSavedWallet(xrpAddress)
     setLoading(false)
   }
 
@@ -78,28 +82,56 @@ export default function ProfilePage() {
 
   async function saveProfile() {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    setSaveError('')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setSaveError('Your session has ended. Sign in again to save.'); return }
 
-    await supabase.from('profiles').update({
-      full_name: form.full_name,
-      company_name: form.company_name,
-      phone: form.phone,
-      updated_at: new Date().toISOString(),
-    }).eq('id', user.id)
+      // 1. Name, company and phone: the user's own profile row
+      const { data: savedRows, error: profileError } = await supabase.from('profiles').update({
+        full_name: form.full_name,
+        company_name: form.company_name,
+        phone: form.phone,
+        updated_at: new Date().toISOString(),
+      }).eq('id', user.id).select('id')
+      if (profileError || !savedRows?.length) {
+        setSaveError(`Your profile was not saved: ${profileError?.message || 'the change was not accepted'}`)
+        return
+      }
 
-    if (profile?.role === 'borrower' && roleRow) {
-      await supabase.from('borrowers')
-        .update({ xrp_address: form.xrp_address || null })
-        .eq('id', roleRow.id)
-    } else if (profile?.role === 'lender' && roleRow) {
-      await supabase.from('lenders')
-        .update({ xrp_address: form.xrp_address || null })
-        .eq('id', roleRow.id)
+      // 2. Payout wallet (contractors only): saved by the server, which checks
+      //    the address and refuses a change while a draw is waiting on the wallet.
+      //    A lender's wallet is changed on the Funding page, never here.
+      const wanted = form.xrp_address.trim()
+      const walletChanged = profile?.role === 'borrower' && wanted !== savedWallet
+      if (walletChanged) {
+        let res: Response
+        try {
+          res = await fetch('/api/wallet', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: wanted || null }),
+          })
+        } catch {
+          setSaveError('Your name, company and phone were saved. The wallet was not: the server could not be reached.')
+          return
+        }
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setSaveError(`Your name, company and phone were saved. The wallet was not: ${json.error || `the server answered ${res.status}`}`)
+          return
+        }
+        const now = json.data?.xrp_address || ''
+        setSavedWallet(now)
+        setForm(f => ({ ...f, xrp_address: now }))
+      }
+
+      showToast(walletChanged ? 'Profile and wallet saved' : 'Profile updated', true)
+    } catch {
+      setSaveError('Your changes were not saved: the server could not be reached.')
+    } finally {
+      setSaving(false)
     }
-
-    setSaving(false)
-    showToast('Profile updated', true)
   }
 
   async function changePassword() {
@@ -221,21 +253,55 @@ export default function ProfilePage() {
           </div>
 
           {/* XRP address — borrowers and lenders only */}
-          {(profile.role === 'borrower' || profile.role === 'lender') && (
+          {profile.role === 'borrower' && (
             <div>
               <label className={labelClass} style={labelStyle}>
-                XRP Wallet Address
+                Payout wallet
                 <span className="ml-2 font-normal normal-case" style={{ color: 'var(--bc-muted)' }}>
-                  — for XRPL escrow routing
+                  — XRP Ledger address
                 </span>
               </label>
-              <input value={form.xrp_address} onChange={e => set('xrp_address', e.target.value)}
-                placeholder="rN7n3473SaZBCG4dFL83w7PB5mMa5xBGF"
-                className={inputClass} style={{ ...inputStyle, fontFamily: 'monospace' }} />
+              {roleRow ? (
+                <>
+                  <input value={form.xrp_address} onChange={e => set('xrp_address', e.target.value)}
+                    placeholder="An address that starts with r"
+                    spellCheck={false} autoComplete="off"
+                    className={inputClass} style={{ ...inputStyle, fontFamily: 'monospace' }} />
+                  <p className="text-xs mt-1" style={{ color: 'var(--bc-muted)' }}>
+                    Draw releases on the XRP Ledger are addressed to this wallet. Enter the classic address (it starts with &quot;r&quot;). Leave it empty to remove it. It cannot be changed while a draw is waiting on it.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm" style={{ color: 'var(--bc-muted)' }}>
+                  Your account is not linked to a contractor record yet, so there is no payout wallet to set. Ask BuildChain to link your account.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* A lender's wallet is confirmed by signing in Xaman, so it is read-only here */}
+          {profile.role === 'lender' && (
+            <div>
+              <label className={labelClass} style={labelStyle}>
+                Lending wallet
+                <span className="ml-2 font-normal normal-case" style={{ color: 'var(--bc-muted)' }}>
+                  — XRP Ledger address
+                </span>
+              </label>
+              <div className={inputClass} style={{ ...inputStyle, fontFamily: 'monospace', opacity: 0.75, wordBreak: 'break-all' }}>
+                {savedWallet || 'No wallet connected'}
+              </div>
               <p className="text-xs mt-1" style={{ color: 'var(--bc-muted)' }}>
-                When set, draw escrow funds route to this address on the XRPL.
+                Your lending wallet is confirmed by signing in Xaman, so it cannot be typed in here.{' '}
+                <a href="/lender/funding" className="underline" style={{ color: 'var(--bc-blue)' }}>
+                  {savedWallet ? 'Change it on the Funding page' : 'Connect it on the Funding page'}
+                </a>
               </p>
             </div>
+          )}
+
+          {saveError && (
+            <p role="alert" className="text-sm" style={{ color: '#c0392b' }}>{saveError}</p>
           )}
 
           <div className="pt-2">
