@@ -68,5 +68,6 @@ create policy "Lenders read their own fee accruals" on public.fee_accruals
   for select using (exists (
     select 1 from public.lenders l where l.id = fee_accruals.lender_id and l.profile_id = auth.uid()));
 
+revoke all on public.fee_accruals from anon, authenticated;
 grant select on public.fee_accruals to authenticated;
 grant all on public.fee_accruals to service_role;
