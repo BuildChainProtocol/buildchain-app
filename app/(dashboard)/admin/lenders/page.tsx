@@ -303,7 +303,7 @@ export default function AdminLendersPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Lenders</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--bc-muted)' }}>{activeLenders.length} active lenders on the platform</p>
+          <p className="text-sm mt-1" style={{ color: 'var(--bc-muted)' }}>{activeLenders.length} active {activeLenders.length === 1 ? 'lender' : 'lenders'} on the platform</p>
         </div>
         <button onClick={() => setShowModal(true)}
           className="px-4 py-2 rounded-lg text-sm font-bold"

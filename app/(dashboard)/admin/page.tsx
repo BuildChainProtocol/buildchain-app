@@ -40,7 +40,7 @@ export default async function AdminDashboard() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Active Projects" value={projects?.filter(p => p.stage === 'active').length || 0} icon="🏗" sub={`${projects?.length || 0} total`} />
-        <StatCard label="Total Portfolio" value={formatCurrency(totalPortfolio)} icon="💰" iconBg="rgba(45,125,210,0.15)" sub={`across ${projects?.length || 0} projects`} />
+        <StatCard label="Total Portfolio" value={formatCurrency(totalPortfolio)} icon="💰" iconBg="rgba(45,125,210,0.15)" sub={`across ${projects?.length || 0} ${(projects?.length || 0) === 1 ? 'project' : 'projects'}`} />
         <StatCard label="Pending Draws" value={pendingDraws?.length || 0} icon="📋" iconBg="rgba(201,164,87,0.15)" sub={pendingDraws && pendingDraws.length > 0 ? '⚠ Needs review' : 'All clear'} subColor={pendingDraws && pendingDraws.length > 0 ? 'orange' : 'default'} />
         {/* Every draw with status "funded", no date filter: a count, with the sum of their draw amounts. No dollars move in the pilot. */}
         <StatCard label="Draws released (pilot)" value={allDraws?.length || 0} icon="✅" iconBg="rgba(46,204,113,0.15)" sub={`all time, test network · ${formatCurrency(totalFunded)} in draw amounts`} />

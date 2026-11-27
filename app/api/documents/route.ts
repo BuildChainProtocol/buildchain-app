@@ -109,7 +109,8 @@ export async function POST(request: NextRequest) {
         .from('profiles').select('full_name, company_name').eq('id', user.id).single()
 
       // Get admin emails from profiles table
-      const { data: admins } = await supabase
+      // An uploader cannot read other people's profiles; the server looks the admins up.
+      const { data: admins } = await serviceClient()
         .from('profiles').select('email').eq('role', 'admin')
 
       const adminEmails = (admins ?? []).map((a: any) => a.email).filter(Boolean)

@@ -392,7 +392,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     let borrowerEmail: string | null = null
     let borrowerName  = 'Borrower'
     if (borrowerRow?.profile_id) {
-      const { data: bp } = await supabase
+      const { data: bp } = await admin
         .from('profiles').select('email, full_name, company_name').eq('id', borrowerRow.profile_id).single()
       borrowerEmail = bp?.email ?? borrowerRow.email ?? null
       borrowerName  = bp?.full_name ?? bp?.company_name ?? borrowerRow.company_name ?? 'Borrower'

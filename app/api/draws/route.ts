@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { serviceClient } from '@/lib/supabase/service'
 import { sendEmail } from '@/lib/email/send'
 import { drawSubmittedEmail } from '@/lib/email/templates'
 
@@ -113,7 +114,8 @@ export async function POST(request: NextRequest) {
 
     // Prefer auth email from profiles (more reliable than lenders.email)
     if (lenderRow?.profile_id) {
-      const { data: lp } = await supabase
+      // A borrower cannot read the lender's profile; the server looks it up.
+      const { data: lp } = await serviceClient()
         .from('profiles').select('email, full_name').eq('id', lenderRow.profile_id).single()
       if (lp?.email) { lenderEmail = lp.email; lenderName = lp.full_name ?? lenderName }
     }

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { serviceClient } from '@/lib/supabase/service'
 
 export async function GET() {
   const supabase = createClient()
@@ -14,14 +15,15 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   // Admins also see which account each record is linked to. Nobody else gets
-  // this field: the lookup runs only for an admin, with the admin's own session.
+  // this field. A person can read only their own profile, an admin included,
+  // so once the caller is known to be an admin the lookup uses the service key.
   const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if ((me as { role?: string } | null)?.role === 'admin') {
     const rows = (data ?? []) as { profile_id: string | null }[]
     const ids = rows.map(r => r.profile_id).filter((v): v is string => !!v)
     const emailById = new Map<string, string | null>()
     if (ids.length > 0) {
-      const { data: accounts } = await supabase.from('profiles').select('id, email').in('id', ids)
+      const { data: accounts } = await serviceClient().from('profiles').select('id, email').in('id', ids)
       for (const a of (accounts ?? []) as { id: string; email: string | null }[]) emailById.set(a.id, a.email)
     }
     return NextResponse.json({

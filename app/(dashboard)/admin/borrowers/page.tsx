@@ -344,7 +344,7 @@ export default function AdminBorrowersPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Borrowers</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--bc-muted)' }}>{activeBorrowers.length} active borrowers on the platform</p>
+          <p className="text-sm mt-1" style={{ color: 'var(--bc-muted)' }}>{activeBorrowers.length} active {activeBorrowers.length === 1 ? 'borrower' : 'borrowers'} on the platform</p>
         </div>
         <button onClick={() => setShowModal(true)}
           className="px-4 py-2 rounded-lg text-sm font-bold"
