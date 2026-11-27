@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { formatCurrency, timeAgo } from '@/lib/utils'
 import BudgetTab from '@/components/shared/BudgetTab'
+import SettlementCard from '@/components/admin/SettlementCard'
 
 const STAGES = ['application', 'review', 'approved', 'active', 'complete', 'cancelled']
 const stageBadge: Record<string, string> = {
@@ -156,6 +157,8 @@ export default function ProjectDetailPage() {
         className="text-sm mb-4 hover:underline" style={{ color: 'var(--bc-muted)' }}>
         ← All Projects
       </button>
+
+      <SettlementCard projectId={project.id} />
 
       {/* Hero */}
       <div className="rounded-xl border overflow-hidden mb-5" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>

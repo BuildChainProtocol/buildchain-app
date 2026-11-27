@@ -27,7 +27,7 @@
  * release routes do not call this file yet.
  */
 
-import { multisign } from 'xrpl'
+import { decode, multisign } from 'xrpl'
 import type { Client, Wallet } from 'xrpl'
 
 const RIPPLE_EPOCH = 946684800
@@ -340,4 +340,54 @@ export async function submitMultisigned(client: Client, signedBlobs: string[]): 
   const combined = signedBlobs.length > 1 ? multisign(signedBlobs) : signedBlobs[0]
   const done = await submitAndConfirm(client, combined)
   return { hash: done.hash }
+}
+
+/**
+ * The lender's signature over a release, as it comes back from the lender's
+ * wallet. Checks that what was signed is exactly the payment BuildChain asked
+ * for, signed by the lender and nobody else. Returns every problem found.
+ */
+export function verifyLenderSignedRelease(signedBlob: string, expected: Tx, lender: string): string[] {
+  let tx: Tx
+  try { tx = decode(signedBlob) as Tx } catch { return ['The signed transaction could not be read'] }
+  const problems: string[] = []
+  // Compare by value, whatever order the fields come back in.
+  const canon = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(canon)
+      : v && typeof v === 'object'
+        ? Object.keys(v as Tx).sort().reduce((acc: Tx, k) => { acc[k] = canon((v as Tx)[k]); return acc }, {})
+        : v
+  const same = (a: unknown, b: unknown) => JSON.stringify(canon(a)) === JSON.stringify(canon(b))
+  for (const field of ['TransactionType', 'Account', 'Destination', 'Sequence', 'TicketSequence', 'Fee', 'Memos']) {
+    if (!same(tx[field], expected[field])) problems.push(`${field} is not what was requested`)
+  }
+  // The ledger's encoding drops trailing zeros ("61500.50" comes back as
+  // "61500.5"), so the amount is compared as a number of cents.
+  const got = tx.Amount as { currency?: string; issuer?: string; value?: string } | string | undefined
+  const want = expected.Amount as { currency: string; issuer: string; value: string }
+  const cents = (v?: string) => Math.round(Number(v) * 100)
+  if (!got || typeof got === 'string' || got.currency !== want.currency || got.issuer !== want.issuer ||
+      !Number.isFinite(Number(got.value)) || cents(got.value) !== cents(want.value) ||
+      Math.abs(Number(got.value) - Number(want.value)) > 1e-9) {
+    problems.push('Amount is not what was requested')
+  }
+  for (const field of ['SendMax', 'Paths', 'DeliverMin', 'LastLedgerSequence', 'Flags', 'DestinationTag']) {
+    if (tx[field] !== undefined && tx[field] !== 0) problems.push(`Unexpected ${field}`)
+  }
+  if (tx.SigningPubKey !== '') problems.push('Not a multi-signature transaction')
+  const signers = (tx.Signers as Array<{ Signer: { Account: string } }> | undefined) ?? []
+  if (signers.length !== 1 || signers[0].Signer.Account !== lender) problems.push('It is not signed by the lender alone')
+  return problems
+}
+
+/**
+ * BuildChain's half of a release: add its signature to the payment the
+ * lender already signed and submit both. Called only when both draw
+ * conditions are recorded.
+ */
+export async function countersignAndSubmit(client: Client, buildchain: Wallet, lenderSignedBlob: string): Promise<{ hash: string }> {
+  const tx = decode(lenderSignedBlob) as Tx
+  delete tx.Signers
+  delete tx.TxnSignature
+  return submitMultisigned(client, [lenderSignedBlob, signAsSigner(buildchain, tx)])
 }

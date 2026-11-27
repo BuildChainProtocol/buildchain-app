@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { sendEmail } from '@/lib/email/send'
 import { drawApprovedEmail, drawDeclinedEmail, drawFundedEmail } from '@/lib/email/templates'
+import { isTokenMethod } from '@/lib/xrpl/release'
 
 // Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
 export const runtime = 'nodejs'
@@ -88,7 +89,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // Fetch the draw before we mutate anything
   const { data: draw, error: fetchError } = await supabase
     .from('draw_requests')
-    .select('*, projects(name, borrower_id, borrowers(xrp_address))')
+    .select('*, projects(name, borrower_id, settlement_method, borrowers(xrp_address))')
     .eq('id', params.id)
     .single()
 
@@ -120,8 +121,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (body.status === 'approved') {
     updates.approved_by = user.id
 
-    // XRPL EscrowCreate — now includes drawRequestId + projectId for on-ledger memo
-    try {
+    // Dollar-token settlement: the lender locks the draw by signing it in
+    // their own wallet (see /api/draws/[id]/sign). Approval only records that.
+    const tokenSettled = isTokenMethod((draw.projects as any)?.settlement_method)
+    if (tokenSettled && (draw as any).settlement_state !== 'locked') {
+      return NextResponse.json(
+        { error: 'The lender signs this draw in their wallet before it can be approved', code: 'signature_needed' },
+        { status: 409 }
+      )
+    }
+
+    // Pilot method: BuildChain's test wallet creates the escrow.
+    if (!tokenSettled) try {
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
       if (isXrplConfigured()) {
         // Prefer gc_wallet (set by BB on submit) over the borrower's registered XRP address
@@ -168,17 +179,24 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ data: draw })
     }
 
+    // A dollar-token draw is released only by the Verification Orchestrator,
+    // once the inspection and the lien waiver are both recorded. That is what
+    // the lender signed for, so there is no manual release.
+    if (isTokenMethod((draw as any).settlement_method)) {
+      return NextResponse.json(
+        { error: 'This draw releases automatically once the inspection and the lien waiver are both recorded' },
+        { status: 409 }
+      )
+    }
+
     updates.funded_at = new Date().toISOString()
 
     try {
-      const { isXrplConfigured, finishDrawEscrow } = await import('@/lib/xrpl/escrow')
+      const { isXrplConfigured } = await import('@/lib/xrpl/escrow')
+      const { releaseDraw } = await import('@/lib/xrpl/release')
 
       if (isXrplConfigured() && draw.escrow_sequence != null) {
-        const finish = await finishDrawEscrow({
-          escrowSequence: draw.escrow_sequence,
-          drawRequestId: params.id,
-          trigger: 'manual',
-        })
+        const finish = await releaseDraw(draw as any, 'manual')
         updates.escrow_finish_hash = finish.txnHash
         console.log(`[XRPL] EscrowFinish OK — hash ${finish.txnHash}`)
       }

@@ -32,7 +32,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { finishDrawEscrow, isXrplConfigured } from './escrow'
+import { isXrplConfigured } from './escrow'
+import { isTokenMethod, releaseDraw } from './release'
 import { sendEmail } from '@/lib/email/send'
 import { drawFundedEmail } from '@/lib/email/templates'
 
@@ -87,6 +88,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       inspection_done, lien_waiver,
       lien_waiver_nft_id,
       escrow_sequence, escrow_txn_hash,
+      settlement_method, settlement_state, escrow_owner, lender_signed_blob,
       payees,
       inspections!draw_request_id ( id, status, credential_nft_id ),
       projects (
@@ -173,15 +175,17 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     let escrowFinishHash: string | null = null
 
     // Step (b): Submit EscrowFinish to XRPL with 'orchestrator' trigger
-    if (isXrplConfigured() && draw.escrow_sequence != null) {
-      const finish = await finishDrawEscrow({
-        escrowSequence: draw.escrow_sequence,
-        drawRequestId: drawId,
-        trigger: 'orchestrator',
-      })
+    const tokenSettled = isTokenMethod((draw as any).settlement_method)
+    if (tokenSettled && (draw as any).settlement_state !== 'locked') {
+      throw new Error('The lender has not locked this draw, so there is nothing to release')
+    }
+    if (isXrplConfigured() && (draw.escrow_sequence != null || (draw as any).lender_signed_blob)) {
+      const finish = await releaseDraw(draw as any, 'orchestrator')
       escrowFinishHash = finish.txnHash
       result.finishHash = escrowFinishHash
       console.log(`[Orchestrator] EscrowFinish OK — hash ${escrowFinishHash}`)
+    } else if (tokenSettled) {
+      throw new Error('The ledger is not configured, so the draw cannot be released')
     } else {
       console.log('[Orchestrator] XRPL not configured or no escrow — transitioning without on-chain finish')
     }
@@ -204,6 +208,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         funded_at: new Date().toISOString(),
         verification_receipt: verificationReceipt,
         ...(escrowFinishHash ? { escrow_finish_hash: escrowFinishHash } : {}),
+        ...(tokenSettled ? { settlement_state: 'released' } : {}),
       })
       .eq('id', drawId)
       .eq('status', 'approved') // Guard: only update if still approved (prevents double-fund race)

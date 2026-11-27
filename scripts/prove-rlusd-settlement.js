@@ -134,7 +134,13 @@ async function main() {
   await expectRefused('the lender\'s signature alone releases nothing', () => S.submitMultisigned(client, [lenderSig]))
   const bcSig = S.signAsSigner(bc, release)                     // only when both conditions are recorded
   await expectRefused('BuildChain\'s signature alone releases nothing', () => S.submitMultisigned(client, [bcSig]))
-  const rel = await S.submitMultisigned(client, [lenderSig, bcSig])
+  ok('BuildChain confirms the lender signed exactly this release',
+    S.verifyLenderSignedRelease(lenderSig, release, lender.address).length === 0)
+  ok('a signature over a different amount is caught',
+    S.verifyLenderSignedRelease(S.signAsSigner(lender, { ...release, Amount: S.tokenAmount(token, draw3 + 1) }), release, lender.address).length > 0)
+  ok('a signature from someone other than the lender is caught',
+    S.verifyLenderSignedRelease(S.signAsSigner(payee, release), release, lender.address).length > 0)
+  const rel = await S.countersignAndSubmit(client, bc, lenderSig)   // what the app does at release
   console.log(`      Release payment ${rel.hash}`)
   ok('payee received exactly the draw', Number(await S.tokenBalance(client, payee.address, token)) === payeeBefore + draw3)
   ok('loan account holds the remainder', Number(await S.tokenBalance(client, loan.address, token)) === 200000 - draw3)

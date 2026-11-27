@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { formatCurrency, timeAgo } from '@/lib/utils'
+import SignDrawPanel from '@/components/lender/SignDrawPanel'
+import LenderWalletCard from '@/components/lender/LenderWalletCard'
 
 type TabKey = 'submitted' | 'approved' | 'declined'
 
@@ -128,6 +130,9 @@ export default function LenderApprovalsPage() {
     setLienWaiverLoading(null)
   }
 
+  // The draw whose approval is open for signing (dollar-token loans sign in Xaman).
+  const [signDrawId, setSignDrawId] = useState<string | null>(null)
+
   async function act(id: string, status: string, decline_reason?: string) {
     setActionLoading(id + status)
     setErrorMsg('')
@@ -158,6 +163,13 @@ export default function LenderApprovalsPage() {
 
   return (
     <div>
+      {signDrawId && (
+        <SignDrawPanel
+          drawId={signDrawId}
+          onApprove={() => { const id = signDrawId; setSignDrawId(null); act(id, 'approved') }}
+          onClose={() => setSignDrawId(null)}
+        />
+      )}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-xl"
           style={{ background: toast.ok ? 'var(--bc-gold)' : '#c0392b', color: '#fff' }}>
@@ -228,6 +240,8 @@ export default function LenderApprovalsPage() {
           Review pending draws and track your full approval history
         </p>
       </div>
+
+      <LenderWalletCard />
 
       {/* Tab bar */}
       <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-xl" style={{ background: 'rgba(13,27,42,0.04)', border: '1px solid var(--bc-border)' }}>
@@ -515,11 +529,11 @@ export default function LenderApprovalsPage() {
                         </div>
                       )}
                       <div className="flex flex-wrap gap-3 items-center">
-                        <button onClick={() => act(draw.id, 'approved')}
+                        <button onClick={() => setSignDrawId(draw.id)}
                           disabled={actionLoading === draw.id + 'approved'}
                           className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
                           style={{ background: blockApprove ? 'rgba(201,164,87,0.4)' : 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
-                          {actionLoading === draw.id + 'approved' ? '⬡ Creating XRPL record…' : '⬡ Approve & Create XRPL Record'}
+                          {actionLoading === draw.id + 'approved' ? 'Recording approval…' : 'Approve Draw'}
                         </button>
                         <button onClick={() => { setDeclineModal(draw); setDeclineReason('') }}
                           disabled={!!actionLoading}
@@ -528,7 +542,7 @@ export default function LenderApprovalsPage() {
                           ✗ Decline
                         </button>
                         <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>
-                          Admin releases funds after escrow review
+                          Releases once the inspection and lien waiver are both recorded
                         </span>
                       </div>
                     </div>

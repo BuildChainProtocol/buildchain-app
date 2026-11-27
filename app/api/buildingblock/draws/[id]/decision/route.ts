@@ -74,12 +74,21 @@ export async function POST(
   const supabase = getServiceClient()
   const { data: draw, error: fetchErr } = await supabase
     .from('draw_requests')
-    .select('*, projects(name, borrower_id, borrowers(xrp_address))')
+    .select('*, projects(name, borrower_id, settlement_method, borrowers(xrp_address))')
     .eq('id', drawId)
     .single()
 
   if (fetchErr || !draw) {
     return NextResponse.json({ error: 'Draw not found', detail: fetchErr?.message }, { status: 404 })
+  }
+
+  // ── Dollar-token settlement: the lender approves by signing in BuildChain ──
+  const projectMethod = (draw.projects as any)?.settlement_method
+  if (decision === 'approved' && (projectMethod === 'token_escrow' || projectMethod === 'two_signature')) {
+    return NextResponse.json(
+      { error: 'signature_needed', detail: 'This loan settles in the dollar token: the lender approves the draw by signing it in BuildChain.' },
+      { status: 409 }
+    )
   }
 
   // ── Guard: prevent double-funding ─────────────────────────────────────────
