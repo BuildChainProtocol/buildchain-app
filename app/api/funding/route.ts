@@ -112,6 +112,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unknown request' }, { status: 400 })
   }
   if (!isXamanConfigured()) return NextResponse.json({ error: 'Wallet signing is not set up on this site yet (Xaman keys are missing)' }, { status: 503 })
+  // A person opens a handful of these in a day; a script should not open hundreds.
+  const { count: recent } = await supabase.from('settlement_requests').select('id', { count: 'exact', head: true })
+    .eq('requested_by', userId).gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+  if ((recent ?? 0) >= 20) return NextResponse.json({ error: 'Too many requests in the last hour. Try again later.' }, { status: 429 })
 
   const { data: project } = await supabase.from('projects').select(PROJECT_SELECT).eq('id', String(body?.projectId ?? '')).single()
   if (!project) return NextResponse.json({ error: 'Loan not found' }, { status: 404 })

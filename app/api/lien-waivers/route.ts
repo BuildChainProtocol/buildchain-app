@@ -1,3 +1,4 @@
+import { serviceClient } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
@@ -34,6 +35,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'project_id, sub_name, waiver_type required' }, { status: 400 })
   }
 
+  // A waiver can only be attached to a draw on the same project, and only
+  // while that draw is still open.
+  let drawOpen = false
+  if (draw_request_id) {
+    const { data: linked } = await supabase
+      .from('draw_requests').select('project_id, status').eq('id', draw_request_id).single()
+    if (!linked || (linked as any).project_id !== project_id) {
+      return NextResponse.json({ error: 'That draw is not on this project' }, { status: 400 })
+    }
+    drawOpen = ['draft', 'submitted', 'pending'].includes((linked as any).status)
+    if (!drawOpen) {
+      return NextResponse.json({ error: 'Lien waivers can no longer be added to this draw' }, { status: 409 })
+    }
+  }
+
   const { data, error } = await supabase
     .from('lien_waivers')
     .insert({
@@ -54,9 +70,14 @@ export async function POST(req: NextRequest) {
       .select('id, status')
       .eq('draw_request_id', draw_request_id)
     const allSigned = waivers && waivers.length > 0 && waivers.every((w: any) => w.status === 'signed' || w.status === 'issued')
-    await supabase.from('draw_requests')
-      .update({ lien_waiver: allSigned, updated_at: new Date().toISOString() })
-      .eq('id', draw_request_id)
+    // The contractor's own record that waivers are in hand. It is advisory:
+    // release still needs the lender's confirmation and its on-ledger record.
+    // Draw state is written by the server (see migration 023).
+    if (drawOpen) {
+      await serviceClient().from('draw_requests')
+        .update({ lien_waiver: allSigned, updated_at: new Date().toISOString() })
+        .eq('id', draw_request_id)
+    }
   }
 
   return NextResponse.json({ data })

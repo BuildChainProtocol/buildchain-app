@@ -41,7 +41,7 @@ export async function GET(
   const { data: inspection, error } = await supabase
     .from('inspections')
     .select(`
-      id, token, status, notes, submitted_at, scheduled_date,
+      id, status, notes, submitted_at, scheduled_date,
       inspector_name, inspector_email,
       draw_requests (
         request_number, amount, phase, purpose, description

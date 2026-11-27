@@ -74,6 +74,8 @@ export async function POST(request: NextRequest) {
   // Send inspection request email to the inspector
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.buildchain.finance'
   const portalUrl = `${baseUrl}/inspect/${inspection.token}`
+  // Names and addresses are typed by people; escape them before they go into HTML.
+  const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   const project = (draw as any)?.projects
 
   try {
@@ -87,17 +89,17 @@ export async function POST(request: NextRequest) {
             Inspection Request
           </div>
 
-          <h2 style="font-size: 18px; font-weight: 700; margin: 0 0 8px;">Hello ${inspector_name},</h2>
+          <h2 style="font-size: 18px; font-weight: 700; margin: 0 0 8px;">Hello ${esc(inspector_name)},</h2>
           <p style="color: #9ab0c7; margin: 0 0 24px;">
             You have been assigned to inspect the following construction draw:
           </p>
 
           <div style="background: rgba(255,255,255,0.05); border: 1px solid #1e3a50; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
             <div style="font-size: 13px; color: #6b8198; margin-bottom: 4px;">PROJECT</div>
-            <div style="font-weight: 700; font-size: 16px; margin-bottom: 12px;">${project?.name ?? '—'}</div>
+            <div style="font-weight: 700; font-size: 16px; margin-bottom: 12px;">${esc(project?.name ?? '—')}</div>
 
             <div style="font-size: 13px; color: #6b8198; margin-bottom: 4px;">ADDRESS</div>
-            <div style="margin-bottom: 12px;">${[project?.address, project?.city, project?.state].filter(Boolean).join(', ') || '—'}</div>
+            <div style="margin-bottom: 12px;">${esc([project?.address, project?.city, project?.state].filter(Boolean).join(', ') || '—')}</div>
 
             <div style="font-size: 13px; color: #6b8198; margin-bottom: 4px;">DRAW REQUEST</div>
             <div style="margin-bottom: 12px;">${draw?.request_number ?? '—'}</div>
