@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/app-url'
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Send inspection request email to the inspector
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.buildchain.finance'
+  const baseUrl = appUrl()
   const portalUrl = `${baseUrl}/inspect/${inspection.token}`
   // Names and addresses are typed by people; escape them before they go into HTML.
   const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

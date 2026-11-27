@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { appUrl } from '@/lib/app-url'
 
 /**
  * POST /api/invite
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       full_name: name || '',
       company_name: company || '',
     },
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.buildchain.finance'}/auth/accept`,
+    redirectTo: `${appUrl()}/auth/accept`,
   })
 
   if (error) {

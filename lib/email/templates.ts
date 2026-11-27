@@ -5,8 +5,9 @@
  */
 
 import { explorerTx, ledgerName, onTestNetwork } from '@/lib/network'
+import { appUrl } from '@/lib/app-url'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.buildchain.finance'
+const APP_URL = appUrl()
 
 // Names, notes, reasons and file names come from people (some of them outside
 // the site, like an inspector). They are escaped before going into HTML.
