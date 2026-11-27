@@ -127,10 +127,9 @@ as $$
       where p.lender_id = p_lender_id and b.profile_id = auth.uid())
 $$;
 
-revoke all on function public.can_see_borrower(uuid) from public, anon;
-revoke all on function public.can_see_lender(uuid) from public, anon;
-grant execute on function public.can_see_borrower(uuid) to authenticated, service_role;
-grant execute on function public.can_see_lender(uuid) to authenticated, service_role;
+-- A signed-out caller gets "no rows" (auth.uid() is null), not an error.
+grant execute on function public.can_see_borrower(uuid) to anon, authenticated, service_role;
+grant execute on function public.can_see_lender(uuid) to anon, authenticated, service_role;
 
 drop policy if exists "Borrowers visible to authenticated users" on public.borrowers;
 create policy "Borrowers visible to their parties" on public.borrowers
