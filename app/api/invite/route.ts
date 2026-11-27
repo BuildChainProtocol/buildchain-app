@@ -66,6 +66,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
+  // The sign-up trigger never grants admin from sign-up data (anyone can send
+  // that), so the role an admin chose is set here with the service key.
+  if (data.user?.id) {
+    const { error: roleErr } = await admin
+      .from('profiles')
+      .upsert({ id: data.user.id, email, role, full_name: name || '', company_name: company || '' }, { onConflict: 'id' })
+    if (roleErr) {
+      return NextResponse.json({ error: `Invite sent, but the role could not be set: ${roleErr.message}` }, { status: 500 })
+    }
+  }
+
   // Log the invite
   await supabase.from('activity_log').insert({
     project_id: null,

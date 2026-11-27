@@ -61,8 +61,8 @@ export default function SignupPage() {
             {/* Role Selection */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--bc-muted)' }}>I am a</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['borrower', 'lender', 'admin'] as UserRole[]).map(r => (
+              <div className="grid grid-cols-2 gap-2">
+                {(['borrower', 'lender'] as UserRole[]).map(r => (
                   <button
                     key={r}
                     type="button"
@@ -87,7 +87,7 @@ export default function SignupPage() {
                   onChange={e => setFormData(f => ({ ...f, fullName: e.target.value }))}
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: '#e8edf2' }}
-                  placeholder="Jason Caruso" />
+                  placeholder="Your full name" />
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--bc-muted)' }}>Company</label>
@@ -95,7 +95,7 @@ export default function SignupPage() {
                   onChange={e => setFormData(f => ({ ...f, companyName: e.target.value }))}
                   className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bc-border)', color: '#e8edf2' }}
-                  placeholder="BuildChain Protocol" />
+                  placeholder="Your company" />
               </div>
             </div>
 

@@ -265,9 +265,9 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       await supabase.from('notifications').insert({
         user_id: borrowerRow.profile_id,
         type: 'draw_funded',
-        title: 'Funds Released! 🎉',
-        body: `Draw ${draw.request_number} for ${fmt(draw.amount)} was automatically released — ` +
-              `inspection and lien waiver were both verified on the XRP Ledger.`,
+        title: 'Draw Release Recorded',
+        body: `Draw ${draw.request_number} for ${fmt(draw.amount)} was automatically released on the XRP Ledger test network — ` +
+              `inspection and lien waiver were both recorded (pilot: no funds were transferred).`,
         link: '/borrower',
       })
     }
@@ -281,7 +281,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         type: 'draw_auto_funded',
         title: '⬡ Draw Auto-Released',
         body: `Draw ${draw.request_number} for ${fmt(draw.amount)} on ${project?.name ?? 'a project'} was automatically released — ` +
-              `inspector credential and lien waiver NFTs both verified on the XRP Ledger (Patent BLDCHN-001-P §V).`,
+              `inspector credential and lien waiver NFTs both recorded on the XRP Ledger test network (pilot: no funds were transferred).`,
         link: '/lender/approvals',
       })
     }

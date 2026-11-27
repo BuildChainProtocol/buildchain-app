@@ -40,6 +40,7 @@ function base(body: string): string {
         <tr><td style="padding-top:20px;text-align:center;">
           <p style="color:${MUTED};font-size:12px;margin:0;">
             BuildChain Protocol · Construction Loan Management<br/>
+            BuildChain is in pilot on the XRP Ledger test network. No real funds are moved.<br/>
             <a href="${APP_URL}" style="color:${MUTED};">buildchain.finance</a>
           </p>
         </td></tr>
@@ -99,7 +100,7 @@ export function drawSubmittedEmail(o: DrawSubmittedOpts) {
     ${btn('Review Draw Request', url)}
 
     <p style="color:${MUTED};font-size:12px;margin-top:20px;">
-      Logged in as ${o.lenderName}. Once approved, an XRPL escrow will be created on-chain.
+      Logged in as ${o.lenderName}. Once approved, an escrow is created on the XRP Ledger test network.
     </p>
   `)
   return { subject, html }
@@ -119,7 +120,7 @@ export function drawApprovedEmail(o: DrawApprovedOpts) {
   const subject = `Draw approved — ${formatUSD(o.drawAmount)} on ${o.projectName}`
   const xrplLine = o.escrowTxnHash
     ? `<p style="color:${MUTED};font-size:12px;margin:12px 0 0;">
-         On-chain escrow created:
+         Test-network escrow created:
          <a href="https://testnet.xrpl.org/transactions/${o.escrowTxnHash}" style="color:${GOLD};font-family:monospace;">
            ${o.escrowTxnHash.slice(0, 16)}…
          </a>
@@ -130,7 +131,7 @@ export function drawApprovedEmail(o: DrawApprovedOpts) {
     <h2 style="color:${GOLD};font-size:20px;font-weight:700;margin:0 0 8px;">✓ Draw Approved</h2>
     <p style="color:${MUTED};font-size:14px;margin:0 0 24px;">
       Your draw request has been approved by <strong style="color:${LIGHT};">${o.lenderName}</strong>.
-      Funds will be released once the platform admin confirms disbursement.
+      The escrow releases once the inspection and the lien waiver are both recorded.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${BORDER};">
@@ -196,10 +197,10 @@ interface DrawFundedOpts {
 
 export function drawFundedEmail(o: DrawFundedOpts) {
   const pct = Math.round((o.totalDrawn / o.loanAmount) * 100)
-  const subject = `Funds released — ${formatUSD(o.drawAmount)} on ${o.projectName}`
+  const subject = `Draw release recorded — ${formatUSD(o.drawAmount)} on ${o.projectName} (pilot)`
   const hashLine = o.escrowFinishHash
     ? `<p style="color:${MUTED};font-size:12px;margin:12px 0 0;">
-         Settlement TX:
+         Test-network release TX:
          <a href="https://testnet.xrpl.org/transactions/${o.escrowFinishHash}" style="color:${GOLD};font-family:monospace;">
            ${o.escrowFinishHash.slice(0, 16)}…
          </a>
@@ -207,14 +208,15 @@ export function drawFundedEmail(o: DrawFundedOpts) {
     : ''
 
   const html = base(`
-    <h2 style="color:${GOLD};font-size:20px;font-weight:700;margin:0 0 8px;">💸 Draw Funds Released</h2>
+    <h2 style="color:${GOLD};font-size:20px;font-weight:700;margin:0 0 8px;">Draw Release Recorded</h2>
     <p style="color:${MUTED};font-size:14px;margin:0 0 24px;">
-      Your draw has been disbursed. The funds are on their way.
+      The escrow release for this draw was recorded on the XRP Ledger test network.
+      This is a pilot: no funds were transferred.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${BORDER};">
       ${keyval('Project', o.projectName)}
-      ${keyval('Disbursed', formatUSD(o.drawAmount))}
+      ${keyval('Draw amount', formatUSD(o.drawAmount))}
       ${keyval('Total drawn', `${formatUSD(o.totalDrawn)} of ${formatUSD(o.loanAmount)} (${pct}%)`)}
     </table>
 
@@ -241,7 +243,7 @@ export function inspectionPassedEmail(o: InspectionPassedOpts) {
     <h2 style="color:#2ecc71;font-size:20px;font-weight:700;margin:0 0 8px;">✓ Inspection Passed</h2>
     <p style="color:${MUTED};font-size:14px;margin:0 0 24px;">
       The on-site inspection for Draw #${o.drawNumber} has been completed and approved.
-      An inspector credential has been recorded on the XRP Ledger.
+      An inspector credential has been recorded on the XRP Ledger test network.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${BORDER};">
@@ -255,7 +257,7 @@ export function inspectionPassedEmail(o: InspectionPassedOpts) {
       <p style="color:#2ecc71;font-size:13px;font-weight:700;margin:0 0 4px;">What happens next</p>
       <p style="color:${MUTED};font-size:13px;margin:0;">
         Your lender will review and confirm the lien waiver. Once both the inspector credential
-        and lien waiver are verified on-chain, funds will be released automatically.
+        and lien waiver are recorded, the escrow release is triggered automatically.
       </p>
     </div>
 

@@ -125,8 +125,13 @@ export async function POST(
         console.log('[XRPL] Not configured — approving draw without escrow (BB decision path)')
       }
     } catch (xrplError) {
+      // Never record an approval the ledger does not back.
       const msg = xrplError instanceof Error ? xrplError.message : String(xrplError)
-      console.warn('[XRPL] Escrow skipped (non-fatal):', msg.slice(0, 200))
+      console.error('[XRPL] EscrowCreate failed (BB decision) — draw not approved:', msg.slice(0, 300))
+      return NextResponse.json(
+        { error: 'escrow_create_failed', detail: `The escrow could not be created on the XRP Ledger, so the draw was not approved. ${msg.slice(0, 200)}` },
+        { status: 502 }
+      )
     }
   }
 

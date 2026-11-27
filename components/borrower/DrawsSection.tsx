@@ -294,7 +294,7 @@ export default function BorrowerDrawsSection() {
                   <div className="rounded-lg border p-3"
                     style={{ background: 'rgba(45,125,210,0.04)', borderColor: 'rgba(45,125,210,0.2)' }}>
                     <div className="text-xs font-bold mb-2" style={{ color: 'var(--bc-blue)' }}>
-                      ⬡ On-Chain Verification (Patent BLDCHN-001-P)
+                      ⬡ On-Chain Verification (patent pending)
                     </div>
                     <div className="space-y-1.5">
                       {/* Condition 1: Inspector Credential */}

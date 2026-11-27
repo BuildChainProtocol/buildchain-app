@@ -28,7 +28,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Redirect unauthenticated users away from protected routes
-  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/signup') && !pathname.startsWith('/api') && !pathname.startsWith('/auth') && pathname !== '/') {
+  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/signup') && !pathname.startsWith('/api') && !pathname.startsWith('/auth') && !pathname.startsWith('/inspect') && pathname !== '/') {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

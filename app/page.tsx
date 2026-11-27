@@ -375,7 +375,7 @@ export default async function Home() {
                 boxShadow: '0 0 10px rgba(201,164,87,.9)',
               }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: '#c9a457', letterSpacing: '.05em' }}>
-                Patent Pending · BLDCHN-001-P · Powered by XRP Ledger
+                Patent Pending · Pilot on the XRP Ledger test network
               </span>
             </div>
 
@@ -394,8 +394,9 @@ export default async function Home() {
               maxWidth: 640, margin: '0 auto 60px', fontWeight: 400,
             }}>
               BuildChain automates every draw request, site inspection, and fund release
-              through blockchain-verified smart escrow — reducing a 14-day process to
-              under 48 hours, at institutional scale, with zero manual wires.
+              through blockchain-verified escrow. It is designed to cut a draw cycle that
+              takes weeks by hand to under 48 hours, with no manual wires. Now in pilot
+              on the XRP Ledger test network.
             </p>
 
             <div className="fade-in-delay-3" style={{
@@ -420,10 +421,10 @@ export default async function Home() {
               boxShadow: '0 0 0 1px rgba(201,164,87,.04), 0 24px 80px rgba(0,0,0,.5)',
             }}>
               {[
-                { val: '89%', label: 'Faster Draw Cycles', note: '14 days → under 48 hrs', color: '#c9a457', cls: 'grad-stat' },
-                { val: '$4.6M+', label: 'Annual Value Unlocked', note: 'per $200M portfolio', color: '#2d7dd2', cls: 'grad-stat-blue' },
-                { val: '100%', label: 'Lien Waiver Compliance', note: 'on-chain · immutable', color: '#1ab3a6', cls: 'grad-stat-teal' },
-                { val: '3–5s', label: 'XRPL Settlement', note: 'vs. 3–5 days by wire', color: '#c9a457', cls: 'grad-stat' },
+                { val: '<48 hrs', label: 'Target Draw Cycle', note: 'design target', color: '#c9a457', cls: 'grad-stat' },
+                { val: '2', label: 'Conditions Before Release', note: 'inspection + lien waiver', color: '#2d7dd2', cls: 'grad-stat-blue' },
+                { val: 'Testnet', label: 'Pilot Status', note: 'no real funds move yet', color: '#1ab3a6', cls: 'grad-stat-teal' },
+                { val: '3–5s', label: 'XRPL Ledger Close', note: 'how fast a release confirms', color: '#c9a457', cls: 'grad-stat' },
               ].map((s, i) => (
                 <div key={i} style={{
                   background: 'rgba(6,9,15,.85)', padding: '32px 24px',
@@ -456,15 +457,14 @@ export default async function Home() {
             gap: 16, flexWrap: 'wrap',
           }}>
             <span style={{ fontSize: 11, color: '#2a4a66', fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', marginRight: 8 }}>
-              Trusted Infrastructure
+              Foundations
             </span>
             {[
-              { icon: '🛡', label: 'Patent BLDCHN-001-P', color: '#c9a457', bg: 'rgba(201,164,87,.07)', border: 'rgba(201,164,87,.18)' },
-              { icon: '⬡', label: 'XRP Ledger Native', color: '#2d7dd2', bg: 'rgba(45,125,210,.07)', border: 'rgba(45,125,210,.18)' },
+              { icon: '🛡', label: 'Patent Pending', color: '#c9a457', bg: 'rgba(201,164,87,.07)', border: 'rgba(201,164,87,.18)' },
+              { icon: '⬡', label: 'XRP Ledger Native · Testnet Pilot', color: '#2d7dd2', bg: 'rgba(45,125,210,.07)', border: 'rgba(45,125,210,.18)' },
               { icon: '🏛', label: 'Delaware C-Corp', color: '#e8edf2', bg: 'rgba(255,255,255,.04)', border: 'rgba(255,255,255,.1)' },
-              { icon: '⚖️', label: 'Non-MSB Compliant', color: '#1ab3a6', bg: 'rgba(26,179,166,.07)', border: 'rgba(26,179,166,.18)' },
-              { icon: '™', label: 'Class 042 Trademark', color: '#e8edf2', bg: 'rgba(255,255,255,.04)', border: 'rgba(255,255,255,.1)' },
-              { icon: '🔒', label: 'Institutional Grade', color: '#c9a457', bg: 'rgba(201,164,87,.07)', border: 'rgba(201,164,87,.18)' },
+              { icon: '™', label: 'BUILDCHAIN™', color: '#e8edf2', bg: 'rgba(255,255,255,.04)', border: 'rgba(255,255,255,.1)' },
+              { icon: '🔒', label: 'Built for Lender Workflows', color: '#c9a457', bg: 'rgba(201,164,87,.07)', border: 'rgba(201,164,87,.18)' },
             ].map((b, i) => (
               <div key={i} className="trust-badge" style={{ background: b.bg, border: `1px solid ${b.border}` }}>
                 <span style={{ fontSize: 13 }}>{b.icon}</span>
@@ -487,8 +487,8 @@ export default async function Home() {
               fontSize: 'clamp(36px,5vw,64px)', fontWeight: 900,
               letterSpacing: '-2px', margin: '18px 0 24px', lineHeight: 1.05,
             }}>
-              Construction lending is a
-              <br /><span className="grad-gold">$4.6 trillion market</span><br />
+              U.S. construction is a
+              <br /><span className="grad-gold">$2 trillion-a-year industry</span><br />
               running on fax machines.
             </h2>
             <p style={{
@@ -516,7 +516,7 @@ export default async function Home() {
                     { title: '14-day draw cycles', body: 'Paper-based G702 submissions, manual review, phone approvals, and ACH transfers that take days to settle.' },
                     { title: 'Rampant fraud exposure', body: 'Lenders have no real-time visibility into job site progress. Overbilling and draw fraud cost the industry billions annually.' },
                     { title: 'Lien waiver chaos', body: 'Collecting, tracking, and verifying lien waivers from every sub means weeks of administrative work per loan.' },
-                    { title: 'No audit trail', body: 'Disputes end up in court because there\'s no immutable record of who approved what, when, and why.' },
+                    { title: 'No audit trail', body: 'Disputes end up in court because there\'s no shared record of who approved what, when, and why.' },
                   ].map((p, i) => (
                     <div key={i} style={{ display: 'flex', gap: 16 }}>
                       <div style={{
@@ -546,10 +546,10 @@ export default async function Home() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   {[
-                    { title: 'Under 48-hour settlement', body: 'Digital G702/G703 submission, real-time inspector portal, and automatic EscrowFinish on condition confirmation.' },
-                    { title: 'Tamper-proof site verification', body: 'Licensed inspectors mint XLS-20 NFTs on every site visit — permanent on-chain proof of completion status, forever.' },
-                    { title: 'Automated lien waiver NFTs', body: 'Every waiver is minted as a non-transferable on-ledger NFT. No chasing, no disputes, instant verification.' },
-                    { title: 'Immutable compliance receipt', body: 'Every auto-release generates a permanent receipt: Inspector NFT ID, Lien Waiver NFT ID, tx hash, and timestamp.' },
+                    { title: 'Built for under-48-hour draws', body: 'Digital G702/G703 submission, real-time inspector portal, and automatic EscrowFinish on condition confirmation.' },
+                    { title: 'On-ledger site verification', body: 'When the assigned inspector passes a site visit, BuildChain records an XLS-20 inspection NFT on the XRP Ledger.' },
+                    { title: 'Automated lien waiver NFTs', body: 'Each confirmed waiver is recorded as an on-ledger NFT tied to its draw, so its status can be checked in one place.' },
+                    { title: 'Compliance receipt for every release', body: 'Every auto-release generates a receipt: Inspector NFT ID, Lien Waiver NFT ID, transaction hash, and timestamp.' },
                   ].map((p, i) => (
                     <div key={i} style={{ display: 'flex', gap: 16 }}>
                       <div style={{
@@ -604,20 +604,20 @@ export default async function Home() {
                 }}>
                   Your portfolio.<br />
                   <span className="grad-blue">Total visibility.</span><br />
-                  Zero exposure.
+                  Fewer blind spots.
                 </h2>
                 <p style={{ fontSize: 17, color: '#4a6a86', lineHeight: 1.85, margin: '0 0 48px' }}>
                   Deploy capital with confidence. BuildChain gives you real-time portfolio intelligence,
-                  automated compliance, and on-chain proof of every draw — eliminating the fraud risk
-                  and operational overhead that comes with legacy construction lending.
+                  automated compliance, and on-chain proof of every draw. It is designed to reduce the
+                  draw-fraud risk and manual overhead that come with legacy construction lending.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 48 }}>
                   {[
                     { icon: '◎', title: 'Portfolio Dashboard', body: 'Live LTV tracking, draw status, budget vs. disbursed, and risk flags across your entire construction loan book.' },
-                    { icon: '⬡', title: 'Automated Escrow Disbursement', body: 'Funds release automatically when both NFT conditions are met. No manual wires. No approval bottlenecks.' },
-                    { icon: '📋', title: 'On-Chain Compliance Receipts', body: 'Every draw generates an immutable audit trail with Inspector NFT ID, Lien Waiver NFT ID, and XRPL transaction hash.' },
-                    { icon: '🔒', title: 'Fraud Elimination', body: 'Inspector credential NFTs are non-transferable and minted only by licensed, token-gated professionals.' },
+                    { icon: '⬡', title: 'Automated Escrow Disbursement', body: 'After you approve a draw, the escrow releases automatically once both NFT conditions are recorded. No manual wire.' },
+                    { icon: '📋', title: 'On-Chain Compliance Receipts', body: 'Every draw leaves an on-ledger audit trail with Inspector NFT ID, Lien Waiver NFT ID, and XRPL transaction hash.' },
+                    { icon: '🔒', title: 'Fraud Controls', body: 'An inspection NFT is issued only through a one-time link tied to the inspection you assigned, and each one names its draw.' },
                   ].map((f, i) => (
                     <div key={i} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                       <div style={{
@@ -653,8 +653,8 @@ export default async function Home() {
                 }}>
                   <span style={{ fontSize: 13 }}>🏗</span>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#c8d8e8' }}>90-Day Lender Pilot — Now Open</div>
-                    <div style={{ fontSize: 11, color: '#3d5c78' }}>3 lenders · 5 active loans each · No cost · Full ROI analysis at close</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#c8d8e8' }}>Lender Pilot — Now Forming</div>
+                    <div style={{ fontSize: 11, color: '#3d5c78' }}>Run sample draws end to end on the XRP Ledger test network · No cost</div>
                   </div>
                 </div>
               </div>
@@ -681,7 +681,7 @@ export default async function Home() {
                       flex: 1, background: 'rgba(255,255,255,.04)', borderRadius: 7,
                       padding: '5px 14px', fontSize: 11, color: '#2a4a66',
                       textAlign: 'center', maxWidth: 260, margin: '0 auto',
-                    }}>buildchain.finance/lender/portfolio</div>
+                    }}>Illustration · sample data</div>
                   </div>
 
                   <div style={{ padding: '24px' }}>
@@ -731,7 +731,7 @@ export default async function Home() {
                         <div style={{ fontSize: 11, color: '#1ab3a6' }}>✓ Lien Waiver NFT #0x9c1b…</div>
                       </div>
                       <div style={{ fontSize: 11, color: '#2a4a66', fontFamily: 'monospace' }}>
-                        EscrowFinish · $340,000 released · Patent §V verified
+                        EscrowFinish · $340,000 released · sample data
                       </div>
                     </div>
 
@@ -805,7 +805,7 @@ export default async function Home() {
                       flex: 1, background: 'rgba(255,255,255,.04)', borderRadius: 7,
                       padding: '5px 14px', fontSize: 11, color: '#2a4a66',
                       textAlign: 'center', maxWidth: 260, margin: '0 auto',
-                    }}>buildingblock.app/draws/submit</div>
+                    }}>Illustration · sample data</div>
                   </div>
 
                   <div style={{ padding: '24px' }}>
@@ -902,10 +902,10 @@ export default async function Home() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 48 }}>
                   {[
-                    { icon: '📋', title: 'Digital G702/G703 Submission', body: 'Submit AIA-standard draw requests digitally. AI-powered validation catches errors before you submit, reducing rejection rates to near zero.' },
+                    { icon: '📋', title: 'Digital G702/G703 Submission', body: 'Submit AIA-standard draw requests digitally. Built-in checks are designed to catch common errors before you submit.' },
                     { icon: '🔍', title: 'Real-Time Inspection Tracking', body: 'See inspector status live. Know the moment your inspection is approved and your draw is queued for release.' },
-                    { icon: '⚡', title: 'Automatic Draw Disbursement', body: 'When the inspector signs off and your lien waiver is confirmed, funds release automatically — no manual wire required.' },
-                    { icon: '✦', title: 'Building Block AI Assistant', body: 'AI analyzes your schedule of values, flags overbilling risk, and recommends supporting documentation for each draw.' },
+                    { icon: '⚡', title: 'Automatic Draw Disbursement', body: 'Designed so that when the inspector signs off and your lien waiver is confirmed, the release happens automatically, with no manual wire.' },
+                    { icon: '✦', title: 'Building Block AI Assistant', body: 'In Building Block, an AI assistant helps review your schedule of values and suggests supporting documentation for each draw.' },
                   ].map((f, i) => (
                     <div key={i} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                       <div style={{
@@ -957,8 +957,8 @@ export default async function Home() {
                 <span className="grad-gold">One automatic release.</span>
               </h2>
               <p style={{ fontSize: 18, color: '#4a6a86', maxWidth: 540, margin: '0 auto', lineHeight: 1.8 }}>
-                No manual wires. No approval queues. Funds move the instant the XRP Ledger
-                confirms both conditions — and not a moment before.
+                No manual wires. Once both conditions are recorded on the XRP Ledger,
+                BuildChain releases the escrow automatically, and not a moment before.
               </p>
             </div>
 
@@ -976,7 +976,7 @@ export default async function Home() {
                 {
                   n: '02', icon: '🔍', color: '#c9a457', hl: true,
                   title: 'Site Inspected',
-                  body: 'Licensed inspector submits via token-gated portal. On pass, BuildChain mints an XLS-20 Inspector Credential NFT (taxon 3). Tamper-proof. Permanent.',
+                  body: 'The assigned inspector submits a pass or fail through a one-time secure link. On pass, BuildChain mints an XLS-20 Inspector Credential NFT (taxon 3).',
                   tag: 'NFT taxon 3 · Condition ①',
                 },
                 {
@@ -988,8 +988,8 @@ export default async function Home() {
                 {
                   n: '04', icon: '⚡', color: '#1ab3a6', hl: false,
                   title: 'Auto-Released',
-                  body: 'The Verification Orchestrator detects both NFTs and fires EscrowFinish — funds released in 3–5 seconds. Zero manual steps. Immutable receipt generated.',
-                  tag: 'EscrowFinish · Auto · §V',
+                  body: 'The Verification Orchestrator detects both NFTs and fires EscrowFinish. The release confirms in seconds, with no manual wire, and a receipt is generated.',
+                  tag: 'EscrowFinish · Auto',
                 },
               ].map((step, i) => (
                 <div key={i} className="feature-card" style={{
@@ -1026,11 +1026,11 @@ export default async function Home() {
               <div style={{ fontSize: 28, color: '#2d7dd2', flexShrink: 0 }}>⬡</div>
               <div style={{ flex: 1, minWidth: 240 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 5, color: '#c8d8e8' }}>
-                  Patent BLDCHN-001-P — Auto-Release Verification Receipt
+                  Auto-Release Verification Receipt (patent pending)
                 </div>
                 <div style={{ fontSize: 12, color: '#4a6a86', lineHeight: 1.75 }}>
-                  Inspector NFT ID · Lien Waiver NFT ID · EscrowFinish tx hash · ISO timestamp · Patent ref BLDCHN-001-P §V —
-                  every release generates an immutable JSONB receipt, available to regulators, title companies, and auditors on demand.
+                  Inspector NFT ID · Lien Waiver NFT ID · EscrowFinish tx hash · ISO timestamp —
+                  every auto-release generates a receipt that can be shared with title companies and auditors.
                 </div>
               </div>
               <div style={{
@@ -1038,7 +1038,7 @@ export default async function Home() {
                 textAlign: 'right',
               }}>
                 <div style={{ fontSize: 22, fontWeight: 900, color: '#1ab3a6' }}>3–5 sec</div>
-                <div style={{ fontSize: 11, color: '#2a4a66' }}>from both conditions → funds released</div>
+                <div style={{ fontSize: 11, color: '#2a4a66' }}>from both conditions → escrow release confirmed</div>
               </div>
             </div>
           </div>
@@ -1065,20 +1065,20 @@ export default async function Home() {
             }}>
               {[
                 {
-                  val: '$4.6T', label: 'Annual U.S. Construction Activity',
-                  body: 'The largest single segment of U.S. private investment. BuildChain targets the lending infrastructure that moves all of it.',
+                  val: '$2T+', label: 'Annual U.S. Construction Spending',
+                  body: 'U.S. Census Bureau, value of construction put in place. BuildChain targets the lending workflow that pays for it.',
                   color: '#c9a457', cls: 'grad-stat',
                   bg: 'rgba(201,164,87,.04)', border: 'rgba(201,164,87,.15)',
                 },
                 {
-                  val: '9M+', label: 'Construction Draw Events/Year',
-                  body: 'Every one of these is a manual, error-prone process today. BuildChain automates each and every one with protocol-grade reliability.',
+                  val: 'Paper', label: 'How Most Draws Still Move',
+                  body: 'Draw requests, inspections and lien waivers are still largely handled by email, PDF and wire. BuildChain is built to automate that workflow.',
                   color: '#2d7dd2', cls: 'grad-stat-blue',
                   bg: 'rgba(45,125,210,.04)', border: 'rgba(45,125,210,.15)',
                 },
                 {
-                  val: '30 bps', label: 'Per-Draw Fee — $0 Marginal Cost',
-                  body: '0.30% of every disbursement. At institutional volumes, this creates recurring revenue that scales directly with the market.',
+                  val: '0.30%', label: 'Fee Per Draw Disbursement',
+                  body: 'Paid by the lender on each draw released through the protocol. No fees during the pilot.',
                   color: '#1ab3a6', cls: 'grad-stat-teal',
                   bg: 'rgba(26,179,166,.04)', border: 'rgba(26,179,166,.15)',
                 },
@@ -1103,10 +1103,10 @@ export default async function Home() {
               border: '1px solid rgba(255,255,255,.07)', borderRadius: 16, overflow: 'hidden',
             }}>
               {[
-                { v: '89%', l: 'Draw Cycle Reduction', n: '14 days → under 48 hours' },
-                { v: '$4.6M+', l: 'Annual Value / $200M Portfolio', n: 'fraud reduction + admin savings' },
-                { v: '100%', l: 'Lien Waiver Compliance', n: 'on-chain, immutable, permanent' },
-                { v: '$0.0001', l: 'Per XRPL Transaction', n: 'vs. $25–45 wire transfer fee' },
+                { v: '<48 hrs', l: 'Target Draw Cycle', n: 'design target' },
+                { v: '2', l: 'Conditions Before Release', n: 'inspection + lien waiver' },
+                { v: '0.30%', l: 'Fee Per Draw', n: 'paid by the lender · none in pilot' },
+                { v: '<1¢', l: 'XRPL Network Fee', n: 'per transaction' },
               ].map((s, i) => (
                 <div key={i} style={{
                   background: 'rgba(6,9,15,.85)', padding: '28px 22px',
@@ -1144,8 +1144,8 @@ export default async function Home() {
                 </h2>
                 <p style={{ fontSize: 16, color: '#4a6a86', lineHeight: 1.9, margin: '0 0 52px' }}>
                   BuildChain runs on the XRP Ledger&apos;s native escrow and XLS-20 NFT standard —
-                  no Solidity, no gas fees, no contract vulnerabilities. Settlement in 3–5 seconds,
-                  at $0.0001 per transaction, with institutional-grade finality.
+                  not custom smart contracts, so there is less contract code to attack. A release
+                  confirms in 3–5 seconds, for a network fee of a fraction of a cent.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
@@ -1153,17 +1153,17 @@ export default async function Home() {
                     {
                       color: '#c9a457',
                       title: 'XLS-20 NFT Standard',
-                      body: 'Taxon 0 (loan titles) · Taxon 2 (lien waivers) · Taxon 3 (inspector credentials). All non-transferable, on-ledger, permanent proof of each condition. Cannot be forged, duplicated, or deleted.',
+                      body: 'Taxon 0 (loan titles) · Taxon 2 (lien waivers) · Taxon 3 (inspector credentials). Each is issued by BuildChain\'s ledger account and names its draw, so anyone can check who recorded a condition and when.',
                     },
                     {
                       color: '#2d7dd2',
                       title: 'Native XRPL Escrow',
-                      body: 'EscrowCreate locks loan funds at draw approval. EscrowFinish executes automatically the instant both NFTs are detected on-chain by the Verification Orchestrator (Patent BLDCHN-001-P §V).',
+                      body: 'EscrowCreate locks the escrow at draw approval. EscrowFinish is submitted automatically once the Verification Orchestrator (patent pending) finds both NFTs on the ledger.',
                     },
                     {
                       color: '#1ab3a6',
-                      title: 'RLUSD Stablecoin Ready',
-                      body: 'Stablecoin draw releases via Ripple USD. One environment variable away — ESCROW_CURRENCY=RLUSD — enabling fully stable, dollar-denominated disbursements at XRPL speed.',
+                      title: 'RLUSD Settlement (Planned)',
+                      body: 'Draws are dollar amounts, and production settlement is planned in RLUSD, Ripple\'s dollar stablecoin. The pilot runs on the test network with test XRP.',
                     },
                   ].map((t, i) => (
                     <div key={i} style={{ display: 'flex', gap: 20 }}>
@@ -1192,14 +1192,13 @@ export default async function Home() {
                     <div style={{ fontSize: 36, flexShrink: 0 }}>🛡</div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: '#c9a457', marginBottom: 8 }}>
-                        U.S. Provisional Patent BLDCHN-001-P
+                        Patent Pending · U.S. provisional application
                       </div>
                       <div style={{ fontSize: 14, color: '#8fa8c4', lineHeight: 1.7, marginBottom: 14 }}>
                         &ldquo;Multi-Condition Verification System and Method for Automated Construction Draw Disbursement Using Distributed Ledger Technology&rdquo;
                       </div>
                       <div style={{ fontSize: 11, color: '#2a4a66', lineHeight: 1.6 }}>
-                        Filed April 20, 2026 · Non-provisional due April 20, 2027<br />
-                        Claims §I–§VIII cover the dual-condition escrow architecture, NFT taxon assignment,
+                        The application describes the dual-condition escrow architecture, NFT taxon assignment,
                         and the Verification Orchestrator execution engine.
                       </div>
                     </div>
@@ -1210,7 +1209,7 @@ export default async function Home() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {[
                     { taxon: 'Taxon 0', type: 'Loan NFT', desc: 'Minted at origination, burned at payoff', hl: false },
-                    { taxon: 'Taxon 1', type: 'Draw Event', desc: 'Records each disbursement permanently', hl: false },
+                    { taxon: 'Taxon 1', type: 'Draw Event', desc: 'Records each disbursement on the ledger', hl: false },
                     { taxon: 'Taxon 2', type: 'Lien Waiver', desc: '⚡ Condition ② — triggers release', hl: true },
                     { taxon: 'Taxon 3', type: 'Inspector Cred', desc: '⚡ Condition ① — triggers release', hl: true },
                   ].map((n, i) => (
@@ -1243,7 +1242,7 @@ export default async function Home() {
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 13, color: '#2d7dd2', marginBottom: 6 }}>XRPL EscrowFinish</div>
                       <div style={{ fontSize: 28, fontWeight: 900, color: '#2d7dd2' }}>3–5 sec</div>
-                      <div style={{ fontSize: 11, color: '#2a4a66', marginTop: 4 }}>$0.0001 per transaction</div>
+                      <div style={{ fontSize: 11, color: '#2a4a66', marginTop: 4 }}>network fee under 1¢</div>
                     </div>
                   </div>
                 </div>
@@ -1257,11 +1256,11 @@ export default async function Home() {
                   <div style={{ fontSize: 28, flexShrink: 0 }}>⚖️</div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: '#1ab3a6', marginBottom: 5 }}>
-                      Regulatory Analysis Complete
+                      Non-Custodial by Design
                     </div>
                     <div style={{ fontSize: 12, color: '#3d5c78', lineHeight: 1.7 }}>
-                      Independent counsel determined BuildChain Protocol, Inc. does not qualify as a Money Services Business (non-MSB)
-                      under 31 CFR 1010.100(ff). Designed for institutional lender compliance from day one.
+                      BuildChain is designed as a verification layer: the lender keeps control of loan funds until release.
+                      Regulatory review continues as the pilot moves toward production.
                     </div>
                   </div>
                 </div>
@@ -1302,8 +1301,8 @@ export default async function Home() {
               <span className="grad-gold">is on-chain.</span>
             </h2>
             <p style={{ fontSize: 18, color: '#4a6a86', margin: '0 auto 64px', maxWidth: 500, lineHeight: 1.8 }}>
-              Whether you fund projects or build them — BuildChain eliminates
-              the friction between your world and capital, permanently.
+              Whether you fund projects or build them — BuildChain is built to remove
+              the friction between your world and capital.
             </p>
 
             {/* Dual CTA cards */}
@@ -1312,7 +1311,7 @@ export default async function Home() {
                 <div style={{ fontSize: 28, marginBottom: 16 }}>🏦</div>
                 <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, color: '#c8d8e8' }}>For Lenders</div>
                 <div style={{ fontSize: 13, color: '#4a6a86', lineHeight: 1.7, marginBottom: 24 }}>
-                  Join our 90-day pilot. Deploy capital across 5 active construction loans — no cost, full ROI analysis delivered at close.
+                  Join the pilot. Run sample draws end to end on the XRP Ledger test network, at no cost.
                 </div>
                 <a href="mailto:info@buildchain.finance?subject=BuildChain Lender Pilot Program"
                   className="btn-gold" style={{ display: 'inline-flex', fontSize: 14, padding: '13px 24px' }}>
@@ -1324,7 +1323,7 @@ export default async function Home() {
                 <div style={{ fontSize: 28, marginBottom: 16 }}>🏗</div>
                 <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, color: '#c8d8e8' }}>For Contractors</div>
                 <div style={{ fontSize: 13, color: '#4a6a86', lineHeight: 1.7, marginBottom: 24 }}>
-                  Get early access to the Building Block platform. Submit draws, track inspections, and get paid faster — starting now.
+                  Get early access to the Building Block platform. Submit draws, track inspections, and help shape the pilot.
                 </div>
                 <a href="mailto:info@buildchain.finance?subject=BuildChain GC Early Access"
                   className="btn-blue" style={{ display: 'inline-flex', fontSize: 14, padding: '13px 24px' }}>
@@ -1412,12 +1411,11 @@ export default async function Home() {
               <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: '#c9a457', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: '#c9a457' }} />
-                  Settled on the XRP Ledger
+                  Built on the XRP Ledger · Testnet pilot
                 </span>
                 {[
-                  'Patent BLDCHN-001-P · Filed 2026',
-                  'Class 042 Trademark',
-                  'Non-MSB Compliant',
+                  'Patent Pending',
+                  'BUILDCHAIN™',
                 ].map((s, i) => (
                   <span key={i} style={{ fontSize: 12, color: '#6b86a3' }}>{s}</span>
                 ))}

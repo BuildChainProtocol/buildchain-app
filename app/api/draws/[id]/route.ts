@@ -45,9 +45,37 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   return NextResponse.json(data)
 }
 
+// The only draw statuses a lender or admin may set through this route.
+const SETTABLE_STATUSES = new Set(['approved', 'held', 'declined', 'funded'])
+
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
-  const body = await request.json()
+
+  // Only these fields are ever read from the request. Nothing else the caller
+  // sends can reach the draw row (amounts, escrow hashes, NFT ids, payees and
+  // wallets are set by the server alone).
+  let raw: Record<string, unknown>
+  try { raw = await request.json() } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }) }
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 2000) : undefined)
+  const body: {
+    status?: string
+    lien_waiver?: true
+    decline_reason?: string
+    hold_reason?: string
+    notes?: string
+  } = {
+    ...(typeof raw?.status === 'string' ? { status: raw.status } : {}),
+    ...(raw?.lien_waiver === true ? { lien_waiver: true as const } : {}),
+    ...(text(raw?.decline_reason) ? { decline_reason: text(raw.decline_reason) } : {}),
+    ...(text(raw?.hold_reason) ? { hold_reason: text(raw.hold_reason) } : {}),
+    ...(text(raw?.notes) ? { notes: text(raw.notes) } : {}),
+  }
+  if (body.status !== undefined && !SETTABLE_STATUSES.has(body.status)) {
+    return NextResponse.json({ error: `status must be one of: ${Array.from(SETTABLE_STATUSES).join(', ')}` }, { status: 400 })
+  }
+  if (body.status === undefined && body.lien_waiver === undefined) {
+    return NextResponse.json({ error: 'Nothing to update: send a status or lien_waiver: true' }, { status: 400 })
+  }
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -68,8 +96,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
   }
 
+  // ── State guards ────────────────────────────────────────────────────────
+  // A funded or declined draw is final. Approving twice would lock a second
+  // escrow, so a repeat approval returns the draw as it is.
+  if (body.status && (draw.status === 'funded' || draw.status === 'declined') && body.status !== draw.status) {
+    return NextResponse.json({ error: `This draw is already ${draw.status} and can no longer be changed` }, { status: 409 })
+  }
+  if (body.status === 'approved' && draw.status === 'approved') {
+    return NextResponse.json({ data: draw })
+  }
+  if (body.status === 'funded' && draw.status !== 'approved' && draw.status !== 'funded') {
+    return NextResponse.json({ error: 'Only an approved draw can be funded' }, { status: 409 })
+  }
+
   const updates: Record<string, unknown> = {
-    ...body,
+    ...(body.status ? { status: body.status } : {}),
+    ...(body.lien_waiver ? { lien_waiver: true } : {}),
+    ...(body.status === 'declined' && body.decline_reason ? { decline_reason: body.decline_reason } : {}),
     reviewed_at: new Date().toISOString(),
   }
 
@@ -98,8 +141,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         console.log('[XRPL] Not configured — approving draw without escrow')
       }
     } catch (xrplError) {
+      // Never record an approval the ledger does not back: the draw stays as
+      // it was and the lender sees why.
       const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
-      console.warn('[XRPL] Escrow skipped (non-fatal):', message.slice(0, 200))
+      console.error('[XRPL] EscrowCreate failed — draw not approved:', message.slice(0, 300))
+      return NextResponse.json(
+        { error: `The escrow could not be created on the XRP Ledger, so the draw was not approved. ${message.slice(0, 200)}` },
+        { status: 502 }
+      )
     }
 
     // Draw-level XRPL record: the EscrowCreate TX hash above is the record.
@@ -134,9 +183,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         console.log(`[XRPL] EscrowFinish OK — hash ${finish.txnHash}`)
       }
     } catch (xrplError) {
-      // Non-fatal: log, fire escrow_failed webhook, continue with status update
+      // Never mark a draw funded when the release did not happen: tell
+      // Building Block, leave the draw approved, and show the lender why.
       const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
-      console.warn('[XRPL] EscrowFinish failed (non-fatal):', message.slice(0, 200))
+      console.error('[XRPL] EscrowFinish failed — draw not funded:', message.slice(0, 300))
       try {
         const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
         await sendBuildingBlockWebhook({
@@ -149,9 +199,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       } catch (wErr) {
         console.warn('[BB webhook] escrow_failed dispatch failed:', wErr)
       }
+      return NextResponse.json(
+        { error: `The escrow could not be released on the XRP Ledger, so the draw was not marked funded. ${message.slice(0, 200)}` },
+        { status: 502 }
+      )
     }
 
-    // Always increment project amount_drawn, regardless of XRPL
+    // The release went through (or no escrow applies): count it as drawn
     await supabase.rpc('increment_amount_drawn', {
       p_project_id: draw.project_id,
       p_amount: draw.amount,
@@ -351,8 +405,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         },
         funded: {
           type: 'draw_funded',
-          title: 'Funds Released!',
-          body: `Draw ${updated.request_number} for ${fmt(draw.amount)} has been funded. Funds are on the way.`,
+          title: 'Draw Release Recorded',
+          body: `Draw ${updated.request_number} for ${fmt(draw.amount)} was released on the XRP Ledger test network (pilot: no funds were transferred).`,
         },
       }
       const notif = notifMap[body.status]
