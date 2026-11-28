@@ -79,7 +79,9 @@ export async function createSignRequest(o: {
       },
       custom_meta: {
         instruction: o.instruction.slice(0, 280),
-        ...(o.identifier ? { identifier: o.identifier.slice(0, 40) } : {}),
+        // Each request needs its own reference (a repeated one is refused),
+        // and the same payee or loan is asked more than once.
+        ...(o.identifier ? { identifier: `${o.identifier.slice(0, 31)}-${Math.random().toString(36).slice(2, 10)}` } : {}),
       },
     }),
     cache: 'no-store',
@@ -100,6 +102,8 @@ export async function getSignResult(uuid: string): Promise<SignResult> {
     response?: { account?: string | null; txid?: string | null; hex?: string | null }
     application?: { issued_user_token?: string | null }
   } | null
+  // A request the wallet service no longer has can never be signed.
+  if (res.status === 404) return { resolved: false, signed: false, expired: true, account: null, txid: null, hex: null, userToken: null }
   if (!res.ok || !json?.meta) throw new Error(`Xaman did not return the sign request (${res.status})`)
   return {
     resolved: !!json.meta.resolved,
@@ -121,6 +125,7 @@ export async function cancelSignRequest(uuid: string | null | undefined): Promis
   if (!uuid || !/^[0-9a-f-]{36}$/i.test(uuid)) return true
   try {
     const res = await fetch(`${API}/payload/${uuid}`, { method: 'DELETE', headers: headers(), cache: 'no-store' })
+    if (res.status === 404) return true              // the service no longer has it
     const json = await res.json().catch(() => null) as { result?: { cancelled?: boolean; reason?: string } } | null
     // True only when it can no longer be signed: withdrawn now, or already
     // withdrawn or expired. (Already signed, or open on the phone, is false.)

@@ -271,14 +271,22 @@ export async function sendEscrowReleasedWebhooks(opts: {
   payments?:         BBPaymentRow[] | null
   /** USD actually paid out by this release (less than the net when a payee is on hold) */
   releasedAmount?:   number | null
-}): Promise<void> {
+}): Promise<boolean> {
   const payments = opts.payments ?? buildPaymentsRows(opts.payees, opts.lineItems, {
     escrowFinishHash:  opts.escrowFinishHash,
     ledgerIndex:       null,
   })
 
-  await sendBuildingBlockWebhook({
+  // A release notice has the same id every time it is sent for the same
+  // draw (and payee), so one sent again after a failure is recognisably the
+  // same notice.
+  const stableId = (...parts: Array<string | number | null>) => {
+    const h = crypto.createHash('sha256').update(parts.join('|')).digest('hex')
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`
+  }
+  const released = await sendBuildingBlockWebhook({
     event:              'escrow_released',
+    event_id:           stableId('escrow_released', opts.bcDrawId),
     bc_draw_id:         opts.bcDrawId,
     escrow_finish_hash: opts.escrowFinishHash,
     funded_at:          opts.fundedAt,
@@ -291,10 +299,11 @@ export async function sendEscrowReleasedWebhooks(opts: {
   })
 
   // payment_confirmed — one event per paid payee for per-sub granularity
-  await Promise.allSettled(
-    payments.filter(p => p.status === 'paid').map(p =>
+  const confirmed = await Promise.allSettled(
+    payments.filter(p => p.status === 'paid').map((p, i) =>
       sendBuildingBlockWebhook({
         event:         'payment_confirmed',
+        event_id:      stableId('payment_confirmed', opts.bcDrawId, p.bb_pay_app_id ?? p.sub_code ?? `row-${i}`),
         bc_draw_id:    opts.bcDrawId,
         bb_pay_app_id: p.bb_pay_app_id,
         sub_code:      p.sub_code,
@@ -309,6 +318,7 @@ export async function sendEscrowReleasedWebhooks(opts: {
       })
     )
   )
+  return released.ok && confirmed.every(c => c.status === 'fulfilled' && c.value.ok)
 }
 
 /**

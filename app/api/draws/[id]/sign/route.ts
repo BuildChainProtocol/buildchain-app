@@ -6,7 +6,7 @@ import { isValidClassicAddress } from 'xrpl'
 import { cancelSignRequest, createSignRequest, getSignResult, isXamanConfigured } from '@/lib/xaman'
 import { loanCommitments } from '@/lib/loan-commitments'
 import {
-  confirmLenderSigning, isTokenMethod, PayeeNotReady, prepareLenderSigning, SigningMismatch,
+  confirmLenderSigning, findExistingEscrow, isTokenMethod, PayeeNotReady, prepareLenderSigning, SigningMismatch,
 } from '@/lib/xrpl/release'
 
 // The lender approves a dollar-token draw by signing it in their own wallet:
@@ -48,6 +48,8 @@ const SIGNED = ['locked', 'releasing', 'failed', 'released']
 // A draw can be signed while it awaits review, and, for payees left over
 // (held, or needing a new signature), while it is approved and not yet paid.
 const SIGNABLE_DRAW = ['submitted', 'pending', 'approved']
+// "Not released", written so that it also matches a draw whose state is still empty.
+const NOT_RELEASED = 'settlement_state.is.null,settlement_state.neq.released'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -194,6 +196,21 @@ async function openNext(admin: any, draw: any, method: 'token_escrow' | 'two_sig
 
     let request: Awaited<ReturnType<typeof createSignRequest>> | null = null
     try {
+      // If the lender has already locked this payee's money (an earlier
+      // request was signed but lost track of), pick that escrow up. Asking
+      // again would lock the money twice. A failed look-up stops here.
+      if (method === 'token_escrow') {
+        const existing = await findExistingEscrow({
+          drawRequestId: draw.id, paymentId: next.id, amountUsd: Number(next.amount), lenderWallet, payee: next.wallet,
+        })
+        if (existing) {
+          await admin.from('draw_payments').update({
+            status: 'locked', held_reason: null, updated_at: now(),
+            escrow_owner: existing.escrowOwner, escrow_sequence: existing.escrowSequence, lock_txn_hash: existing.escrowTxnHash,
+          }).eq('id', next.id).eq('status', 'awaiting_signature')
+          continue
+        }
+      }
       // Money and slots already promised on this loan, by this draw or others.
       const busy = await loanCommitments(admin, draw.project_id, next.id)
       let plan
@@ -225,13 +242,19 @@ async function openNext(admin: any, draw: any, method: 'token_escrow' | 'two_sig
       }, { onConflict: 'payment_id' })
       if (sigErr) throw new Error(sigErr.message)
       // Still ours? (A status check may have given up on this claim meanwhile.)
-      const { data: kept } = await admin.from('draw_payments')
+      const { data: kept, error: keepErr } = await admin.from('draw_payments')
         .update({ release_ticket: plan.releaseTicket, updated_at: now() })
         .eq('id', next.id).eq('status', 'awaiting_signature').select('id')
       if (!kept?.length) {
-        await cancelSignRequest(request.uuid)
-        await admin.from('payment_signatures').delete().eq('payment_id', next.id).eq('payload', request.uuid)
-        continue
+        // The claim was given up meanwhile, or another draw on this loan took
+        // the same slot a moment ago. Withdraw the request; only once that is
+        // certain is its record dropped and the payment tried again.
+        if (await cancelSignRequest(request.uuid)) {
+          await admin.from('payment_signatures').delete().eq('payment_id', next.id).eq('payload', request.uuid)
+          if (keepErr) await release('pending')
+          continue
+        }
+        return 'busy'
       }
       return { paymentId: next.id, qrPng: request.qrPng, url: request.url, pushed: request.pushed, cancelAfter: plan.cancelAfter }
     } catch (err) {
@@ -264,10 +287,11 @@ async function finalize(admin: any, draw: any, method: string): Promise<boolean>
   if (cents(listed) !== cents(net)) {
     throw new Error(`This draw's payment list adds up to ${usd(listed)}, not its net amount of ${usd(net)}, so it was not locked. Close this and open the draw again; if it repeats, contact BuildChain.`)
   }
-  await admin.from('draw_requests').update({
+  const { data: lockedDraw } = await admin.from('draw_requests').update({
     settlement_method: method, settlement_state: 'locked',
     settlement_amount: signed.reduce((t, r) => t + Number(r.amount), 0),
-  }).eq('id', draw.id).in('status', SIGNABLE_DRAW).neq('settlement_state', 'released')
+  }).eq('id', draw.id).in('status', SIGNABLE_DRAW).or(NOT_RELEASED).select('id')
+  if (!lockedDraw?.length) return false
   // A draw that was already approved (a payee signed for afterwards) has
   // nobody left to press Approve: try the release now.
   if (draw.status === 'approved') {
@@ -310,8 +334,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     // Write down who this draw pays. Until the lender has started signing,
     // the list is rebuilt each time, so it always matches the draw as it
     // stands now (its amounts or payees may have changed since last time).
+    // An approved draw's list is never rebuilt, even if every payee on it is
+    // back to waiting (a release that needs a new signature): it goes
+    // straight to signing what is left.
     const started = rows.some(r => r.status !== 'pending' && r.status !== 'held')
-    if (!started) {
+    if (!started && draw.status !== 'approved') {
       const planned = planPayees(draw)
       const net = Number(draw.net_amount ?? draw.amount)
       const total = planned.reduce((t: number, p: any) => t + p.amount, 0)
@@ -376,6 +403,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       if (await finalize(admin, draw, method)) {
         return NextResponse.json({ method, signatureNeeded: false, state: 'locked', ...view(draw, rows, method) })
       }
+      // Another call may be part-way through this same draw: say so, and
+      // leave everything as it is.
+      if (rows.some(r => r.status === 'pending' || r.status === 'awaiting_signature')) {
+        return NextResponse.json({ method, signatureNeeded: true, state: 'checking', current: null, ...view(draw, rows, method) })
+      }
       // Nobody could be signed for: leave the draw as it was before signing.
       await admin.from('draw_requests').update({ settlement_state: null })
         .eq('id', draw.id).eq('settlement_state', 'awaiting_lender_signature').in('status', ['submitted', 'pending'])
@@ -386,8 +418,8 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     }
     // A payee being signed for on an approved draw: it is not fully locked
     // again until this signature is in.
-    await admin.from('draw_requests').update({ settlement_state: 'awaiting_lender_signature' })
-      .eq('id', draw.id).in('status', SIGNABLE_DRAW).neq('settlement_state', 'released')
+    await admin.from('draw_requests').update({ settlement_method: method, settlement_state: 'awaiting_lender_signature' })
+      .eq('id', draw.id).in('status', SIGNABLE_DRAW).or(NOT_RELEASED)
     return NextResponse.json({ method, signatureNeeded: true, state: 'waiting', current, ...view(draw, rows, method) })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

@@ -274,6 +274,60 @@ export async function confirmLenderSigning(o: {
  */
 export class ReleaseNeedsNewSignature extends Error {}
 
+/**
+ * The ledger gave a final refusal to release this payee's escrow (the payee
+ * closed the trust line, or no longer accepts payments, or the escrow is
+ * gone). The escrow, if still there, stays locked. Not a failure of the draw:
+ * this payee goes on hold and the others are paid and reported.
+ */
+export class PaymentCannotRelease extends Error {}
+
+/**
+ * token_escrow: an escrow already on the ledger for this payment. Its release
+ * condition is unique to the payment, so an escrow from the lender carrying
+ * it can only be this payment's. Used to pick up an escrow whose sign request
+ * was lost track of, instead of asking the lender to lock the money again.
+ * A failed ledger read throws: no answer is never taken as "none".
+ */
+export async function findExistingEscrow(o: {
+  drawRequestId: string
+  paymentId: string
+  amountUsd: number
+  lenderWallet: string
+  payee: string
+}): Promise<SigningProof | null> {
+  const token = settlementToken()
+  const want = paymentCondition(o.drawRequestId, o.paymentId).condition.toUpperCase()
+  return withClient(async (client) => {
+    let marker: unknown = undefined
+    for (let page = 0; page < 20; page++) {
+      const res = await client.request({
+        command: 'account_objects', account: o.lenderWallet, type: 'escrow', ledger_index: 'validated', limit: 200,
+        ...(marker ? { marker } : {}),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      const result = res.result as unknown as { account_objects?: Tx[]; marker?: unknown }
+      for (const obj of result.account_objects ?? []) {
+        if (obj.Account !== o.lenderWallet || String(obj.Condition ?? '').toUpperCase() !== want) continue
+        const created = await client.request({ command: 'tx', transaction: String(obj.PreviousTxnID) })
+        const r = created.result as unknown as Tx
+        const txj = (r.tx_json ?? r) as Tx
+        if (txj.TransactionType !== 'EscrowCreate') continue
+        const sequence = Number(txj.Sequence) || Number(txj.TicketSequence)
+        const problems = await verifyLenderEscrow(client, {
+          owner: o.lenderWallet, sequence, payee: o.payee, token, usd: o.amountUsd, condition: want,
+          minCancelAfter: new Date(Date.now() + 60 * 60 * 1000),
+        })
+        if (problems.length) continue
+        return { escrowOwner: o.lenderWallet, escrowSequence: sequence, escrowTxnHash: String(r.hash ?? obj.PreviousTxnID) }
+      }
+      marker = result.marker
+      if (!marker) return null
+    }
+    throw new Error('The lender\'s wallet holds too many escrows to search in one go')
+  })
+}
+
 /** One payee's payment, with what is needed to release it. */
 export interface ReleasablePayment {
   id: string
@@ -305,11 +359,22 @@ export async function releasePayment(
   if (method === 'token_escrow') {
     if (payment.escrow_sequence == null || !payment.escrow_owner) throw new Error('This payment has no lender escrow to release')
     const { condition, fulfillment } = paymentCondition(payment.draw_request_id, payment.id)
-    const done = await onLedger(client => finishTokenEscrow(client, platformWallet(), {
-      owner: payment.escrow_owner as string, sequence: payment.escrow_sequence as number,
-      condition, fulfillment, drawRequestId: payment.draw_request_id,
-    }))
-    return { txnHash: done.hash }
+    try {
+      const done = await onLedger(client => finishTokenEscrow(client, platformWallet(), {
+        owner: payment.escrow_owner as string, sequence: payment.escrow_sequence as number,
+        condition, fulfillment, drawRequestId: payment.draw_request_id,
+      }))
+      return { txnHash: done.hash }
+    } catch (err) {
+      // A "tec" code is the ledger's final answer from a validated ledger.
+      const code = /^(tec[A-Z_]+)/.exec(err instanceof Error ? err.message : String(err))?.[1]
+      if (code) {
+        throw new PaymentCannotRelease(code === 'tecNO_TARGET'
+          ? 'This escrow is no longer on the ledger and it was not released by BuildChain'
+          : `The ledger refused to release this escrow to the payee (${code})`)
+      }
+      throw err
+    }
   }
 
   if (!payment.lender_signed_blob || !payment.lender_sign_tx || !lenderWallet) {

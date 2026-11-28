@@ -61,9 +61,9 @@ export async function POST(req: NextRequest) {
   // written late, after its own month was invoiced): nothing is left behind.
   const { data: lines } = await admin.from('fee_accruals')
     .select('id, release_amount, fee_amount, waived')
-    .eq('lender_id', lenderId).lt('released_at', next.toISOString()).is('invoice_id', null)
+    .eq('lender_id', lenderId).eq('network', 'mainnet').lt('released_at', next.toISOString()).is('invoice_id', null)
   const rows: any[] = lines ?? []
-  if (!rows.length) return NextResponse.json({ error: 'No draws were released for this lender in that month and nothing earlier is waiting, so there is nothing to invoice.' }, { status: 409 })
+  if (!rows.length) return NextResponse.json({ error: 'No real-money draws were released for this lender in that month and nothing earlier is waiting, so there is nothing to invoice. Draws on the test network are never invoiced.' }, { status: 409 })
 
   const feeTotal = money(rows.reduce((t, r) => t + Number(r.fee_amount), 0))
   const waivedTotal = money(rows.filter(r => r.waived).reduce((t, r) => t + Number(r.fee_amount), 0))

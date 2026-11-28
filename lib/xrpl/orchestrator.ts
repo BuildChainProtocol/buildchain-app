@@ -33,8 +33,8 @@ import { createClient } from '@supabase/supabase-js'
 import { waitUntil } from '@vercel/functions'
 import type { Client } from 'xrpl'
 import { getConnectedClient } from './client'
-import { isXrplConfigured } from './escrow'
-import { isTokenMethod, releaseDraw, releasePayment, ReleaseNeedsNewSignature } from './release'
+import { createDrawEscrow, isXrplConfigured } from './escrow'
+import { isTokenMethod, PaymentCannotRelease, releaseDraw, releasePayment, ReleaseNeedsNewSignature } from './release'
 import { ledgerName, onTestNetwork, pilotNote } from '@/lib/network'
 import { appUrl } from '@/lib/app-url'
 import { sendEmail } from '@/lib/email/send'
@@ -143,9 +143,9 @@ export async function runOrchestrator(drawId: string, opts: { hop?: number } = {
       inspection_done, lien_waiver,
       lien_waiver_nft_id,
       escrow_sequence, escrow_txn_hash, escrow_finish_after,
-      settlement_method, settlement_state, settlement_payee, escrow_owner,
+      settlement_method, settlement_state, settlement_payee, escrow_owner, gc_wallet,
       inspections!draw_request_id ( id, status, credential_nft_id ),
-      projects ( name, lenders ( profile_id, xrp_address ) )
+      projects ( name, lenders ( profile_id, xrp_address ), borrowers ( xrp_address ) )
     `)
     .eq('id', drawId)
     .single()
@@ -214,6 +214,7 @@ export async function runOrchestrator(drawId: string, opts: { hop?: number } = {
       const lenderWallet: string | null = (draw.projects as any)?.lenders?.xrp_address ?? null
       const failures: string[] = []
       const needSign: string[] = []
+      const refused: string[] = []
       let inProgress = false
       let outOfTime = false
       const stamp = () => new Date().toISOString()
@@ -258,6 +259,17 @@ export async function runOrchestrator(drawId: string, opts: { hop?: number } = {
               await supabase.from('draw_payments').update({ status: 'pending', release_ticket: null, updated_at: stamp() })
                 .eq('id', p.id).eq('status', 'releasing')
               await supabase.from('payment_signatures').delete().eq('payment_id', p.id)
+            } else if (payErr instanceof PaymentCannotRelease) {
+              // The ledger's final answer for this payee's escrow. One payee
+              // who cannot be paid must not hold up paying and reporting the
+              // rest: this one goes on hold, with the reason. Its escrow, if
+              // still there, stays locked; signing for the payee again picks
+              // it up and tries once more.
+              await supabase.from('draw_payments').update({
+                status: 'held', updated_at: stamp(),
+                held_reason: `${m.slice(0, 200)}. Nothing was paid to this payee. Open the draw to try again once the payee's wallet is fixed, or take the escrow back after its deadline.`,
+              }).eq('id', p.id).eq('status', 'releasing')
+              refused.push(p.payee_name ?? 'a payee')
             } else {
               failures.push(`${p.payee_name ?? 'payee'}: ${m.slice(0, 160)}`)
               await supabase.from('draw_payments').update({ status: 'failed', updated_at: stamp() })
@@ -302,7 +314,19 @@ export async function runOrchestrator(drawId: string, opts: { hop?: number } = {
       // The lender may have started signing for a held payee while this ran.
       if (unsigned(now).length) throw new WaitingOnLender(`Waiting for the lender to sign for ${unsigned(now).length} payee(s)`)
       const paid = now.filter(p => p.status === 'released')
-      if (!paid.length) throw new Error('No payment on this draw has been signed for')
+      if (refused.length) {
+        const { alertOwner } = await import('@/lib/alerts')
+        await alertOwner({
+          title: 'The ledger refused to pay a payee',
+          body: `Draw ${draw.request_number}: ${refused.join(', ')} could not be paid and ${refused.length === 1 ? 'is' : 'are'} on hold. The other payees were paid.`,
+          link: '/admin/draws', details: { draw: drawId },
+        })
+      }
+      if (!paid.length) {
+        throw new Error(refused.length
+          ? `No payee on this draw could be paid: the ledger refused ${refused.join(', ')}`
+          : 'No payment on this draw has been signed for')
+      }
       releasedUsd = Math.round(paid.reduce((t, r) => t + Number(r.amount), 0) * 100) / 100
       escrowFinishHash = paid[0].release_txn_hash ?? null
       result.finishHash = escrowFinishHash ?? undefined
@@ -311,8 +335,21 @@ export async function runOrchestrator(drawId: string, opts: { hop?: number } = {
       escrowFinishHash = finish.txnHash
       result.finishHash = escrowFinishHash
       console.log(`[Orchestrator] EscrowFinish OK — hash ${escrowFinishHash}`)
+    } else if (isXrplConfigured()) {
+      // Approved, but its escrow was never created (the approval was cut off
+      // before the ledger step). Create it now; it can be released once its
+      // short hold period has passed, in a follow-on run.
+      const escrow = await createDrawEscrow({
+        destinationAddress: (draw as any).gc_wallet ?? (draw.projects as any)?.borrowers?.xrp_address ?? undefined,
+        drawAmountUsd: draw.amount, drawRequestId: drawId, projectId: draw.project_id,
+      })
+      await supabase.from('draw_requests').update({
+        escrow_sequence: escrow.escrowSequence, escrow_txn_hash: escrow.txnHash, escrow_finish_after: escrow.finishAfter.toISOString(),
+      }).eq('id', drawId).eq('status', 'approved').is('escrow_sequence', null)
+      if (await continueInNewRun(drawId, hop)) throw new ReleaseInProgress('The draw\'s missing escrow was created; its release follows')
+      throw new Error('This draw had been approved without its escrow. The escrow has now been created. Use "Check again" in a minute to release it.')
     } else {
-      console.log('[Orchestrator] XRPL not configured or no escrow — transitioning without on-chain finish')
+      console.log('[Orchestrator] XRPL not configured — transitioning without on-chain finish')
     }
 
     // Verification Receipt (Patent §V)
@@ -430,12 +467,15 @@ export async function announceRelease(supabase: any, drawId: string, trigger: 'm
     await recordFeeAccrual({ ...draw, settlement_amount: tokenSettled ? paidAmount : draw.settlement_amount, funded_at: fundedAt })
   })
 
-  // Building Block: the release with payments[], then one notice per paid payee.
+  // Building Block: the release with payments[], then one notice per paid
+  // payee. Each notice carries the same id every time it is sent, so sending
+  // again after a failure cannot be counted twice on their side.
+  let delivered = false
   await step('Building Block notices', async () => {
     const { data: lineItems } = await supabase
       .from('draw_line_items').select('bb_pay_app_id, sub_code, current_payment_due').eq('draw_request_id', drawId)
     const { sendEscrowReleasedWebhooks } = await import('@/lib/webhooks/building-block')
-    await sendEscrowReleasedWebhooks({
+    delivered = await sendEscrowReleasedWebhooks({
       bcDrawId:         drawId,
       escrowFinishHash: draw.escrow_finish_hash ?? null,
       netAmount:        draw.net_amount ?? draw.amount,
@@ -448,8 +488,15 @@ export async function announceRelease(supabase: any, drawId: string, trigger: 'm
     })
   })
 
+  // People are told once. The activity-log entry written below is the mark:
+  // if this is a second try (the first was cut short, or Building Block did
+  // not take its notices), nobody gets the same email twice.
+  const { count: toldBefore } = await supabase.from('activity_log').select('id', { count: 'exact', head: true })
+    .eq('entity_id', drawId).in('action', ['orchestrator_dual_condition_release', 'draw_funded'])
+  const tellPeople = !toldBefore
+
   // The borrower's email (address from the account, which is the reliable one).
-  await step('borrower email', async () => {
+  if (tellPeople) await step('borrower email', async () => {
     if (!borrowerRow?.profile_id || !project) return
     const { data: bp } = await supabase.from('profiles').select('email, full_name, company_name').eq('id', borrowerRow.profile_id).single()
     const to = bp?.email ?? borrowerRow.email ?? null
@@ -466,7 +513,7 @@ export async function announceRelease(supabase: any, drawId: string, trigger: 'm
   })
 
   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
-  await step('notifications', async () => {
+  if (tellPeople) await step('notifications', async () => {
     if (borrowerRow?.profile_id) {
       await supabase.from('notifications').insert({
         user_id: borrowerRow.profile_id, type: 'draw_funded', title: 'Draw Release Recorded',
@@ -487,7 +534,7 @@ export async function announceRelease(supabase: any, drawId: string, trigger: 'm
     }
   })
 
-  await step('activity log', async () => {
+  if (tellPeople) await step('activity log', async () => {
     await supabase.from('activity_log').insert({
       project_id: draw.project_id,
       action: trigger === 'orchestrator' ? 'orchestrator_dual_condition_release' : 'draw_funded',
@@ -496,6 +543,9 @@ export async function announceRelease(supabase: any, drawId: string, trigger: 'm
     })
   })
 
+  // Not marked done until Building Block has the notices: the daily check
+  // sends them again (the sender has already alerted the owner).
+  if (!delivered) return false
   await supabase.from('draw_requests').update({ release_announced_at: new Date().toISOString() })
     .eq('id', drawId).is('release_announced_at', null)
   return true

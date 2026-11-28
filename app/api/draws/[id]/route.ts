@@ -193,7 +193,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
       }
     }
-    await admin.from('draw_payments').delete().eq('draw_request_id', params.id)
+    // Only payees nobody has signed for. A signature confirmed in the last
+    // moment keeps its record.
+    await admin.from('draw_payments').delete().eq('draw_request_id', params.id).in('status', ['pending', 'held', 'awaiting_signature', 'withdrawn'])
+    const { count: lateSigned } = await admin.from('draw_payments')
+      .select('id', { count: 'exact', head: true }).eq('draw_request_id', params.id)
+    if (lateSigned) {
+      return NextResponse.json(
+        { error: 'The lender signed for a payee on this draw a moment ago. Withdraw that approval on the Funding page first.' },
+        { status: 409 }
+      )
+    }
   }
 
   let claimedApproval = false

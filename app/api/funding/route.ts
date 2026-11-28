@@ -9,7 +9,7 @@ import { getConnectedClient } from '@/lib/xrpl/client'
 import { isTokenMethod, settlementToken } from '@/lib/xrpl/release'
 import {
   buildAddSlots, buildDeposit, buildEscrowCancel, buildRefundPayment, buildVoidTicket, countersignAndSubmit,
-  loanTickets, submitAndConfirm, tokenBalance, usdValue, validatedResult, verifyLenderSigned,
+  isDeadTransaction, loanTickets, SlotUsedUp, submitAndConfirm, tokenBalance, usdValue, validatedResult, verifyLenderSigned,
 } from '@/lib/xrpl/settlement'
 
 // A lender's funding desk: what sits where on the ledger, and the things a
@@ -66,9 +66,12 @@ export async function GET(req: NextRequest) {
   // (nothing else asks about it). Finish those first, so what this page then
   // shows is true. Row-level security limits this to the caller's own loans.
   const { data: unfinished } = await supabase.from('settlement_requests').select('id')
-    .eq('state', 'waiting').lt('created_at', new Date(Date.now() - 20 * 1000).toISOString()).order('created_at').limit(4)
+    .eq('state', 'waiting').lt('created_at', new Date(Date.now() - 20 * 1000).toISOString())
+    .order('created_at', { ascending: false }).limit(3)
+  const loadStarted = Date.now()
   for (const u of (unfinished ?? []) as any[]) {
-    try { await finish(supabase, u.id) } catch { /* looked at again on the next load */ }
+    if (Date.now() - loadStarted > 8000) break       // the page must still load
+    try { await finish(supabase, u.id, true) } catch { /* looked at again on the next load */ }
   }
 
   // Row-level security limits a lender to their own projects and their payments.
@@ -91,15 +94,15 @@ export async function GET(req: NextRequest) {
       method: p.settlement_method ?? 'test_xrp', loanAccount: p.loan_account ?? null,
       lenderWallet: p.lenders?.xrp_address ?? null,
       // One line per payee the lender has signed for (or is signing for).
-      locked: mine.filter(x => ['locked', 'failed', 'releasing'].includes(x.status)).map(x => ({
-        releaseFailed: x.status === 'failed',
+      locked: mine.filter(x => ['locked', 'failed', 'releasing'].includes(x.status) || (x.status === 'held' && x.escrow_sequence != null)).map(x => ({
+        releaseFailed: x.status === 'failed' || x.status === 'held',
         releasing: x.status === 'releasing',
         paymentId: x.id, drawId: x.draw_request_id, requestNumber: number(x.draw_request_id), payee: x.payee_name,
         wallet: x.wallet, amount: Number(x.amount), method: p.settlement_method, cancelAfter: null as string | null,
         _owner: x.escrow_owner, _seq: x.escrow_sequence,
       })),
       // Payees that could not be signed for, so the lender knows who is still unpaid.
-      held: mine.filter(x => x.status === 'held').map(x => ({
+      held: mine.filter(x => x.status === 'held' && x.escrow_sequence == null).map(x => ({
         paymentId: x.id, requestNumber: number(x.draw_request_id), payee: x.payee_name, amount: Number(x.amount),
         reason: x.held_reason ?? 'This payee cannot be paid yet',
       })),
@@ -231,7 +234,8 @@ export async function POST(req: NextRequest) {
           instruction = `Take ${dollars(amount)} back from the loan account for ${project.name} to your wallet.`
         }
       } else {
-        if (!payment || !['locked', 'failed'].includes(payment.status)) throw new Error('That payment is not locked')
+        const heldEscrow = kind === 'escrow_cancel' && payment?.status === 'held' && payment?.escrow_sequence != null
+        if (!payment || !(['locked', 'failed'].includes(payment.status) || heldEscrow)) throw new Error('That payment is not locked')
         const number = (project.draw_requests ?? []).find((d: any) => d.id === payment.draw_request_id)?.request_number ?? ''
         if (kind === 'escrow_cancel') {
           if (project.settlement_method !== 'token_escrow' || payment.escrow_sequence == null) throw new Error('That payment has no escrow')
@@ -313,13 +317,20 @@ async function settleDrawAfterTakeBack(admin: any, drawId: string, how: 'withdra
     }
     if (cleared) await admin.from('draw_payments').delete().eq('draw_request_id', drawId).in('status', ['pending', 'held', 'withdrawn'])
   } else {
-    await admin.from('draw_requests')
-      .update({ status: 'declined', settlement_state: null, settlement_amount: null, decline_reason: 'The lender took back the escrow after its deadline passed.' })
-      .eq('id', drawId).in('status', ['submitted', 'pending', 'approved', 'held'])
+    const reason = 'The lender took back the escrow after its deadline passed.'
+    const { data: ended } = await admin.from('draw_requests')
+      .update({ status: 'declined', settlement_state: null, settlement_amount: null, decline_reason: reason })
+      .eq('id', drawId).in('status', ['submitted', 'pending', 'approved', 'held']).select('id')
+    if (ended?.length) {
+      try {
+        const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+        await sendBuildingBlockWebhook({ event: 'draw_declined', bc_draw_id: drawId, reason, decided_at: new Date().toISOString() })
+      } catch { /* the sender alerts the owner itself when a notice is not accepted */ }
+    }
   }
 }
 
-async function finish(supabase: any, requestId: string) {
+async function finish(supabase: any, requestId: string, quick = false) {
   const { data: r } = await supabase.from('settlement_requests')
     .select('*, projects ( id, loan_account, lenders ( xrp_address ) )').eq('id', requestId).single()
   if (!r) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
@@ -391,13 +402,16 @@ async function finish(supabase: any, requestId: string) {
           // second try never pays twice.
           const loanAccount = r.projects?.loan_account
           const info = await client.request({ command: 'account_info', account: loanAccount, ledger_index: 'validated' })
-          const acct = (info.result as unknown as { account_data: { Balance: string; OwnerCount: number } }).account_data
+          const acct = (info.result as unknown as { account_data: { Balance: string; OwnerCount: number; Sequence: number } }).account_data
+          // If the account has already moved past this transaction's number, an
+          // earlier try added the slots: nothing more to pay for.
+          const alreadyAdded = Number(acct.Sequence) > Number((r.txjson as any)?.Sequence ?? Number.MAX_SAFE_INTEGER)
           const server = await client.request({ command: 'server_info' })
           const ledger = (server.result as unknown as { info: { validated_ledger?: { reserve_base_xrp?: number; reserve_inc_xrp?: number } } }).info.validated_ledger
           const base = Number(ledger?.reserve_base_xrp ?? 1), inc = Number(ledger?.reserve_inc_xrp ?? 0.2)
           const adding = Number((r.txjson as any)?.TicketCount ?? 50)
           const needed = base + inc * (Number(acct.OwnerCount) + adding) + 1 - Number(acct.Balance) / 1_000_000
-          if (needed > 0) {
+          if (needed > 0 && !alreadyAdded) {
             if (needed > 50) return close('failed', { error: 'The loan account needs more XRP for new slots than BuildChain tops up automatically. Nothing was changed.' })
             const platform = Wallet.fromSeed(seed)
             const topUp: any = await client.autofill({
@@ -416,7 +430,12 @@ async function finish(supabase: any, requestId: string) {
       if (!hash) return close('failed', { error: 'The wallet did not return a transaction hash' })
       const client = await getConnectedClient()
       let outcome: string | null
-      try { outcome = await validatedResult(client, hash) } finally { await client.disconnect() }
+      let dead = false
+      try {
+        outcome = await validatedResult(client, hash, quick ? 2 : 8)
+        if (outcome === null) dead = await isDeadTransaction(client, result.hex, hash)
+      } finally { await client.disconnect() }
+      if (dead) return close('failed', { txn_hash: hash, error: 'The signed request never reached the ledger and no longer can. Nothing moved.' })
       if (outcome === null) return unclaim()   // not validated yet: let the next check look again
       if (outcome !== 'tesSUCCESS') return close('failed', { txn_hash: hash, error: `The ledger refused it: ${outcome}` })
     }
@@ -427,7 +446,7 @@ async function finish(supabase: any, requestId: string) {
       await admin.from('draw_payments').update({
         status: 'withdrawn', release_ticket: null, updated_at: new Date().toISOString(),
         held_reason: r.kind === 'withdraw_release' ? 'The lender withdrew approval for this payee' : 'The lender took this escrow back after its deadline',
-      }).eq('id', paymentId).in('status', ['locked', 'failed', 'releasing', 'pending'])
+      }).eq('id', paymentId).in('status', ['locked', 'failed', 'releasing', 'pending', 'held'])
       await admin.from('payment_signatures').delete().eq('payment_id', paymentId)
       if (r.draw_request_id) await settleDrawAfterTakeBack(admin, r.draw_request_id, r.kind === 'withdraw_release' ? 'withdrawn' : 'taken_back')
     }
@@ -438,6 +457,9 @@ async function finish(supabase: any, requestId: string) {
     return close('done', { txn_hash: hash })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Ledger error'
+    // The ledger's history shows this request's transaction was refused, or
+    // its slot went to something else: final, and nothing moved.
+    if (err instanceof SlotUsedUp) return close('failed', { error: `Not done, and nothing moved. ${message.slice(0, 240)}` })
     // The ledger refusing the transaction is final. Anything else (no answer
     // from the wallet service or the ledger) is not: release the claim and
     // let the next check try again, so a success is never recorded as a failure.

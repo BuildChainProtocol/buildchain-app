@@ -197,6 +197,9 @@ export async function GET(req: NextRequest) {
     problems.push(`The daily check itself failed part-way: ${err instanceof Error ? err.message.slice(0, 200) : 'error'}`)
   }
 
+  // The count of public requests only needs the last day.
+  try { await db.from('public_request_log').delete().lt('created_at', old(2 * 24 * 60)) } catch { /* tidy-up only */ }
+
   if (problems.length) {
     await alertOwner({
       title: `${problems.length} item${problems.length === 1 ? '' : 's'} need${problems.length === 1 ? 's' : ''} attention`,

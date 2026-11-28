@@ -121,7 +121,9 @@ export async function findTicketUse(client: Client, account: string, ticketSeque
     for (const item of result.transactions ?? []) {
       const txj = ((item.tx_json ?? item.tx ?? {}) as Tx)
       const meta = (item.meta ?? {}) as Tx
-      if (item.validated !== false && Number(txj.TicketSequence) === ticketSequence) {
+      // The account's OWN transaction: anyone can send it a payment that
+      // happens to use the same ticket number on their own account.
+      if (item.validated !== false && txj.Account === account && Number(txj.TicketSequence) === ticketSequence) {
         return { hash: String(item.hash ?? txj.hash ?? ''), result: String(meta.TransactionResult) }
       }
     }
@@ -536,6 +538,21 @@ export async function countersignAndSubmit(client: Client, buildchain: Wallet, l
       }
       throw new Error('The release slot is gone from the ledger but no transaction that used it was found. Left as it is so nothing can be paid twice; this needs a person to look.')
     }
+    // A transaction that used the account's own sequence, not a slot (adding
+    // slots does): an earlier try may have gone through. Its hash says so.
+    if (/tefPAST_SEQ|tefALREADY|not validated in time/.test(message)) {
+      for (let i = 0; i < 4; i++) {
+        try {
+          const found = await client.request({ command: 'tx', transaction: hash })
+          const r = found.result as unknown as { validated?: boolean; meta?: Tx }
+          if (r.validated && r.meta?.TransactionResult === 'tesSUCCESS') return { hash }
+          if (r.validated) break
+        } catch (lookupErr) {
+          if (ledgerErrorCode(lookupErr) !== 'txnNotFound') throw lookupErr
+        }
+        await new Promise(res => setTimeout(res, 2000))
+      }
+    }
     // A "tec" result here came from a validated ledger: final, and it
     // consumed the slot.
     if (/^tec[A-Z_]+/.test(message)) throw new SlotUsedUp(message)
@@ -605,8 +622,27 @@ export function buildVoidTicket(o: { loanAccount: string; ticketSequence: number
  * in a validated ledger ('tesSUCCESS' when it did what it said). Null when it
  * has not been validated in time.
  */
-export async function validatedResult(client: Client, hash: string): Promise<string | null> {
-  for (let i = 0; i < 20; i++) {
+/**
+ * True when a signed transaction can no longer enter the ledger: the
+ * validated ledger is past the last one it named, and the ledger itself says
+ * it has no such transaction. False whenever that is not certain.
+ */
+export async function isDeadTransaction(client: Client, signedHex: string | null, hash: string | null): Promise<boolean> {
+  if (!signedHex || !hash) return false
+  let last = 0
+  try { last = Number((decode(signedHex) as Tx).LastLedgerSequence ?? 0) } catch { return false }
+  if (!(last > 0)) return false
+  if ((await client.getLedgerIndex()) <= last + 3) return false
+  try {
+    await client.request({ command: 'tx', transaction: hash })
+    return false                       // it is known to the ledger
+  } catch (err) {
+    return ledgerErrorCode(err) === 'txnNotFound'
+  }
+}
+
+export async function validatedResult(client: Client, hash: string, tries = 20): Promise<string | null> {
+  for (let i = 0; i < tries; i++) {
     try {
       const res = await client.request({ command: 'tx', transaction: hash })
       const r = res.result as unknown as { validated?: boolean; meta?: Tx }

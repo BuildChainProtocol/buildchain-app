@@ -27,19 +27,19 @@ export const dynamic = 'force-dynamic'
 // across every server instance: 6 per visitor in 10 minutes, 150 in all per
 // day. The visitor is stored only as a one-way hash. If the count cannot be
 // read, the request is refused rather than let through uncounted.
-async function tooMany(req: NextRequest): Promise<boolean> {
+async function tooMany(req: NextRequest, kind = 'wallet_setup', perVisitor = 6, perDay = 150): Promise<boolean> {
   try {
     const who = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
     const source = createHash('sha256').update(`wallet-setup:${who}`).digest('hex').slice(0, 32)
     const db = serviceClient()
     const since = (ms: number) => new Date(Date.now() - ms).toISOString()
     const { count: mine, error: e1 } = await db.from('public_request_log').select('id', { count: 'exact', head: true })
-      .eq('kind', 'wallet_setup').eq('source', source).gte('created_at', since(10 * 60 * 1000))
+      .eq('kind', kind).eq('source', source).gte('created_at', since(10 * 60 * 1000))
     const { count: all, error: e2 } = await db.from('public_request_log').select('id', { count: 'exact', head: true })
-      .eq('kind', 'wallet_setup').gte('created_at', since(24 * 60 * 60 * 1000))
+      .eq('kind', kind).gte('created_at', since(24 * 60 * 60 * 1000))
     if (e1 || e2) return true
-    if ((mine ?? 0) >= 6 || (all ?? 0) >= 150) return true
-    const { error: e3 } = await db.from('public_request_log').insert({ kind: 'wallet_setup', source })
+    if ((mine ?? 0) >= perVisitor || (all ?? 0) >= perDay) return true
+    const { error: e3 } = await db.from('public_request_log').insert({ kind, source })
     return !!e3
   } catch { return true }
 }
@@ -79,6 +79,9 @@ export async function GET(req: NextRequest) {
   if (!process.env.SETTLEMENT_TOKEN_ISSUER) return unavailable()
   const address = req.nextUrl.searchParams.get('address')
   const requestId = req.nextUrl.searchParams.get('request')
+  // Checks are cheap but not free (each asks the ledger or the wallet
+  // service). The page asks every few seconds while someone is setting up.
+  if (await tooMany(req, 'wallet_check', 300, 20000)) return NextResponse.json({ error: 'Too many requests. Please wait a few minutes.' }, { status: 429 })
   try {
     if (address) {
       if (!isValidClassicAddress(address)) return NextResponse.json({ error: 'That is not a valid XRP Ledger address.' }, { status: 400 })

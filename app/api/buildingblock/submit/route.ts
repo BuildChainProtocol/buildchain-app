@@ -137,6 +137,10 @@ async function anchorBbInspection(opts: {
   }
 }
 
+// This route can record a condition and run the release engine, which waits on the ledger.
+export const runtime = 'nodejs'
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('authorization') || ''
