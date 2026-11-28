@@ -73,6 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { count } = await supabase.from('draw_requests').select('id', { count: 'exact', head: true })
     .eq('project_id', project.id).in('settlement_state', ['awaiting_lender_signature', 'locked'])
+    // (a draw in either state has payments the lender is signing or has signed)
   if (count) return NextResponse.json({ error: 'This project has a draw waiting on a signature or a release. Finish it before changing the method.' }, { status: 409 })
 
   let loanAccount: string | null = project.loan_account ?? null
@@ -99,12 +100,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const fund: any = await client.autofill({
             TransactionType: 'Payment', Account: platform.address, Destination: loan.address,
-            Amount: xrpToDrops(process.env.LOAN_ACCOUNT_RESERVE_XRP ?? '10'),
+            Amount: xrpToDrops(process.env.LOAN_ACCOUNT_RESERVE_XRP ?? '25'),
           })
           await submitAndConfirm(client, platform.sign(fund).tx_blob)
           await setUpLoanAccount(client, loan, {
             lender: lenderWallet, buildchain: platform.address, token,
-            tickets: Math.min(40, Math.max(1, parseInt(process.env.LOAN_ACCOUNT_TICKETS ?? '20', 10) || 20)),
+            // One slot per payee per draw: a loan with several subs uses them quickly.
+            tickets: Math.min(100, Math.max(1, parseInt(process.env.LOAN_ACCOUNT_TICKETS ?? '100', 10) || 100)),
           })
           loanAccount = loan.address
         }

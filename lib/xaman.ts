@@ -27,6 +27,8 @@ export interface SignRequest {
   url: string
   /** PNG of the QR code to scan */
   qrPng: string
+  /** true when Xaman sent it straight to the lender's phone (no QR needed) */
+  pushed: boolean
 }
 
 export interface SignResult {
@@ -40,12 +42,18 @@ export interface SignResult {
   txid: string | null
   /** the signed transaction, hex */
   hex: string | null
+  /**
+   * Given once a wallet has signed for this app: with it, later requests are
+   * pushed to that phone. Server-only; treat it like a password.
+   */
+  userToken: string | null
 }
 
 /**
  * Ask Xaman to present a transaction for signing.
  *   submit    Xaman submits it to the ledger after signing (single-signer transactions)
  *   multisign the lender signs as one signer of a multi-signature account; nothing is submitted
+ *   userToken push the request to the phone that signed before
  */
 export async function createSignRequest(o: {
   txjson: Record<string, unknown>
@@ -56,12 +64,14 @@ export async function createSignRequest(o: {
   /** our reference, at most 40 characters */
   identifier?: string
   expireMinutes?: number
+  userToken?: string | null
 }): Promise<SignRequest> {
   const res = await fetch(`${API}/payload`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({
       txjson: o.txjson,
+      ...(o.userToken ? { user_token: o.userToken } : {}),
       options: {
         submit: o.submit,
         ...(o.multisign ? { multisign: true } : {}),
@@ -75,11 +85,11 @@ export async function createSignRequest(o: {
     cache: 'no-store',
   })
   const json = await res.json().catch(() => null) as
-    { uuid?: string; next?: { always?: string }; refs?: { qr_png?: string }; error?: { reference?: string; code?: number } } | null
+    { uuid?: string; next?: { always?: string }; refs?: { qr_png?: string }; pushed?: boolean; error?: { reference?: string; code?: number } } | null
   if (!res.ok || !json?.uuid || !json.next?.always || !json.refs?.qr_png) {
     throw new Error(`Xaman did not accept the sign request (${res.status}${json?.error?.code ? `, code ${json.error.code}` : ''})`)
   }
-  return { uuid: json.uuid, url: json.next.always, qrPng: json.refs.qr_png }
+  return { uuid: json.uuid, url: json.next.always, qrPng: json.refs.qr_png, pushed: !!json.pushed }
 }
 
 export async function getSignResult(uuid: string): Promise<SignResult> {
@@ -88,6 +98,7 @@ export async function getSignResult(uuid: string): Promise<SignResult> {
   const json = await res.json().catch(() => null) as {
     meta?: { resolved?: boolean; signed?: boolean; expired?: boolean; cancelled?: boolean }
     response?: { account?: string | null; txid?: string | null; hex?: string | null }
+    application?: { issued_user_token?: string | null }
   } | null
   if (!res.ok || !json?.meta) throw new Error(`Xaman did not return the sign request (${res.status})`)
   return {
@@ -97,5 +108,6 @@ export async function getSignResult(uuid: string): Promise<SignResult> {
     account: json.response?.account ?? null,
     txid: json.response?.txid ?? null,
     hex: json.response?.hex ?? null,
+    userToken: json.application?.issued_user_token ?? null,
   }
 }

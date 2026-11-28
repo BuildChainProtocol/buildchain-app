@@ -1,0 +1,30 @@
+name: CI
+
+# Every push and pull request: install, run the unit tests and the escrow
+# condition check, and make sure the site builds. No secrets are used; the
+# build gets placeholder settings and never talks to the database or a ledger.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit tests (amounts, signature check, links, keys)
+        run: node scripts/test-units.js
+      - name: Escrow condition encoding
+        run: node scripts/check-escrow-condition.js
+      - name: Build
+        run: npx next build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.invalid
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder

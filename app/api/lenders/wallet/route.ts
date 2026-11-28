@@ -41,14 +41,20 @@ export async function GET() {
       const { count } = await admin.from('draw_requests')
         .select('id, projects!inner(lender_id)', { count: 'exact', head: true })
         .eq('projects.lender_id', lender.id).in('settlement_state', ['awaiting_lender_signature', 'locked'])
-      if (count && lender.xrp_address && lender.xrp_address !== result.account) {
-        await admin.from('lender_wallet_links').delete().eq('lender_id', lender.id)
+      // A different wallet has no push token for this app yet.
+      const changed = !!lender.xrp_address && lender.xrp_address !== result.account
+      if (count && changed) {
+        await admin.from('lender_wallet_links').update({ payload: null }).eq('lender_id', lender.id)
         return NextResponse.json({ wallet: lender.xrp_address, state: 'connected', available: true,
           error: 'Your wallet was not changed: a draw is waiting on the current one. Finish or withdraw it first.' })
       }
       await admin.from('lenders').update({ xrp_address: result.account }).eq('id', lender.id)
+      // Keep the row: it also holds the token that lets later requests go
+      // straight to this phone. A new wallet starts with this sign-in's token.
+      await admin.from('lender_wallet_links').update({ payload: null, user_token: result.userToken ?? null }).eq('lender_id', lender.id)
+    } else {
+      await admin.from('lender_wallet_links').update({ payload: null }).eq('lender_id', lender.id)
     }
-    await admin.from('lender_wallet_links').delete().eq('lender_id', lender.id)
     return NextResponse.json({
       wallet: connected ? result.account : lender.xrp_address ?? null, available: true,
       state: connected ? 'connected' : result.expired ? 'expired' : 'rejected',

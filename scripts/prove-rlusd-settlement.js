@@ -114,6 +114,29 @@ async function main() {
   ok('after the deadline the lender gets an unreleased draw back',
     Number(await S.tokenBalance(client, lender.address, token)) === before + draw2)
 
+  // ── Several payees on one draw: each is its own ledger payment ────────────
+  console.log('\nOne draw, several payees — each paid by its own transaction')
+  const sub1 = await fund(), sub2 = await fund()
+  await send(client, sub1, { TransactionType: 'TrustSet', Account: sub1.address,
+    LimitAmount: { currency: S.currencyCode('RLUSD'), issuer: issuer.address, value: '1000000000' } })
+  // sub2 never sets its wallet up, so it cannot be paid.
+  ok('a payee whose wallet is not set up is detected before anyone signs',
+    (await S.tokenBalance(client, sub2.address, token)) === null && (await S.tokenBalance(client, sub1.address, token)) !== null)
+  const gcShare = 12000.25, subShare = 8000.5
+  const cGc = condition(), cSub = condition()       // a separate release condition per payee
+  const payeeStart = Number(await S.tokenBalance(client, payee.address, token))
+  const eGc = await send(client, lender, S.buildLenderEscrowCreate({ lender: lender.address, payee: payee.address, token, usd: gcShare,
+    condition: cGc.condition, cancelAfter, drawRequestId: 'proof-draw-5' }))
+  const eSub = await send(client, lender, S.buildLenderEscrowCreate({ lender: lender.address, payee: sub1.address, token, usd: subShare,
+    condition: cSub.condition, cancelAfter, drawRequestId: 'proof-draw-5' }))
+  await expectRefused('one payee\'s release key does not open another payee\'s escrow', () =>
+    S.finishTokenEscrow(client, bc, { owner: lender.address, sequence: eSub.sequence, condition: cSub.condition, fulfillment: cGc.fulfillment }))
+  await S.finishTokenEscrow(client, bc, { owner: lender.address, sequence: eGc.sequence, condition: cGc.condition, fulfillment: cGc.fulfillment })
+  ok('the general contractor received exactly its share', Number(await S.tokenBalance(client, payee.address, token)) === payeeStart + gcShare)
+  ok('the subcontractor has not been paid until its own release', Number(await S.tokenBalance(client, sub1.address, token)) === 0)
+  await S.finishTokenEscrow(client, bc, { owner: lender.address, sequence: eSub.sequence, condition: cSub.condition, fulfillment: cSub.fulfillment })
+  ok('the subcontractor received exactly its share, in its own wallet', Number(await S.tokenBalance(client, sub1.address, token)) === subShare)
+
   // ── Method B: two-signature loan account ─────────────────────────────────
   console.log('\nMethod B — two-signature loan account')
   const setup = await S.setUpLoanAccount(client, loan, { lender: lender.address, buildchain: bc.address, token, tickets: 3 })

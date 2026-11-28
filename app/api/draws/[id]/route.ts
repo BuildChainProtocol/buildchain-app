@@ -139,9 +139,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       { status: 409 }
     )
   }
-  // A signature request still out for this draw is cancelled with it.
+  // Signing still in progress: a payee the lender has already signed for is
+  // locked on the ledger, so the same rule applies. Otherwise the open
+  // request is cancelled along with the draw's payment list.
   if ((body.status === 'declined' || body.status === 'held') && (draw as any).settlement_state === 'awaiting_lender_signature') {
-    await admin.from('draw_signatures').delete().eq('draw_request_id', params.id)
+    const { count: signedFor } = await admin.from('draw_payments')
+      .select('id', { count: 'exact', head: true }).eq('draw_request_id', params.id).eq('status', 'locked')
+    if (signedFor) {
+      return NextResponse.json(
+        { error: 'The lender has already signed for part of this draw. Withdraw those approvals on the Funding page first.' },
+        { status: 409 }
+      )
+    }
+    await admin.from('draw_payments').delete().eq('draw_request_id', params.id)
   }
 
   const updates: Record<string, unknown> = {

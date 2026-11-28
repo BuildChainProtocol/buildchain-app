@@ -1,20 +1,38 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Loader2, Smartphone, X } from 'lucide-react'
+import { Check, Loader2, QrCode, Smartphone, X } from 'lucide-react'
 import LenderWalletCard from '@/components/lender/LenderWalletCard'
 import FeeStatement from '@/components/shared/FeeStatement'
 
-interface Locked { drawId: string; requestNumber: string; amount: number; payee: string; method: string; cancelAfter: string | null }
+/** One payee the lender has signed for, still waiting to be released. */
+interface Locked {
+  paymentId: string; drawId: string; requestNumber: string; payee: string; wallet: string | null
+  amount: number; method: string; cancelAfter: string | null
+}
+/** A payee that could not be signed for, or whose release the ledger refused. */
+interface Held { paymentId: string; requestNumber: string; payee: string; amount: number; reason: string | null }
 interface Loan {
   id: string; name: string; loanNumber: string | null; loanAmount: number; amountDrawn: number
   method: 'test_xrp' | 'token_escrow' | 'two_signature'
   loanAccount: string | null; lenderWallet: string | null
-  locked: Locked[]; lockedTotal: number
+  locked: Locked[]; held?: Held[]; lockedTotal: number
   walletBalance: string | null; loanAccountBalance: string | null
 }
 interface Funding { loans: Loan[]; walletSigning: boolean; tokenReady: boolean }
-interface Open { title: string; requestId: string; qrPng: string; url: string; instruction: string }
+interface Open { title: string; requestId: string; qrPng: string; url: string; pushed?: boolean; instruction: string }
+
+const short = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-6)}` : a)
+/** Locked lines grouped by the draw they belong to, in the order they arrive. */
+function byDraw(lines: Locked[]): Array<{ drawId: string; requestNumber: string; lines: Locked[] }> {
+  const groups: Array<{ drawId: string; requestNumber: string; lines: Locked[] }> = []
+  for (const line of lines) {
+    const group = groups.find(g => g.drawId === line.drawId)
+    if (group) group.lines.push(line)
+    else groups.push({ drawId: line.drawId, requestNumber: line.requestNumber, lines: [line] })
+  }
+  return groups
+}
 
 const usd = (n: number | string | null) =>
   n == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(n))
@@ -30,6 +48,7 @@ export default function LenderFundingPage() {
   const [amounts, setAmounts] = useState<Record<string, string>>({})
   const [open, setOpen] = useState<Open | null>(null)
   const [outcome, setOutcome] = useState<{ state: string; error?: string } | null>(null)
+  const [showQr, setShowQr] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/funding')
@@ -44,7 +63,7 @@ export default function LenderFundingPage() {
     const json = await res.json().catch(() => ({}))
     setBusy('')
     if (!res.ok) { setError(json.error || `The request could not be opened (${res.status})`); return }
-    setOutcome(null); setOpen({ title, ...json })
+    setOutcome(null); setShowQr(false); setOpen({ title, ...json })
   }
 
   // While a request is open on the lender's phone, ask every 3 seconds.
@@ -79,10 +98,26 @@ export default function LenderFundingPage() {
               <p className="text-sm text-left mb-5" style={{ color: 'var(--bc-text)' }}>{open.instruction}</p>
               {!outcome ? (
                 <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={open.qrPng} alt="QR code to open this request in Xaman" width={188} height={188} className="mx-auto rounded-md border bg-white p-2" style={{ borderColor: 'var(--bc-border)' }} />
-                  <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold"><Smartphone size={14} /> Scan with Xaman</div>
-                  <a href={open.url} target="_blank" rel="noopener noreferrer" className="text-xs underline" style={{ color: 'var(--bc-blue)' }}>On your phone? Open in Xaman</a>
+                  {open.pushed && (
+                    <>
+                      <Smartphone size={36} className="mx-auto" style={{ color: 'var(--bc-text)' }} />
+                      <div className="mt-2 text-sm font-bold" style={{ color: 'var(--bc-text)' }}>Sent to your phone. Open Xaman to approve.</div>
+                      {open.qrPng && (
+                        <button type="button" onClick={() => setShowQr(v => !v)} aria-expanded={showQr}
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs underline" style={{ color: 'var(--bc-muted)' }}>
+                          <QrCode size={12} /> {showQr ? 'Hide QR code' : 'Show QR code'}
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {open.qrPng && (!open.pushed || showQr) && (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={open.qrPng} alt="QR code to open this request in Xaman" width={188} height={188} className={`mx-auto rounded-md border bg-white p-2 max-w-full h-auto ${open.pushed ? 'mt-3' : ''}`} style={{ borderColor: 'var(--bc-border)' }} />
+                      <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold"><Smartphone size={14} /> Scan with Xaman</div>
+                    </>
+                  )}
+                  <a href={open.url} target="_blank" rel="noopener noreferrer" className="block mt-1 text-xs underline" style={{ color: 'var(--bc-blue)' }}>On your phone? Open in Xaman</a>
                   <div className="mt-4 flex items-center justify-center gap-1.5 text-xs" style={{ color: 'var(--bc-muted)' }}><Loader2 size={12} className="animate-spin" /> Waiting for your signature</div>
                 </>
               ) : outcome.state === 'done' ? (
@@ -123,7 +158,7 @@ export default function LenderFundingPage() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
               {(loan.method === 'two_signature'
-                ? [['In the loan account', usd(loan.loanAccountBalance)], ['Committed to approved draws', usd(loan.lockedTotal)], ['Free to take back', usd(free)], ['In your wallet', usd(loan.walletBalance)]]
+                ? [['In the loan account', usd(loan.loanAccountBalance)], ['Committed to approved payments', usd(loan.lockedTotal)], ['Free to take back', usd(free)], ['In your wallet', usd(loan.walletBalance)]]
                 : [['In your wallet', usd(loan.walletBalance)], ['Locked in escrow', usd(loan.lockedTotal)], ['Loan amount', usd(loan.loanAmount)], ['Drawn to date', usd(loan.amountDrawn)]]
               ).map(([label, value]) => (
                 <div key={label} className="px-6 py-4">
@@ -160,30 +195,70 @@ export default function LenderFundingPage() {
             )}
 
             <div className="px-6 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: 'var(--bc-muted)' }}>Approved draws awaiting release</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: 'var(--bc-muted)' }}>Approved payments awaiting release</div>
               {loan.locked.length === 0 ? (
-                <div className="text-sm" style={{ color: 'var(--bc-muted)' }}>None. Money is committed only while an approved draw waits for its inspection and lien waiver.</div>
-              ) : loan.locked.map(d => {
-                const escrow = d.method === 'token_escrow'
-                const due = d.cancelAfter ? new Date(d.cancelAfter).getTime() <= Date.now() : false
-                return (
-                  <div key={d.drawId} className="flex flex-wrap items-center gap-3 py-2 border-t first:border-t-0" style={{ borderColor: 'var(--bc-border)' }}>
-                    <span className="text-sm font-semibold">Draw {d.requestNumber}</span>
-                    <span className="text-sm tabular-nums">{usd(d.amount)}</span>
-                    <span className="text-xs flex-1" style={{ color: 'var(--bc-muted)' }}>
-                      {escrow ? (d.cancelAfter ? `You can take it back on or after ${date(d.cancelAfter)}` : 'Locked in escrow') : 'You signed the release; it pays when both conditions are recorded'}
+                <div className="text-sm" style={{ color: 'var(--bc-muted)' }}>None. Money is committed only while an approved payment waits for its inspection and lien waiver.</div>
+              ) : byDraw(loan.locked).map(group => (
+                <div key={group.drawId} className="rounded-lg border mb-3 last:mb-0" style={{ borderColor: 'var(--bc-border)' }}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2 border-b" style={{ borderColor: 'var(--bc-border)', background: 'var(--bc-page)' }}>
+                    <span className="text-sm font-semibold">Draw {group.requestNumber}</span>
+                    <span className="text-xs tabular-nums" style={{ color: 'var(--bc-muted)' }}>
+                      {group.lines.length === 1 ? '1 payee' : `${group.lines.length} payees`} · {usd(group.lines.reduce((t, l) => t + l.amount, 0))}
                     </span>
-                    <button disabled={!!busy || (escrow && !due)}
-                      title={escrow && !due ? 'The ledger enforces the take-back date' : ''}
-                      onClick={() => request(escrow ? 'Take back the escrow' : 'Withdraw your approval',
-                        { projectId: loan.id, kind: escrow ? 'escrow_cancel' : 'withdraw_release', drawId: d.drawId }, d.drawId)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold border disabled:opacity-50" style={{ borderColor: 'var(--bc-border)' }}>
-                      {busy === d.drawId ? 'Checking…' : escrow ? 'Take back' : 'Withdraw approval'}
-                    </button>
                   </div>
-                )
-              })}
+                  {group.lines.map(d => {
+                    const escrow = d.method === 'token_escrow'
+                    const due = d.cancelAfter ? new Date(d.cancelAfter).getTime() <= Date.now() : false
+                    const blocked = escrow && !due
+                    return (
+                      <div key={d.paymentId} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 border-t first:border-t-0" style={{ borderColor: 'var(--bc-border)' }}>
+                        <div className="min-w-0 flex-1 basis-56">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="text-sm font-semibold truncate">{d.payee}</span>
+                            <span className="text-sm tabular-nums shrink-0">{usd(d.amount)}</span>
+                          </div>
+                          <div className="mt-0.5 text-xs break-words" style={{ color: 'var(--bc-muted)' }}>
+                            {d.wallet && <><span className="font-mono">{short(d.wallet)}</span><span aria-hidden="true"> · </span></>}
+                            {escrow
+                              ? (d.cancelAfter ? `You can take it back on or after ${date(d.cancelAfter)}` : 'Locked in escrow')
+                              : 'You signed the release; it pays when both conditions are recorded'}
+                          </div>
+                        </div>
+                        <button disabled={!!busy || blocked}
+                          title={blocked
+                            ? (d.cancelAfter
+                              ? `The ledger allows the take-back on or after ${date(d.cancelAfter)}`
+                              : 'The take-back date could not be read from the ledger')
+                            : ''}
+                          onClick={() => request(escrow ? 'Take back the escrow' : 'Withdraw your approval',
+                            { projectId: loan.id, kind: escrow ? 'escrow_cancel' : 'withdraw_release', paymentId: d.paymentId }, d.paymentId)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border disabled:opacity-50 shrink-0" style={{ borderColor: 'var(--bc-border)' }}>
+                          {busy === d.paymentId ? 'Checking…' : escrow ? 'Take back' : 'Withdraw approval'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
+
+            {(loan.held ?? []).length > 0 && (
+              <div className="px-6 py-4 border-t" style={{ borderColor: 'var(--bc-border)' }}>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1" style={{ color: 'var(--bc-muted)' }}>On hold</div>
+                <div className="text-xs mb-2" style={{ color: 'var(--bc-muted)' }}>Not locked and not paid by the protocol.</div>
+                {(loan.held ?? []).map(h => (
+                  <div key={h.paymentId} className="py-2 border-t first:border-t-0" style={{ borderColor: 'var(--bc-border)' }}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-semibold truncate min-w-0">{h.payee}</span>
+                      <span className="text-sm tabular-nums shrink-0">{usd(h.amount)}</span>
+                    </div>
+                    <div className="mt-0.5 text-xs break-words" style={{ color: 'var(--bc-muted)' }}>
+                      {h.requestNumber ? `Draw ${h.requestNumber} · ` : ''}{h.reason || 'This payee cannot be paid yet'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )
       })}

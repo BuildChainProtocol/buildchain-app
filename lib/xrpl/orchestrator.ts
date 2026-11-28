@@ -33,10 +33,32 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { isXrplConfigured } from './escrow'
-import { isTokenMethod, releaseDraw } from './release'
+import { isTokenMethod, releaseDraw, releasePayment } from './release'
 import { ledgerName, pilotNote } from '@/lib/network'
 import { sendEmail } from '@/lib/email/send'
 import { drawFundedEmail } from '@/lib/email/templates'
+
+/**
+ * For a dollar-token draw, what the ledger actually did, payee by payee: who
+ * was paid (with that payment's own transaction) and who is on hold. Null for
+ * the pilot method, whose single test escrow stands for the whole draw.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ledgerPayments(supabase: any, drawId: string, method: string | null) {
+  if (!isTokenMethod(method)) return null
+  const { data } = await supabase.from('draw_payments').select('*').eq('draw_request_id', drawId).order('seq')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((data ?? []) as any[]).map(p => ({
+    bb_pay_app_id: p.bb_pay_app_id ?? null,
+    sub_code: p.sub_code ?? null,
+    sub_name: p.payee_name ?? null,
+    amount: Number(p.amount),
+    status: (p.status === 'released' ? 'paid' : 'held') as 'paid' | 'held',
+    tx_hash: p.status === 'released' ? p.release_txn_hash : null,
+    wallet: p.status === 'released' ? p.wallet : null,
+    ledger_index: null,
+  }))
+}
 
 export interface OrchestratorResult {
   drawId: string
@@ -180,20 +202,42 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     if (tokenSettled && (draw as any).settlement_state !== 'locked') {
       throw new Error('The lender has not locked this draw, so there is nothing to release')
     }
-    // The lender's signature lives where no signed-in user can read or change it.
-    let toRelease: any = draw
     if (tokenSettled) {
-      const { data: sig } = await supabase
-        .from('draw_signatures').select('txjson, signed_blob').eq('draw_request_id', drawId).maybeSingle()
-      toRelease = {
-        ...draw,
-        lender_sign_tx: sig?.txjson ?? null,
-        lender_signed_blob: sig?.signed_blob ?? null,
-        lender_wallet: (draw.projects as any)?.lenders?.xrp_address ?? null,
+      // One ledger payment per payee. Each is released on its own, and one
+      // already released on an earlier attempt is skipped, so trying again
+      // after a partial failure only does what is left. The signatures live
+      // where no signed-in user can read or change them.
+      if (!isXrplConfigured()) throw new Error('The ledger is not configured, so the draw cannot be released')
+      const { data: pays } = await supabase
+        .from('draw_payments').select('*, payment_signatures ( txjson, signed_blob )')
+        .eq('draw_request_id', drawId).order('seq')
+      const lenderWallet: string | null = (draw.projects as any)?.lenders?.xrp_address ?? null
+      const failures: string[] = []
+      let anyReleased = false
+      for (const p of (pays ?? []) as any[]) {
+        if (p.status === 'released') { anyReleased = true; escrowFinishHash = escrowFinishHash ?? p.release_txn_hash; continue }
+        if (p.status !== 'locked' && p.status !== 'failed') continue
+        const sig = Array.isArray(p.payment_signatures) ? p.payment_signatures[0] : p.payment_signatures
+        try {
+          const done = await releasePayment(
+            { ...p, lender_sign_tx: sig?.txjson ?? null, lender_signed_blob: sig?.signed_blob ?? null },
+            (draw as any).settlement_method, lenderWallet)
+          await supabase.from('draw_payments').update({
+            status: 'released', release_txn_hash: done.txnHash, released_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          }).eq('id', p.id)
+          anyReleased = true
+          escrowFinishHash = escrowFinishHash ?? done.txnHash
+        } catch (payErr) {
+          const m = payErr instanceof Error ? payErr.message : String(payErr)
+          failures.push(`${p.payee_name ?? 'payee'}: ${m.slice(0, 160)}`)
+          await supabase.from('draw_payments').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', p.id)
+        }
       }
-    }
-    if (isXrplConfigured() && (draw.escrow_sequence != null || toRelease.lender_signed_blob)) {
-      const finish = await releaseDraw(toRelease, 'orchestrator')
+      if (failures.length) throw new Error(`${failures.length} payment(s) could not be released. ${failures.join('; ')}`)
+      if (!anyReleased) throw new Error('No payment on this draw has been signed for')
+      result.finishHash = escrowFinishHash ?? undefined
+    } else if (isXrplConfigured() && draw.escrow_sequence != null) {
+      const finish = await releaseDraw(draw as any, 'orchestrator')
       escrowFinishHash = finish.txnHash
       result.finishHash = escrowFinishHash
       console.log(`[Orchestrator] EscrowFinish OK — hash ${escrowFinishHash}`)
@@ -380,6 +424,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         netAmount:        draw.net_amount ?? draw.amount,
         payees:           draw.payees ?? null,
         lineItems:        lineItems ?? [],
+        payments:         await ledgerPayments(supabase, drawId, (draw as any).settlement_method),
         fundedAt:         new Date().toISOString(),
         trigger:          'orchestrator',
       })

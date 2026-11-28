@@ -267,8 +267,10 @@ export async function sendEscrowReleasedWebhooks(opts: {
   lineItems:         Array<{ bb_pay_app_id: number | null; sub_code: string | null; sub_name?: string | null; current_payment_due: number | null }>
   fundedAt:          string
   trigger:           'manual' | 'orchestrator'
+  /** Dollar-token draws: what the ledger did per payee. Used as given, never inferred. */
+  payments?:         BBPaymentRow[] | null
 }): Promise<void> {
-  const payments = buildPaymentsRows(opts.payees, opts.lineItems, {
+  const payments = opts.payments ?? buildPaymentsRows(opts.payees, opts.lineItems, {
     escrowFinishHash:  opts.escrowFinishHash,
     ledgerIndex:       null,
   })
