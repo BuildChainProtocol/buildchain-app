@@ -19,8 +19,10 @@ create table if not exists public.draw_payments (
                     'pending',             -- waiting for the lender to sign
                     'awaiting_signature',  -- a sign request is open on the lender's phone
                     'locked',              -- signed; escrowed, or the release is authorized
+                    'releasing',           -- being paid right now (one run at a time may hold this)
                     'released',            -- paid on the ledger
                     'held',                -- cannot be paid yet (no wallet, or it cannot receive the token)
+                    'withdrawn',           -- the lender withdrew the approval or took the escrow back
                     'failed')),            -- the ledger refused the release
   held_reason     text,
   release_ticket  integer,                          -- two_signature: the ticket this payment uses
@@ -35,10 +37,11 @@ create table if not exists public.draw_payments (
 );
 create index if not exists draw_payments_project_idx on public.draw_payments (project_id, status);
 
--- One pending payment per ticket on a loan account.
+-- One unpaid payment per ticket on a loan account, in every state where the
+-- ticket is still spoken for.
 create unique index if not exists draw_payments_ticket_uniq
   on public.draw_payments (project_id, release_ticket)
-  where release_ticket is not null and status in ('awaiting_signature', 'locked');
+  where release_ticket is not null and status in ('awaiting_signature', 'locked', 'releasing', 'failed');
 
 alter table public.draw_payments enable row level security;
 

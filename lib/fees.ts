@@ -36,6 +36,8 @@ export async function recordFeeAccrual(draw: {
   net_amount?: number | null
   settlement_amount?: number | null
   settlement_method?: string | null
+  /** when the draw was released; the fee line carries the same moment */
+  funded_at?: string | null
 }): Promise<void> {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -65,7 +67,7 @@ export async function recordFeeAccrual(draw: {
       draw_request_id: draw.id,
       project_id: draw.project_id,
       lender_id: project?.lender_id ?? null,
-      released_at: new Date().toISOString(),
+      released_at: draw.funded_at ?? new Date().toISOString(),
       release_amount: released,
       rate_bps: feeRateBps(),
       fee_amount: feeFor(released),

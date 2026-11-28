@@ -22,7 +22,7 @@ import { getConnectedClient } from './client'
 import { escrowConditionFor, finishDrawEscrow, isTestnet } from './escrow'
 import {
   buildLenderEscrowCreate, buildReleasePayment, countersignAndSubmit, finishTokenEscrow,
-  issuerAllowsEscrow, loanTickets, tokenAmount, tokenBalance, usdValue, verifyLenderEscrow,
+  issuerAllowsEscrow, loanTickets, SlotUsedUp, tokenAmount, tokenBalance, usdValue, verifyLenderEscrow,
   verifyLenderSignedRelease, verifyLoanAccount,
 } from './settlement'
 import type { TokenSpec } from './settlement'
@@ -121,7 +121,19 @@ export async function prepareLenderSigning(o: {
   usdValue(o.amountUsd)
 
   return withClient(async (client) => {
-    if ((await tokenBalance(client, o.payee, token)) === null) {
+    // A wallet that does not exist on the ledger yet, or a mistyped address,
+    // is that payee's problem alone: it is held, and the others go ahead.
+    let payeeLine: string | null
+    try {
+      payeeLine = await tokenBalance(client, o.payee, token)
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err)
+      if (/actNotFound|Account not found|actMalformed|malformed|invalid/i.test(m)) {
+        throw new PayeeNotReady('This wallet is not active on the ledger yet, or its address is not valid')
+      }
+      throw err
+    }
+    if (payeeLine === null) {
       throw new PayeeNotReady('This wallet is not set up to receive the settlement token yet')
     }
 
@@ -233,6 +245,13 @@ export async function confirmLenderSigning(o: {
   })
 }
 
+/**
+ * This payment's signed release can never be used (the ledger used up its
+ * slot without paying). Nothing is owed on it and nothing is locked by it;
+ * the lender has to sign for this payee again.
+ */
+export class ReleaseNeedsNewSignature extends Error {}
+
 /** One payee's payment, with what is needed to release it. */
 export interface ReleasablePayment {
   id: string
@@ -286,8 +305,16 @@ export async function releasePayment(
   }
   const problems = verifyLenderSignedRelease(payment.lender_signed_blob, requested, lenderWallet)
   if (problems.length) throw new Error(`The lender's signature no longer matches the payment: ${problems.join('; ')}`)
-  const done = await withClient(client => countersignAndSubmit(client, platformWallet(), payment.lender_signed_blob as string))
-  return { txnHash: done.hash }
+  try {
+    const done = await withClient(client => countersignAndSubmit(client, platformWallet(), payment.lender_signed_blob as string))
+    return { txnHash: done.hash }
+  } catch (err) {
+    if (err instanceof SlotUsedUp) throw new ReleaseNeedsNewSignature(err.message)
+    const m = err instanceof Error ? err.message : String(err)
+    // The slot is gone and no successful transaction used it.
+    if (/tefNO_TICKET|tefPAST_SEQ/.test(m)) throw new ReleaseNeedsNewSignature('The release slot for this payment is no longer on the ledger and it was not paid')
+    throw err
+  }
 }
 
 /** The pilot method: finish the draw's single test escrow. */

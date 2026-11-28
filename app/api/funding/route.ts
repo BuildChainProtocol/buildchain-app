@@ -1,13 +1,15 @@
 import { createClient } from '@/lib/supabase/server'
 import { serviceClient } from '@/lib/supabase/service'
 import { NextRequest, NextResponse } from 'next/server'
-import { Wallet } from 'xrpl'
+import { waitUntil } from '@vercel/functions'
+import { Wallet, xrpToDrops } from 'xrpl'
+import { COMMITTED_STATUSES, loanCommitments } from '@/lib/loan-commitments'
 import { createSignRequest, getSignResult, isXamanConfigured } from '@/lib/xaman'
 import { getConnectedClient } from '@/lib/xrpl/client'
 import { isTokenMethod, settlementToken } from '@/lib/xrpl/release'
 import {
   buildAddSlots, buildDeposit, buildEscrowCancel, buildRefundPayment, buildVoidTicket, countersignAndSubmit,
-  loanTickets, tokenBalance, usdValue, validatedResult, verifyLenderSigned,
+  loanTickets, submitAndConfirm, tokenBalance, usdValue, validatedResult, verifyLenderSigned,
 } from '@/lib/xrpl/settlement'
 
 // A lender's funding desk: what sits where on the ledger, and the things a
@@ -50,8 +52,8 @@ const PROJECT_SELECT = `
   draw_requests ( id, request_number, status, settlement_method, settlement_state )
 `
 // Signed for (or being signed for) and not yet paid: this money is committed.
-// A release the ledger refused is still signed for, so it stays committed too.
-const HELD_BY_LENDER = ['awaiting_signature', 'locked', 'failed']
+// A release the ledger refused, or one being paid this minute, counts too.
+const HELD_BY_LENDER = COMMITTED_STATUSES
 
 export async function GET(req: NextRequest) {
   const s = await session()
@@ -65,12 +67,12 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const ids = (projects ?? []).map((p: any) => p.id)
   const { data: pays } = ids.length
-    ? await supabase.from('draw_payments').select('*').in('project_id', ids).in('status', ['locked', 'awaiting_signature', 'held', 'failed']).order('seq')
+    ? await supabase.from('draw_payments').select('*').in('project_id', ids).in('status', ['locked', 'awaiting_signature', 'held', 'failed', 'releasing']).order('seq')
     : { data: [] }
   const tokenReady = !!process.env.SETTLEMENT_TOKEN_ISSUER
   // Slots already promised to payments signed, or being signed, on a loan.
   const mineBusy = (projectId: string) => ((pays ?? []) as any[])
-    .filter(x => x.project_id === projectId && x.release_ticket != null && ['locked', 'awaiting_signature', 'failed'].includes(x.status)).length
+    .filter(x => x.project_id === projectId && x.release_ticket != null && HELD_BY_LENDER.includes(x.status)).length
 
   const loans: any[] = (projects ?? []).map((p: any) => {
     const mine = ((pays ?? []) as any[]).filter(x => x.project_id === p.id)
@@ -80,8 +82,9 @@ export async function GET(req: NextRequest) {
       method: p.settlement_method ?? 'test_xrp', loanAccount: p.loan_account ?? null,
       lenderWallet: p.lenders?.xrp_address ?? null,
       // One line per payee the lender has signed for (or is signing for).
-      locked: mine.filter(x => x.status === 'locked' || x.status === 'failed').map(x => ({
+      locked: mine.filter(x => ['locked', 'failed', 'releasing'].includes(x.status)).map(x => ({
         releaseFailed: x.status === 'failed',
+        releasing: x.status === 'releasing',
         paymentId: x.id, drawId: x.draw_request_id, requestNumber: number(x.draw_request_id), payee: x.payee_name,
         wallet: x.wallet, amount: Number(x.amount), method: p.settlement_method, cancelAfter: null as string | null,
         _owner: x.escrow_owner, _seq: x.escrow_sequence,
@@ -159,9 +162,9 @@ export async function POST(req: NextRequest) {
     const token = settlementToken()
     const { data: lenderLink } = await admin.from('lender_wallet_links').select('user_token')
       .eq('lender_id', (await admin.from('projects').select('lender_id').eq('id', project.id).single()).data?.lender_id).maybeSingle()
-    const { data: held } = await admin.from('draw_payments').select('id, amount, release_ticket, status')
-      .eq('project_id', project.id).in('status', HELD_BY_LENDER)
-    const busy: any[] = held ?? []
+    // Money and slots already promised on this loan (payments signed or being
+    // signed, and funding requests still waiting on a signature).
+    const busy = await loanCommitments(admin, project.id)
     let payment: any = null
     if (body?.paymentId) {
       const { data } = await admin.from('draw_payments').select('*').eq('id', String(body.paymentId)).eq('project_id', project.id).maybeSingle()
@@ -176,11 +179,7 @@ export async function POST(req: NextRequest) {
     try {
       // Tickets already promised: payments signed or being signed, and requests still waiting on a signature.
       const freeTicket = async () => {
-        const { data: waiting } = await admin.from('settlement_requests').select('txjson').eq('project_id', project.id).eq('state', 'waiting')
-        const used = new Set<number>([
-          ...busy.filter(b => b.release_ticket != null).map(b => Number(b.release_ticket)),
-          ...(waiting ?? []).map((w: any) => Number(w.txjson?.TicketSequence)).filter((n: number) => Number.isFinite(n)),
-        ])
+        const used = new Set<number>(busy.tickets)
         const t = (await loanTickets(client, project.loan_account)).find(x => !used.has(x))
         if (t === undefined) throw new Error('The loan account has no free slots left')
         return t
@@ -188,20 +187,18 @@ export async function POST(req: NextRequest) {
 
       if (kind === 'add_slots') {
         if (project.settlement_method !== 'two_signature' || !project.loan_account) throw new Error('This loan has no two-signature account')
-        const free = (await loanTickets(client, project.loan_account)).length
-        if (free > 40) throw new Error(`This loan still has ${free} release slots; more can be added when fewer than 40 are left`)
-        // Each slot ties up a little XRP on the loan account. BuildChain covers
-        // that from its own wallet before asking for the signature.
-        const seed = process.env.XRPL_WALLET_SEED
-        if (!seed) throw new Error('BuildChain\'s signing wallet is not configured')
-        const platform = Wallet.fromSeed(seed)
-        const { xrpToDrops } = await import('xrpl')
-        const topUp: any = await client.autofill({
-          TransactionType: 'Payment', Account: platform.address, Destination: project.loan_account,
-          Amount: xrpToDrops(process.env.LOAN_ACCOUNT_SLOTS_XRP ?? '11'),
-        })
-        const { submitAndConfirm } = await import('@/lib/xrpl/settlement')
-        await submitAndConfirm(client, platform.sign(topUp).tx_blob)
+        // Counted the same way the funding desk shows it: slots on the ledger,
+        // less those already promised to payments signed or being signed.
+        const onLedger = await loanTickets(client, project.loan_account)
+        const promised = new Set(busy.tickets)
+        const free = onLedger.filter(t => !promised.has(t)).length
+        if (free > 40) throw new Error(`This loan still has ${free} release slots; more can be added when 40 or fewer are left`)
+        // One at a time: two open requests would both be valid and add twice.
+        const { count: open } = await admin.from('settlement_requests').select('id', { count: 'exact', head: true })
+          .eq('project_id', project.id).eq('kind', 'add_slots').eq('state', 'waiting')
+        if (open) throw new Error('A request to add slots is already waiting for your signature. Sign or let it expire first.')
+        // Nothing is spent here. The small XRP the new slots tie up is sent
+        // only after the lender has signed (see finish).
         txjson = await buildAddSlots(client, { loanAccount: project.loan_account, count: 50 })
         multisign = true
         instruction = `Add 50 release slots to the loan account for ${project.name}. This moves no money; each payment to a payee uses one slot.`
@@ -216,7 +213,7 @@ export async function POST(req: NextRequest) {
           instruction = `Deposit ${dollars(amount)} into the loan account for ${project.name}. It can leave only with both your signature and BuildChain's.`
         } else {
           const bal = Number(await tokenBalance(client, project.loan_account, token) ?? 0)
-          const committed = busy.reduce((t, b) => t + Number(b.amount ?? 0), 0)
+          const committed = busy.committedUsd
           if (amount > bal - committed) {
             throw new Error(`Only ${dollars(Math.max(0, bal - committed))} is free to take back: ${dollars(committed)} is committed to approved payments`)
           }
@@ -268,14 +265,34 @@ export async function POST(req: NextRequest) {
  * the lender can decline it or approve it again.
  */
 async function settleDrawAfterTakeBack(admin: any, drawId: string, how: 'withdrawn' | 'taken_back') {
-  const { data: left } = await admin.from('draw_payments').select('id, status').eq('draw_request_id', drawId)
+  const { data: left } = await admin.from('draw_payments').select('id, status, amount').eq('draw_request_id', drawId)
   const rows: any[] = left ?? []
-  if (rows.some(r => ['locked', 'failed', 'awaiting_signature', 'released'].includes(r.status))) return
-  await admin.from('draw_payments').delete().eq('draw_request_id', drawId)
-  await admin.from('draw_requests').update(how === 'withdrawn'
-    ? { status: 'submitted', settlement_state: null, approved_by: null }
-    : { status: 'declined', settlement_state: null, decline_reason: 'The lender took back the escrow after its deadline passed.' },
-  ).eq('id', drawId).in('status', ['submitted', 'pending', 'approved', 'held'])
+  const stillSigned = rows.filter(r => ['locked', 'failed', 'releasing', 'released'].includes(r.status))
+  if (stillSigned.length || rows.some(r => r.status === 'awaiting_signature')) {
+    // Other payees are still signed for: the draw stands, for less money.
+    const { data: d } = await admin.from('draw_requests').update({
+      settlement_amount: Math.round(stillSigned.reduce((t, r) => t + Number(r.amount), 0) * 100) / 100,
+    }).eq('id', drawId).in('status', ['submitted', 'pending', 'approved', 'held']).select('status')
+    // If it is approved and this was the last payee holding it up, release now.
+    if (d?.[0]?.status === 'approved') {
+      waitUntil((async () => {
+        try { const { checkConditions } = await import('@/lib/xrpl/conditions'); await checkConditions(admin, drawId) }
+        catch (err) { console.warn('[funding] release check after a take-back failed:', err instanceof Error ? err.message : err) }
+      })())
+    }
+    return
+  }
+  if (how === 'withdrawn') {
+    // Nothing is signed for any more: back to review with a clean slate.
+    const { data: back } = await admin.from('draw_requests')
+      .update({ status: 'submitted', settlement_state: null, settlement_amount: null, approved_by: null })
+      .eq('id', drawId).in('status', ['submitted', 'pending', 'approved', 'held']).select('id')
+    if (back?.length) await admin.from('draw_payments').delete().eq('draw_request_id', drawId).in('status', ['pending', 'held', 'withdrawn'])
+  } else {
+    await admin.from('draw_requests')
+      .update({ status: 'declined', settlement_state: null, settlement_amount: null, decline_reason: 'The lender took back the escrow after its deadline passed.' })
+      .eq('id', drawId).in('status', ['submitted', 'pending', 'approved', 'held'])
+  }
 }
 
 async function finish(supabase: any, requestId: string) {
@@ -318,13 +335,19 @@ async function finish(supabase: any, requestId: string) {
       if (!result.hex) return close('failed', { error: 'The wallet did not return the signed transaction' })
       const problems = verifyLenderSigned(result.hex, r.txjson, lender)
       if (problems.length) return close('failed', { error: `The signature does not match the request: ${problems.join('; ')}` })
+      if (r.kind === 'withdraw_release' && paymentId) {
+        // Not while it is being paid (or after): the release wins.
+        const { data: p } = await admin.from('draw_payments').select('status').eq('id', paymentId).maybeSingle()
+        if (!p || !['locked', 'failed'].includes(p.status)) {
+          return close('failed', { error: 'This payment is being paid or is no longer signed for, so the approval was not withdrawn.' })
+        }
+      }
       const client = await getConnectedClient()
       try {
         if (r.kind === 'refund') {
           // Payments may have been approved since this refund was opened:
           // money committed to them cannot leave the loan account.
-          const { data: busy } = await admin.from('draw_payments').select('amount').eq('project_id', r.project_id).in('status', HELD_BY_LENDER)
-          const committed = ((busy ?? []) as any[]).reduce((t, b) => t + Number(b.amount ?? 0), 0)
+          const committed = (await loanCommitments(admin, r.project_id)).committedUsd
           const balance = Number(await tokenBalance(client, r.projects?.loan_account, settlementToken()) ?? 0)
           if (Number(r.amount) > balance - committed) {
             return close('failed', { error: `Not sent: ${dollars(committed)} is now committed to approved payments, which leaves ${dollars(Math.max(0, balance - committed))} free.` })
@@ -332,6 +355,29 @@ async function finish(supabase: any, requestId: string) {
         }
         const seed = process.env.XRPL_WALLET_SEED
         if (!seed) return close('failed', { error: 'BuildChain\'s signing wallet is not configured' })
+        if (r.kind === 'add_slots') {
+          // Each slot ties up a little XRP on the loan account. BuildChain
+          // covers exactly what is missing, and only now that the lender has
+          // signed. Working it out from the account's own balance means a
+          // second try never pays twice.
+          const loanAccount = r.projects?.loan_account
+          const info = await client.request({ command: 'account_info', account: loanAccount, ledger_index: 'validated' })
+          const acct = (info.result as unknown as { account_data: { Balance: string; OwnerCount: number } }).account_data
+          const server = await client.request({ command: 'server_info' })
+          const ledger = (server.result as unknown as { info: { validated_ledger?: { reserve_base_xrp?: number; reserve_inc_xrp?: number } } }).info.validated_ledger
+          const base = Number(ledger?.reserve_base_xrp ?? 1), inc = Number(ledger?.reserve_inc_xrp ?? 0.2)
+          const adding = Number((r.txjson as any)?.TicketCount ?? 50)
+          const needed = base + inc * (Number(acct.OwnerCount) + adding) + 1 - Number(acct.Balance) / 1_000_000
+          if (needed > 0) {
+            if (needed > 50) return close('failed', { error: 'The loan account needs more XRP for new slots than BuildChain tops up automatically. Nothing was changed.' })
+            const platform = Wallet.fromSeed(seed)
+            const topUp: any = await client.autofill({
+              TransactionType: 'Payment', Account: platform.address, Destination: loanAccount,
+              Amount: xrpToDrops(needed.toFixed(6)),
+            })
+            await submitAndConfirm(client, platform.sign(topUp).tx_blob)
+          }
+        }
         hash = (await countersignAndSubmit(client, Wallet.fromSeed(seed), result.hex)).hash
       } finally { await client.disconnect() }
     }
@@ -347,9 +393,13 @@ async function finish(supabase: any, requestId: string) {
     }
 
     if (paymentId && (r.kind === 'withdraw_release' || r.kind === 'escrow_cancel')) {
-      // The payment is no longer signed for. Its row goes; the draw follows
-      // once none of its payees is still signed for.
-      await admin.from('draw_payments').delete().eq('id', paymentId).in('status', ['locked', 'failed'])
+      // The payment is no longer signed for. Its row stays, marked withdrawn,
+      // so the record (and Building Block) still shows this payee as unpaid.
+      await admin.from('draw_payments').update({
+        status: 'withdrawn', release_ticket: null, updated_at: new Date().toISOString(),
+        held_reason: r.kind === 'withdraw_release' ? 'The lender withdrew approval for this payee' : 'The lender took this escrow back after its deadline',
+      }).eq('id', paymentId).in('status', ['locked', 'failed', 'releasing', 'pending'])
+      await admin.from('payment_signatures').delete().eq('payment_id', paymentId)
       if (r.draw_request_id) await settleDrawAfterTakeBack(admin, r.draw_request_id, r.kind === 'withdraw_release' ? 'withdrawn' : 'taken_back')
     }
     await admin.from('activity_log').insert({

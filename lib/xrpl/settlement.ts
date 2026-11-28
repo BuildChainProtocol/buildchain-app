@@ -200,7 +200,38 @@ export async function verifyLenderEscrow(client: Client, o: {
   return problems
 }
 
-/** BuildChain releases the lender's escrow by revealing the fulfillment. Any account may submit this. */
+/**
+ * The validated EscrowFinish that released an escrow, if there is one. Used to
+ * tell "already released" from "gone for another reason" when the escrow is
+ * no longer on the ledger.
+ */
+export async function findEscrowFinish(client: Client, owner: string, sequence: number): Promise<string | null> {
+  try {
+    const res = await client.request({
+      command: 'account_tx', account: owner, ledger_index_min: -1, ledger_index_max: -1, limit: 400, forward: false,
+    })
+    const list = (res.result as unknown as { transactions?: Tx[] }).transactions ?? []
+    for (const item of list) {
+      const txj = ((item.tx_json ?? item.tx ?? {}) as Tx)
+      const meta = (item.meta ?? {}) as Tx
+      if (txj.TransactionType === 'EscrowFinish' && txj.Owner === owner && Number(txj.OfferSequence) === sequence &&
+          item.validated !== false && meta.TransactionResult === 'tesSUCCESS') {
+        return String(item.hash ?? txj.hash ?? '') || null
+      }
+    }
+  } catch { /* fall through: unknown */ }
+  return null
+}
+
+/**
+ * BuildChain releases the lender's escrow by revealing the fulfillment. Any
+ * account may submit this.
+ *
+ * Safe to call again: if an earlier attempt released the escrow but its
+ * confirmation was lost (or another run got there first), the escrow is gone
+ * from the ledger and the release that removed it is found and returned. Paid
+ * once, reported once.
+ */
 export async function finishTokenEscrow(client: Client, releaser: Wallet, o: {
   owner: string
   sequence: number
@@ -208,16 +239,37 @@ export async function finishTokenEscrow(client: Client, releaser: Wallet, o: {
   fulfillment: string
   drawRequestId?: string
 }): Promise<{ hash: string }> {
-  const done = await signSubmit(client, releaser, {
-    TransactionType: 'EscrowFinish',
-    Account: releaser.address,
-    Owner: o.owner,
-    OfferSequence: o.sequence,
-    Condition: o.condition.toUpperCase(),
-    Fulfillment: o.fulfillment.toUpperCase(),
-    Memos: memo({ platform: 'BuildChain', event: 'escrow_finish', drid: o.drawRequestId ?? null }),
-  })
-  return { hash: done.hash }
+  const alreadyReleased = async (): Promise<string | null> => {
+    try {
+      await client.request({ command: 'ledger_entry', escrow: { owner: o.owner, seq: o.sequence }, ledger_index: 'validated' })
+      return null                                   // still there: not released
+    } catch {
+      return findEscrowFinish(client, o.owner, o.sequence)
+    }
+  }
+  try {
+    const done = await signSubmit(client, releaser, {
+      TransactionType: 'EscrowFinish',
+      Account: releaser.address,
+      Owner: o.owner,
+      OfferSequence: o.sequence,
+      Condition: o.condition.toUpperCase(),
+      Fulfillment: o.fulfillment.toUpperCase(),
+      Memos: memo({ platform: 'BuildChain', event: 'escrow_finish', drid: o.drawRequestId ?? null }),
+    })
+    return { hash: done.hash }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/tecNO_TARGET|not validated in time|entryNotFound/i.test(message)) {
+      // Give a just-submitted release a moment to be validated, then look.
+      for (let i = 0; i < 6; i++) {
+        const hash = await alreadyReleased()
+        if (hash) return { hash }
+        await new Promise(res => setTimeout(res, 2000))
+      }
+    }
+    throw err
+  }
 }
 
 // ── Method B: two-signature loan account ──────────────────────────────────────
@@ -393,6 +445,15 @@ export function verifyLenderSigned(signedBlob: string, expected: Tx, lender: str
 export const verifyLenderSignedRelease = verifyLenderSigned
 
 /**
+ * The loan-account transaction reached the ledger but did not do its job (or
+ * the slot it was signed for is gone with no successful transaction). The
+ * lender's signature for it can never be used again: a new one is needed.
+ */
+export class SlotUsedUp extends Error {
+  constructor(result: string) { super(`The ledger used up this release slot without paying (${result})`) }
+}
+
+/**
  * BuildChain's half of a release: add its signature to the payment the
  * lender already signed and submit both. Called only when both draw
  * conditions are recorded.
@@ -412,13 +473,28 @@ export async function countersignAndSubmit(client: Client, buildchain: Wallet, l
     return { hash: (await submitAndConfirm(client, combined)).hash }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    if (/tefNO_TICKET|tefPAST_SEQ|tefALREADY/.test(message)) {
-      try {
-        const found = await client.request({ command: 'tx', transaction: hash })
-        const r = found.result as unknown as { validated?: boolean; meta?: Tx }
-        if (r.validated && r.meta?.TransactionResult === 'tesSUCCESS') return { hash }
-      } catch { /* not on the ledger: the refusal stands */ }
+    if (/tefNO_TICKET|tefPAST_SEQ|tefALREADY|not validated in time/.test(message)) {
+      // The first attempt may have been submitted a moment ago and not be in
+      // a validated ledger yet: look a few times before deciding.
+      for (let i = 0; i < 6; i++) {
+        try {
+          const found = await client.request({ command: 'tx', transaction: hash })
+          const r = found.result as unknown as { validated?: boolean; meta?: Tx }
+          if (r.validated) {
+            if (r.meta?.TransactionResult === 'tesSUCCESS') return { hash }
+            // In a validated ledger with another result: it used up the slot
+            // without doing its job. Say so, so the caller can ask to sign again.
+            throw new SlotUsedUp(String(r.meta?.TransactionResult))
+          }
+        } catch (lookupErr) {
+          if (lookupErr instanceof SlotUsedUp) throw lookupErr
+          /* not found yet */
+        }
+        await new Promise(res => setTimeout(res, 2000))
+      }
     }
+    // A "tec" result is final and consumes the slot too.
+    if (/^tec[A-Z_]+/.test(message)) throw new SlotUsedUp(message)
     throw err
   }
 }

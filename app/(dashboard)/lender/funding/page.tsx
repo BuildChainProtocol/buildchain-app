@@ -11,6 +11,10 @@ import LenderInvoices from '@/components/lender/LenderInvoices'
 interface Locked {
   paymentId: string; drawId: string; requestNumber: string; payee: string; wallet: string | null
   amount: number; method: string; cancelAfter: string | null
+  /** the ledger refused this release; it is still signed for and will be tried again */
+  releaseFailed?: boolean
+  /** being paid this minute */
+  releasing?: boolean
 }
 /** A payee that could not be signed for, or whose release the ledger refused. */
 interface Held { paymentId: string; requestNumber: string; payee: string; amount: number; reason: string | null }
@@ -20,6 +24,8 @@ interface Loan {
   loanAccount: string | null; lenderWallet: string | null
   locked: Locked[]; held?: Held[]; lockedTotal: number
   walletBalance: string | null; loanAccountBalance: string | null
+  /** two_signature: release slots left on the loan account; null when unknown or not applicable. */
+  slotsFree: number | null
 }
 interface Funding { loans: Loan[]; walletSigning: boolean; tokenReady: boolean }
 interface Open { title: string; requestId: string; qrPng: string; url: string; pushed?: boolean; instruction: string }
@@ -192,6 +198,28 @@ export default function LenderFundingPage() {
                       {busy === loan.id + 'refund' ? 'Checking…' : 'Take back'}
                     </button>
                     <span className="text-xs font-mono break-all" style={{ color: 'var(--bc-muted)' }}>{loan.loanAccount}</span>
+                    <div className="w-full flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                      {loan.slotsFree == null ? (
+                        <span className="text-sm" style={{ color: 'var(--bc-muted)' }}>Release slots: unavailable</span>
+                      ) : (
+                        <>
+                          <span className={`text-sm tabular-nums ${loan.slotsFree <= 10 ? 'font-bold' : ''}`} style={{ color: loan.slotsFree <= 10 ? '#c0392b' : 'var(--bc-text)' }}>
+                            Release slots left: {loan.slotsFree}
+                          </span>
+                          {loan.slotsFree <= 10 && (
+                            <span className="text-xs font-semibold" role="status" style={{ color: '#c0392b' }}>Running low: approvals will stop when these run out.</span>
+                          )}
+                          <span className="text-xs" style={{ color: 'var(--bc-muted)' }}>Each payment to a payee uses one.</span>
+                          {loan.slotsFree <= 40 && (
+                            <button disabled={!!busy}
+                              onClick={() => request('Add release slots', { projectId: loan.id, kind: 'add_slots' }, loan.id + 'add_slots')}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold border disabled:opacity-50" style={{ borderColor: 'var(--bc-border)' }}>
+                              {busy === loan.id + 'add_slots' ? 'Checking…' : 'Add 50 slots'}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -222,12 +250,16 @@ export default function LenderFundingPage() {
                           </div>
                           <div className="mt-0.5 text-xs break-words" style={{ color: 'var(--bc-muted)' }}>
                             {d.wallet && <><span className="font-mono">{short(d.wallet)}</span><span aria-hidden="true"> · </span></>}
-                            {escrow
-                              ? (d.cancelAfter ? `You can take it back on or after ${date(d.cancelAfter)}` : 'Locked in escrow')
-                              : 'You signed the release; it pays when both conditions are recorded'}
+                            {d.releasing
+                              ? 'Being paid now'
+                              : d.releaseFailed
+                                ? 'The ledger did not accept this payment when it was released. It is still signed for and nothing was paid; BuildChain has been alerted and it will be tried again.'
+                                : escrow
+                                  ? (d.cancelAfter ? `You can take it back on or after ${date(d.cancelAfter)}` : 'Locked in escrow')
+                                  : 'You signed the release; it pays when both conditions are recorded'}
                           </div>
                         </div>
-                        <button disabled={!!busy || blocked}
+                        <button disabled={!!busy || blocked || !!d.releasing}
                           title={blocked
                             ? (d.cancelAfter
                               ? `The ledger allows the take-back on or after ${date(d.cancelAfter)}`

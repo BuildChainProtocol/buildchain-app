@@ -269,6 +269,8 @@ export async function sendEscrowReleasedWebhooks(opts: {
   trigger:           'manual' | 'orchestrator'
   /** Dollar-token draws: what the ledger did per payee. Used as given, never inferred. */
   payments?:         BBPaymentRow[] | null
+  /** USD actually paid out by this release (less than the net when a payee is on hold) */
+  releasedAmount?:   number | null
 }): Promise<void> {
   const payments = opts.payments ?? buildPaymentsRows(opts.payees, opts.lineItems, {
     escrowFinishHash:  opts.escrowFinishHash,
@@ -281,6 +283,9 @@ export async function sendEscrowReleasedWebhooks(opts: {
     escrow_finish_hash: opts.escrowFinishHash,
     funded_at:          opts.fundedAt,
     net_amount:         opts.netAmount,
+    // What was actually paid: the sum of the 'paid' rows below.
+    released_amount:    opts.releasedAmount ??
+      Math.round(payments.filter(p => p.status === 'paid').reduce((t, p) => t + p.amount, 0) * 100) / 100,
     trigger:            opts.trigger,
     payments,
   })

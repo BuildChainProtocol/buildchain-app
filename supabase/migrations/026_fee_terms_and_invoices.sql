@@ -36,9 +36,12 @@ create table if not exists public.fee_invoices (
   bill_to_email     text,
   bill_to_address   text,
   created_by        uuid,
-  created_at        timestamptz not null default now(),
-  unique (lender_id, period_start)
+  created_at        timestamptz not null default now()
 );
+-- One live invoice per lender per month. A voided invoice stays on file (its
+-- number is never reused) and does not block a corrected one.
+create unique index if not exists fee_invoices_lender_period_uniq
+  on public.fee_invoices (lender_id, period_start) where status <> 'void';
 
 alter table public.fee_accruals
   add column if not exists invoice_id uuid references public.fee_invoices(id) on delete set null;

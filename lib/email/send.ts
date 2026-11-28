@@ -10,13 +10,14 @@ interface SendEmailOptions {
   replyTo?: string
 }
 
-export async function sendEmail(opts: SendEmailOptions): Promise<void> {
+/** Returns true only when the mail service accepted the message. Callers that do not depend on it may ignore the answer. */
+export async function sendEmail(opts: SendEmailOptions): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
   const from   = process.env.EMAIL_FROM
 
   if (!apiKey || !from || apiKey === 're_your_key_here') {
     console.log('[Email] Resend not configured — skipping:', opts.subject)
-    return
+    return false
   }
 
   const { Resend } = await import('resend')
@@ -32,7 +33,9 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
 
   if (error) {
     console.warn('[Email] Resend error:', error)
+    return false
   } else {
     console.log(`[Email] Sent "${opts.subject}" to ${Array.isArray(opts.to) ? opts.to.join(', ') : opts.to}`)
   }
+  return true
 }

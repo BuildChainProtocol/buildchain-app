@@ -111,3 +111,19 @@ export async function getSignResult(uuid: string): Promise<SignResult> {
     userToken: json.application?.issued_user_token ?? null,
   }
 }
+
+/**
+ * Withdraw a sign request that must no longer be signed (it was superseded,
+ * or its draw was declined). Returns whether it is now certain the request
+ * can never be signed. Callers that only tidy up may ignore the answer.
+ */
+export async function cancelSignRequest(uuid: string | null | undefined): Promise<boolean> {
+  if (!uuid || !/^[0-9a-f-]{36}$/i.test(uuid)) return true
+  try {
+    const res = await fetch(`${API}/payload/${uuid}`, { method: 'DELETE', headers: headers(), cache: 'no-store' })
+    const json = await res.json().catch(() => null) as { result?: { cancelled?: boolean; reason?: string } } | null
+    // True only when it can no longer be signed: withdrawn now, or already
+    // withdrawn or expired. (Already signed, or open on the phone, is false.)
+    return !!json?.result?.cancelled || ['ALREADY_CANCELLED', 'ALREADY_EXPIRED'].includes(String(json?.result?.reason))
+  } catch { return false }
+}

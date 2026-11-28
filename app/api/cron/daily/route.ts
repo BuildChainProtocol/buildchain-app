@@ -46,15 +46,30 @@ export async function GET(req: NextRequest) {
   const problems: string[] = []
   const fixed: string[] = []
   const old = (minutes: number) => new Date(Date.now() - minutes * MINUTE).toISOString()
+  // The platform stops this job at 60 seconds. Ledger work stops at 40, so
+  // there is always time left to report what was and was not done.
+  const started = Date.now()
+  const timeLeft = () => Date.now() - started < 40 * 1000
 
   try {
     // a. Approved draws that have waited: re-do any missing ledger record and
     //    try the release again (the same thing as the "Check again" button).
     const { data: approved } = await db.from('draw_requests')
-      .select('id, request_number, reviewed_at').eq('status', 'approved').lt('reviewed_at', old(15)).limit(15)
+      .select('id, request_number, reviewed_at').eq('status', 'approved').lt('reviewed_at', old(15)).order('reviewed_at').limit(60)
     const { checkConditions } = await import('@/lib/xrpl/conditions')
+    // Start at a different draw each day, so one slow draw at the front can
+    // never keep the ones behind it from being looked at.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const d of (approved ?? []) as any[]) {
+    const queue = (approved ?? []) as any[]
+    const offset = queue.length ? Math.floor(Date.now() / (24 * 60 * MINUTE)) % queue.length : 0
+    const ordered = [...queue.slice(offset), ...queue.slice(0, offset)]
+    let checked = 0
+    for (const d of ordered) {
+      if (!timeLeft()) {
+        problems.push(`${ordered.length - checked} approved draw(s) were not checked today (the check ran out of time); they are first in line tomorrow, or use "Check again" on each`)
+        break
+      }
+      checked++
       try {
         const r = await checkConditions(db, d.id)
         if (r.released) fixed.push(`Draw ${d.request_number} was released on a retry`)
@@ -67,7 +82,7 @@ export async function GET(req: NextRequest) {
 
     // b. Released draws with no fee line: write it.
     const { data: funded } = await db.from('draw_requests')
-      .select('id, request_number, project_id, amount, net_amount, settlement_amount, settlement_method, fee_accruals ( id )')
+      .select('id, request_number, project_id, amount, net_amount, settlement_amount, settlement_method, funded_at, fee_accruals ( id )')
       .eq('status', 'funded').order('funded_at', { ascending: false }).limit(200)
     const { recordFeeAccrual } = await import('@/lib/fees')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,13 +96,51 @@ export async function GET(req: NextRequest) {
     }
 
     // c. Signatures and funding requests that have been open too long.
-    const { data: stale } = await db.from('draw_requests')
-      .select('request_number').eq('settlement_state', 'awaiting_lender_signature').lt('updated_at', old(180)).limit(20)
+    //    A payee still to be signed for is told by its own payment row.
+    const { data: stale } = await db.from('draw_payments')
+      .select('draw_request_id, draw_requests ( request_number, status )')
+      .in('status', ['pending', 'awaiting_signature']).lt('updated_at', old(180)).limit(100)
+    const waitingDraws = new Set<string>()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const d of (stale ?? []) as any[]) problems.push(`Draw ${d.request_number} has been waiting on the lender's signature for over three hours`)
-    const { count: staleRequests } = await db.from('settlement_requests')
-      .select('id', { count: 'exact', head: true }).eq('state', 'waiting').lt('created_at', old(180))
-    if (staleRequests) problems.push(`${staleRequests} funding request(s) have been open for over three hours`)
+    for (const p of (stale ?? []) as any[]) {
+      const d = Array.isArray(p.draw_requests) ? p.draw_requests[0] : p.draw_requests
+      if (d && ['submitted', 'pending', 'approved'].includes(d.status)) waitingDraws.add(d.request_number)
+    }
+    waitingDraws.forEach(n => problems.push(`Draw ${n} has been waiting on the lender's signature for over three hours`))
+
+    //    A funding request nobody signed is closed (its sign request expired
+    //    long ago). One that WAS signed but never finished is reported: the
+    //    lender finishes it by opening the Funding page.
+    const { data: staleRequests } = await db.from('settlement_requests')
+      .select('id, kind, payload').eq('state', 'waiting').lt('created_at', old(180)).limit(20)
+    if ((staleRequests ?? []).length) {
+      const { getSignResult, isXamanConfigured } = await import('@/lib/xaman')
+      let closed = 0
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (staleRequests ?? []) as any[]) {
+        if (!timeLeft() || !isXamanConfigured()) { problems.push('Some funding requests have been open for over three hours and could not be looked at'); break }
+        try {
+          const s = await getSignResult(r.payload)
+          if (s.resolved && s.signed) {
+            problems.push(`A signed funding request (${String(r.kind).replace('_', ' ')}) was never finished; it finishes when the lender opens the Funding page`)
+          } else {
+            await db.from('settlement_requests').update({ state: 'expired', completed_at: new Date().toISOString() }).eq('id', r.id).eq('state', 'waiting')
+            closed++
+          }
+        } catch { problems.push('A funding request has been open for over three hours and the wallet service did not answer about it') }
+      }
+      if (closed) fixed.push(`${closed} unsigned funding request(s) were closed`)
+    }
+
+    //    A payment stuck "being paid" means a release run died part-way. The
+    //    retry in (a) takes it over; say so if it is still there.
+    const { data: stuck } = await db.from('draw_payments')
+      .select('payee_name, draw_requests ( request_number )').eq('status', 'releasing').lt('updated_at', old(30)).limit(20)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const p of (stuck ?? []) as any[]) {
+      const d = Array.isArray(p.draw_requests) ? p.draw_requests[0] : p.draw_requests
+      problems.push(`Draw ${d?.request_number ?? ''}: the payment to ${p.payee_name ?? 'a payee'} has been "being paid" for over 30 minutes`)
+    }
 
     // d. A draw the lender locked whose project has since lost its lender wallet or account.
     const { data: locked } = await db.from('draw_requests')

@@ -11,6 +11,8 @@ import { ledgerName, pilotNote } from '@/lib/network'
 
 // Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
 export const runtime = 'nodejs'
+// Approving creates an escrow and funding finishes one: both wait on the ledger.
+export const maxDuration = 60
 
 // GET /api/draws/[id]
 // Returns the current draw record. Accepts:
@@ -57,17 +59,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   return NextResponse.json({
     ...data,
     network: testnet ? 'testnet' : 'mainnet',
-    funds_moved: !testnet && data.status === 'funded',
+    // Real money moved only if a dollar-token payment was actually released on mainnet.
+    funds_moved: !testnet && isTokenMethod(data.settlement_method) && ((pays ?? []) as any[]).some(p => p.status === 'released'),
+    released_amount: ((pays ?? []) as any[]).filter(p => p.status === 'released').reduce((t, p) => t + Number(p.amount), 0),
     // Dollar-token loans only: one row per payee, as the ledger stands now.
     payments: ((pays ?? []) as any[]).map(p => ({
       bb_pay_app_id: p.bb_pay_app_id ?? null,
       sub_code: p.sub_code ?? null,
       sub_name: p.payee_name ?? null,
       amount: Number(p.amount),
-      status: p.status === 'released' ? 'paid' : p.status === 'held' ? 'held' : p.status === 'failed' ? 'failed' : 'pending',
+      status: p.status === 'released' ? 'paid' : (p.status === 'held' || p.status === 'withdrawn') ? 'held' : p.status === 'failed' ? 'failed' : 'pending',
       tx_hash: p.status === 'released' ? p.release_txn_hash : null,
       wallet: p.status === 'released' ? p.wallet : null,
-      held_reason: p.status === 'held' ? p.held_reason : null,
+      held_reason: (p.status === 'held' || p.status === 'withdrawn') ? p.held_reason : null,
     })),
   })
 }
@@ -167,12 +171,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // request is cancelled along with the draw's payment list.
   if ((body.status === 'declined' || body.status === 'held') && (draw as any).settlement_state === 'awaiting_lender_signature') {
     const { count: signedFor } = await admin.from('draw_payments')
-      .select('id', { count: 'exact', head: true }).eq('draw_request_id', params.id).eq('status', 'locked')
+      .select('id', { count: 'exact', head: true }).eq('draw_request_id', params.id).in('status', ['locked', 'releasing', 'failed', 'released'])
     if (signedFor) {
       return NextResponse.json(
         { error: 'The lender has already signed for part of this draw. Withdraw those approvals on the Funding page first.' },
         { status: 409 }
       )
+    }
+    // A request still open on the lender's phone must be withdrawn before the
+    // payment list goes: signed afterwards, it would lock money with no record.
+    const { data: openPays } = await admin.from('draw_payments')
+      .select('id, payment_signatures ( payload )').eq('draw_request_id', params.id).eq('status', 'awaiting_signature')
+    if ((openPays ?? []).length) {
+      const { cancelSignRequest } = await import('@/lib/xaman')
+      for (const p of (openPays ?? []) as any[]) {
+        const sig = Array.isArray(p.payment_signatures) ? p.payment_signatures[0] : p.payment_signatures
+        if (sig?.payload && !(await cancelSignRequest(sig.payload))) {
+          return NextResponse.json(
+            { error: 'A signature request for this draw is open in the lender\'s wallet, or was just signed. Open the draw to finish or reject it, then try again.' },
+            { status: 409 }
+          )
+        }
+      }
     }
     await admin.from('draw_payments').delete().eq('draw_request_id', params.id)
   }
@@ -259,6 +279,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       )
     }
 
+    // The pilot stands in for a payment with 1 test XRP. Off the test network
+    // that would record a real draw as paid when no money moved.
+    {
+      const { onTestNetwork } = await import('@/lib/network')
+      if (!onTestNetwork()) {
+        return NextResponse.json(
+          { error: 'This project is on the pilot method, which only runs on the test network. Choose a dollar-token method for it before releasing.' },
+          { status: 409 }
+        )
+      }
+    }
+
     updates.funded_at = new Date().toISOString()
 
     try {
@@ -314,15 +346,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     updates.declined_by = user.id
   }
 
-  // Apply updates
+  // Apply updates, only if the draw is still in the state this decision was
+  // made on (two people, or two clicks, deciding at once: one wins).
   const { data: updated, error } = await admin
     .from('draw_requests')
     .update(updates)
     .eq('id', params.id)
+    .eq('status', draw.status)
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (!updated) {
+    return NextResponse.json({ error: 'This draw changed while you were deciding. Reload and try again.' }, { status: 409 })
+  }
 
   // ─── BB webhooks — per §4 of the BB↔BC integration spec ──────────────
   try {
@@ -338,6 +375,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         escrow_txn_hash:     updated.escrow_txn_hash     ?? null,
         xrpl_sequence:       updated.escrow_sequence     ?? null,
         escrow_finish_after: updated.escrow_finish_after ?? null,
+        // Dollar-token draws: what the lender actually signed for (less than
+        // the net when a payee is on hold). Null on the pilot method.
+        settlement_method:   updated.settlement_method ?? null,
+        escrow_amount:       isTokenMethod(updated.settlement_method) ? updated.settlement_amount ?? null : null,
         approved_by:         (profile?.role === 'lender' ? user.email : null) ?? user.id,
         approved_at:         updates.reviewed_at,
       })

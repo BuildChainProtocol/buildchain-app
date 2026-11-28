@@ -33,8 +33,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { isXrplConfigured } from './escrow'
-import { isTokenMethod, releaseDraw, releasePayment } from './release'
-import { ledgerName, pilotNote } from '@/lib/network'
+import { isTokenMethod, releaseDraw, releasePayment, ReleaseNeedsNewSignature } from './release'
+import { ledgerName, onTestNetwork, pilotNote } from '@/lib/network'
 import { sendEmail } from '@/lib/email/send'
 import { drawFundedEmail } from '@/lib/email/templates'
 
@@ -59,6 +59,11 @@ async function ledgerPayments(supabase: any, drawId: string, method: string | nu
     ledger_index: null,
   }))
 }
+
+/** Another run is paying this draw right now. Not a failure: nothing to report. */
+class ReleaseInProgress extends Error {}
+/** The draw is waiting on the lender, not broken. Not a failure either. */
+class WaitingOnLender extends Error {}
 
 export interface OrchestratorResult {
   drawId: string
@@ -194,13 +199,18 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     escrowFinished: false,
   }
 
+  let funded: { at: string; amount: number } | null = null
   try {
     let escrowFinishHash: string | null = null
+    // Dollar-token draws: the total actually paid to payees, from the ledger record.
+    let releasedUsd: number | null = null
 
     // Step (b): Submit EscrowFinish to XRPL with 'orchestrator' trigger
     const tokenSettled = isTokenMethod((draw as any).settlement_method)
-    if (tokenSettled && (draw as any).settlement_state !== 'locked') {
-      throw new Error('The lender has not locked this draw, so there is nothing to release')
+    // The pilot stands in for a payment with 1 test XRP. Off the test network
+    // that would record a real draw as paid when no money moved: refuse.
+    if (!tokenSettled && !onTestNetwork()) {
+      throw new Error('This project is on the pilot method, which only runs on the test network. Choose a dollar-token method for it before releasing.')
     }
     if (tokenSettled) {
       // One ledger payment per payee. Each is released on its own, and one
@@ -212,37 +222,91 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         .from('draw_payments').select('*, payment_signatures ( txjson, signed_blob )')
         .eq('draw_request_id', drawId).order('seq')
       const lenderWallet: string | null = (draw.projects as any)?.lenders?.xrp_address ?? null
+      const list = (pays ?? []) as any[]
+      // A payee the lender still has to sign for holds the draw: it is paid
+      // out together, once every payee is either signed for or on hold.
+      const unsigned = list.filter(p => p.status === 'pending' || p.status === 'awaiting_signature')
+      if (unsigned.length) {
+        throw new WaitingOnLender(`Waiting for the lender to sign for ${unsigned.length} payee(s)`)
+      }
       const failures: string[] = []
-      let anyReleased = false
-      for (const p of (pays ?? []) as any[]) {
-        if (p.status === 'released') { anyReleased = true; escrowFinishHash = escrowFinishHash ?? p.release_txn_hash; continue }
-        if (p.status !== 'locked' && p.status !== 'failed') continue
+      const needSign: string[] = []
+      let inProgress = false
+      const stamp = () => new Date().toISOString()
+      for (const p of list) {
+        if (p.status === 'released') continue
+        // Claim the payment, so two runs at once can never both submit it.
+        // A claim left behind by a run that died is taken over after 3 minutes.
+        let claimed: any[] | null = null
+        if (p.status === 'locked' || p.status === 'failed') {
+          claimed = (await supabase.from('draw_payments').update({ status: 'releasing', updated_at: stamp() })
+            .eq('id', p.id).in('status', ['locked', 'failed']).select('id')).data
+        } else if (p.status === 'releasing' && Date.now() - new Date(p.updated_at).getTime() > 3 * 60 * 1000) {
+          claimed = (await supabase.from('draw_payments').update({ updated_at: stamp() })
+            .eq('id', p.id).eq('status', 'releasing').eq('updated_at', p.updated_at).select('id')).data
+        } else if (p.status !== 'releasing') {
+          continue                                    // held or withdrawn: not paid
+        }
+        if (!claimed?.length) { inProgress = true; continue }
+
         const sig = Array.isArray(p.payment_signatures) ? p.payment_signatures[0] : p.payment_signatures
         try {
           const done = await releasePayment(
             { ...p, lender_sign_tx: sig?.txjson ?? null, lender_signed_blob: sig?.signed_blob ?? null },
             (draw as any).settlement_method, lenderWallet)
-          await supabase.from('draw_payments').update({
-            status: 'released', release_txn_hash: done.txnHash, released_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-          }).eq('id', p.id)
-          anyReleased = true
-          escrowFinishHash = escrowFinishHash ?? done.txnHash
+          const { error: markErr } = await supabase.from('draw_payments').update({
+            status: 'released', release_txn_hash: done.txnHash, released_at: stamp(), updated_at: stamp(),
+          }).eq('id', p.id).eq('status', 'releasing')
+          // Paid on the ledger but not written down: stop here, so the draw
+          // is not closed with this payee shown as unpaid. The next run finds
+          // the payment already made and records it.
+          if (markErr) throw new Error(`paid (${done.txnHash}) but could not be recorded: ${markErr.message}`)
         } catch (payErr) {
           const m = payErr instanceof Error ? payErr.message : String(payErr)
-          failures.push(`${p.payee_name ?? 'payee'}: ${m.slice(0, 160)}`)
-          await supabase.from('draw_payments').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', p.id)
+          if (payErr instanceof ReleaseNeedsNewSignature) {
+            // The lender's signature for this payee can never be used. Nothing
+            // was paid and nothing is locked by it: ask them to sign again.
+            needSign.push(p.payee_name ?? 'a payee')
+            await supabase.from('draw_payments').update({ status: 'pending', release_ticket: null, updated_at: stamp() })
+              .eq('id', p.id).eq('status', 'releasing')
+            await supabase.from('payment_signatures').delete().eq('payment_id', p.id)
+          } else {
+            failures.push(`${p.payee_name ?? 'payee'}: ${m.slice(0, 160)}`)
+            await supabase.from('draw_payments').update({ status: 'failed', updated_at: stamp() })
+              .eq('id', p.id).eq('status', 'releasing')
+          }
         }
       }
+      if (needSign.length) {
+        await supabase.from('draw_requests').update({ settlement_state: 'awaiting_lender_signature' })
+          .eq('id', drawId).eq('status', 'approved')
+        const lenderProfile = (draw.projects as any)?.lenders?.profile_id
+        if (lenderProfile) {
+          await supabase.from('notifications').insert({
+            user_id: lenderProfile, type: 'signature_needed', title: 'A payment needs your signature again',
+            body: `Draw ${draw.request_number}: the release for ${needSign.join(', ')} could not be used and nothing was paid on it. Open the draw to sign again, or it stays unpaid.`,
+            link: '/lender/approvals',
+          })
+        }
+        throw new Error(`The lender has to sign again for ${needSign.join(', ')}; that release could not be used and was not paid.` +
+          (failures.length ? ` Also failed: ${failures.join('; ')}` : ''))
+      }
       if (failures.length) throw new Error(`${failures.length} payment(s) could not be released. ${failures.join('; ')}`)
-      if (!anyReleased) throw new Error('No payment on this draw has been signed for')
+      if (inProgress) throw new ReleaseInProgress('Another run is releasing this draw')
+
+      // What the ledger actually paid, read back from the record.
+      const { data: paidRows } = await supabase.from('draw_payments')
+        .select('amount, release_txn_hash').eq('draw_request_id', drawId).eq('status', 'released').order('seq')
+      const paid = (paidRows ?? []) as any[]
+      if (!paid.length) throw new Error('No payment on this draw has been signed for')
+      releasedUsd = Math.round(paid.reduce((t, r) => t + Number(r.amount), 0) * 100) / 100
+      escrowFinishHash = paid[0].release_txn_hash ?? null
       result.finishHash = escrowFinishHash ?? undefined
     } else if (isXrplConfigured() && draw.escrow_sequence != null) {
       const finish = await releaseDraw(draw as any, 'orchestrator')
       escrowFinishHash = finish.txnHash
       result.finishHash = escrowFinishHash
       console.log(`[Orchestrator] EscrowFinish OK — hash ${escrowFinishHash}`)
-    } else if (tokenSettled) {
-      throw new Error('The ledger is not configured, so the draw cannot be released')
     } else {
       console.log('[Orchestrator] XRPL not configured or no escrow — transitioning without on-chain finish')
     }
@@ -258,14 +322,15 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     }
 
     // Step (c): Update draw → 'funded'
+    const fundedAt = new Date().toISOString()
     const { data: nowFunded } = await supabase
       .from('draw_requests')
       .update({
         status: 'funded',
-        funded_at: new Date().toISOString(),
+        funded_at: fundedAt,
         verification_receipt: verificationReceipt,
         ...(escrowFinishHash ? { escrow_finish_hash: escrowFinishHash } : {}),
-        ...(tokenSettled ? { settlement_state: 'released' } : {}),
+        ...(tokenSettled ? { settlement_state: 'released', settlement_amount: releasedUsd } : {}),
       })
       .eq('id', drawId)
       .eq('status', 'approved') // Guard: only update if still approved (prevents double-fund race)
@@ -278,11 +343,16 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
       return result
     }
 
+    // What this release paid: for a dollar-token draw the payments the ledger
+    // made (a payee on hold is not in it); for the pilot, the draw's amount.
+    const paidAmount: number = tokenSettled ? (releasedUsd as number) : Number(draw.amount)
+    funded = { at: fundedAt, amount: paidAmount }
+
     // Step (d): Increment project.amount_drawn
     await supabase.rpc('increment_amount_drawn', {
       p_project_id: draw.project_id,
-      // A dollar-token draw counts what the lender signed for and the ledger paid.
-      p_amount: tokenSettled ? Number((draw as any).settlement_amount ?? draw.amount) : draw.amount,
+      // A dollar-token draw counts what the ledger actually paid.
+      p_amount: paidAmount,
     })
 
     // ── Fetch updated project amount for emails ──────────────────────────────
@@ -316,8 +386,8 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         const { subject, html } = drawFundedEmail({
           borrowerName,
           projectName: project.name,
-          drawAmount: draw.amount,
-          totalDrawn: projectUpdated?.amount_drawn ?? draw.amount,
+          drawAmount: paidAmount,
+          totalDrawn: projectUpdated?.amount_drawn ?? paidAmount,
           loanAmount: project.loan_amount,
           escrowFinishHash: escrowFinishHash ?? null,
         })
@@ -337,7 +407,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         user_id: borrowerRow.profile_id,
         type: 'draw_funded',
         title: 'Draw Release Recorded',
-        body: `Draw ${draw.request_number} for ${fmt(draw.amount)} was automatically released on ${ledgerName()}: ` +
+        body: `Draw ${draw.request_number} for ${fmt(paidAmount)} was automatically released on ${ledgerName()}: ` +
               `inspection and lien waiver were both recorded.${pilotNote()}`,
         link: '/borrower',
       })
@@ -351,7 +421,7 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         user_id: lenderRow.profile_id,
         type: 'draw_auto_funded',
         title: '⬡ Draw Auto-Released',
-        body: `Draw ${draw.request_number} for ${fmt(draw.amount)} on ${project?.name ?? 'a project'} was automatically released — ` +
+        body: `Draw ${draw.request_number} for ${fmt(paidAmount)} on ${project?.name ?? 'a project'} was automatically released — ` +
               `inspector credential and lien waiver NFTs both recorded on ${ledgerName()}.${pilotNote()}`,
         link: '/lender/approvals',
       })
@@ -369,11 +439,17 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     result.escrowFinished = true
     {
       const { recordFeeAccrual } = await import('@/lib/fees')
-      await recordFeeAccrual(draw as any)
+      await recordFeeAccrual({ ...(draw as any), settlement_amount: tokenSettled ? paidAmount : (draw as any).settlement_amount, funded_at: fundedAt })
     }
     console.log(`[Orchestrator] ✓ Draw ${drawId} auto-funded successfully`)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    // Waiting (on another run, or on the lender) is not a failure: say why
+    // and leave it. Nobody is alerted and Building Block is not told it failed.
+    if (err instanceof ReleaseInProgress || err instanceof WaitingOnLender) {
+      result.reason = message
+      return result
+    }
     // Two checks can race: the loser finds the escrow already finished. If the
     // draw is funded by now, that is a success, not a failure to report.
     const { data: after } = await supabase.from('draw_requests').select('status').eq('id', drawId).single()
@@ -425,7 +501,8 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
         payees:           draw.payees ?? null,
         lineItems:        lineItems ?? [],
         payments:         await ledgerPayments(supabase, drawId, (draw as any).settlement_method),
-        fundedAt:         new Date().toISOString(),
+        releasedAmount:   funded?.amount ?? null,
+        fundedAt:         funded?.at ?? new Date().toISOString(),
         trigger:          'orchestrator',
       })
     } catch (webhookErr) {

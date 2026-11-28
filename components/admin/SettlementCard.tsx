@@ -8,6 +8,7 @@ interface Info {
   lenderWallet: string | null
   network: 'testnet' | 'mainnet'
   tokenConfigured: boolean
+  feeTermsAccepted: boolean
   token?: { currency: string; issuer: string }
   issuerAllowsEscrow?: boolean
   lenderBalance?: string | null
@@ -51,6 +52,7 @@ export default function SettlementCard({ projectId }: { projectId: string }) {
   const rows: [string, string][] = [
     ['Network', info.network === 'testnet' ? 'XRP Ledger test network' : 'XRP Ledger mainnet'],
     ['Lender wallet', info.lenderWallet ?? 'not connected yet'],
+    ['Fee terms', info.feeTermsAccepted ? 'Accepted by the lender' : 'Not accepted yet (the lender accepts them on their Funding page)'],
   ]
   if (info.tokenConfigured && info.token) {
     rows.push(['Settlement token', `${info.token.currency} · issuer ${info.token.issuer}`])
@@ -92,6 +94,11 @@ export default function SettlementCard({ projectId }: { projectId: string }) {
           </button>
         ))}
         {error && <span className="text-xs" style={{ color: '#c0392b' }}>{error}</span>}
+        {info.network === 'mainnet' && !info.feeTermsAccepted && (
+          <div className="w-full text-xs" style={{ color: 'var(--bc-muted)' }}>
+            A loan can move to real settlement only after its lender has accepted the fee terms.
+          </div>
+        )}
       </div>
     </div>
   )

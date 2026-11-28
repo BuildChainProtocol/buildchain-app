@@ -49,17 +49,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!inv.bill_to_email) return NextResponse.json({ error: 'This lender has no billing email on file. Add one on the lender\'s record, void this draft and build it again.' }, { status: 409 })
     // lib/email/send skips silently when email is not set up; an invoice must
     // never be recorded as sent when nothing went out.
-    if (!process.env.RESEND_API_KEY) {
-      return NextResponse.json({ error: 'Email is not set up on this site (no RESEND_API_KEY), so the invoice cannot be sent. It is still a draft.' }, { status: 503 })
+    if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) {
+      return NextResponse.json({ error: 'Email is not set up on this site (RESEND_API_KEY or EMAIL_FROM is missing), so the invoice cannot be sent. It is still a draft.' }, { status: 503 })
     }
     const issued = new Date()
     const due = new Date(issued.getTime() + INVOICE_DUE_DAYS * 24 * 3600 * 1000)
-    const { error } = await admin.from('fee_invoices').update({
+    // Claim it first, so two clicks send one email. If the email then does not
+    // go out, it is put back to draft: never "sent" when nothing was sent.
+    const { data: claimed, error } = await admin.from('fee_invoices').update({
       status: 'sent', issued_at: issued.toISOString(), due_at: due.toISOString(),
-    }).eq('id', inv.id).eq('status', 'draft')
+    }).eq('id', inv.id).eq('status', 'draft').select('id')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!claimed?.length) return NextResponse.json({ error: 'This invoice was just sent or changed. Reload the page.' }, { status: 409 })
     const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    await sendEmail({
+    const went = await sendEmail({
       to: inv.bill_to_email,
       subject: `BuildChain invoice ${inv.number}: ${usd(inv.amount_due)} due ${due.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
       html: `<div style="font-family:Arial,sans-serif;max-width:600px">
@@ -70,7 +73,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         <p><a href="${appUrl()}/lender/invoices/${esc(inv.id)}">View the invoice</a> (sign in to BuildChain).</p>
         <p style="color:#5b6573;font-size:12px">BuildChain Protocol, Inc.</p>
       </div>`,
-    })
+    }).catch(() => false)
+    if (!went) {
+      await admin.from('fee_invoices').update({ status: 'draft', issued_at: null, due_at: null }).eq('id', inv.id).eq('status', 'sent')
+      return NextResponse.json({ error: 'The email service did not accept the message, so the invoice was not sent. It is still a draft.' }, { status: 502 })
+    }
     return NextResponse.json({ status: 'sent' })
   }
 
@@ -86,10 +93,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (action === 'void') {
-    if (!['draft', 'sent'].includes(inv.status)) return NextResponse.json({ error: `A ${inv.status} invoice cannot be voided` }, { status: 409 })
-    await admin.from('fee_accruals').update({ invoice_id: null }).eq('invoice_id', inv.id)
-    const { error } = await admin.from('fee_invoices').update({ status: 'void' }).eq('id', inv.id)
+    if (!['draft', 'sent', 'void'].includes(inv.status)) return NextResponse.json({ error: `A ${inv.status} invoice cannot be voided` }, { status: 409 })
+    if (inv.status === 'void') {
+      // Voiding again only finishes freeing its lines, if that failed before.
+      await admin.from('fee_accruals').update({ invoice_id: null }).eq('invoice_id', inv.id)
+      return NextResponse.json({ status: 'void' })
+    }
+    // Void first (a paid invoice can no longer be voided), then free its lines.
+    const { data: voided, error } = await admin.from('fee_invoices').update({ status: 'void' })
+      .eq('id', inv.id).in('status', ['draft', 'sent']).select('id')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!voided?.length) return NextResponse.json({ error: 'This invoice was just changed. Reload the page.' }, { status: 409 })
+    const { error: freeErr } = await admin.from('fee_accruals').update({ invoice_id: null }).eq('invoice_id', inv.id)
+    if (freeErr) return NextResponse.json({ error: `The invoice is void, but its fee lines could not be freed: ${freeErr.message}. Try voiding again.` }, { status: 500 })
     return NextResponse.json({ status: 'void' })
   }
 

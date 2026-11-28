@@ -20,6 +20,7 @@ import { sendEmail } from '@/lib/email/send'
 import { inspectionPassedEmail, inspectionFailedEmail } from '@/lib/email/templates'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

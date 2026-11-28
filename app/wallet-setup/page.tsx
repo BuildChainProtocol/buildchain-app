@@ -129,7 +129,7 @@ export default function WalletSetupPage() {
         </form>
 
         <p className="text-xs mt-10" style={{ color: 'var(--bc-muted)' }}>
-          BuildChain is in pilot on the XRP Ledger test network. BuildChain never holds your funds or your keys.
+          BuildChain never holds your funds or your keys.
         </p>
       </main>
     </div>
