@@ -1,4 +1,5 @@
 import FeeStatement from '@/components/shared/FeeStatement'
+import InvoicesPanel from '@/components/admin/InvoicesPanel'
 
 export default function AdminFeesPage() {
   return (
@@ -10,6 +11,7 @@ export default function AdminFeesPage() {
         </p>
       </div>
       <FeeStatement showLender />
+      <InvoicesPanel />
     </div>
   )
 }

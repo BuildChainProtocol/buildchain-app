@@ -27,7 +27,7 @@
  * release routes do not call this file yet.
  */
 
-import { decode, multisign } from 'xrpl'
+import { decode, hashes, multisign } from 'xrpl'
 import type { Client, Wallet } from 'xrpl'
 
 const RIPPLE_EPOCH = 946684800
@@ -401,7 +401,26 @@ export async function countersignAndSubmit(client: Client, buildchain: Wallet, l
   const tx = decode(lenderSignedBlob) as Tx
   delete tx.Signers
   delete tx.TxnSignature
-  return submitMultisigned(client, [lenderSignedBlob, signAsSigner(buildchain, tx)])
+  const combined = multisign([lenderSignedBlob, signAsSigner(buildchain, tx)])
+  // Signing is deterministic, so the same two signatures always make the same
+  // transaction with the same hash. That lets a retry tell "already paid" from
+  // "refused": if an earlier attempt went through but its confirmation was
+  // lost, the ledger rejects the second submission (the ticket is used up)
+  // and the first one is found by its hash. Paid once, reported once.
+  const hash = hashes.hashSignedTx(combined)
+  try {
+    return { hash: (await submitAndConfirm(client, combined)).hash }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/tefNO_TICKET|tefPAST_SEQ|tefALREADY/.test(message)) {
+      try {
+        const found = await client.request({ command: 'tx', transaction: hash })
+        const r = found.result as unknown as { validated?: boolean; meta?: Tx }
+        if (r.validated && r.meta?.TransactionResult === 'tesSUCCESS') return { hash }
+      } catch { /* not on the ledger: the refusal stands */ }
+    }
+    throw err
+  }
 }
 
 // ── Deposits and take-backs ───────────────────────────────────────────────────

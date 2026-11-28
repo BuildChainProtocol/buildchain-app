@@ -168,6 +168,10 @@ async function main() {
   ok('payee received exactly the draw', Number(await S.tokenBalance(client, payee.address, token)) === payeeBefore + draw3)
   ok('loan account holds the remainder', Number(await S.tokenBalance(client, loan.address, token)) === 200000 - draw3)
   await expectRefused('the same signed release cannot be replayed', () => S.submitMultisigned(client, [lenderSig, bcSig]))
+  // The app's own release step, run a second time (as after a lost confirmation):
+  const again = await S.countersignAndSubmit(client, bc, lenderSig)
+  ok('releasing the same payment again reports the first payment and pays nothing more',
+    again.hash === rel.hash && Number(await S.tokenBalance(client, payee.address, token)) === payeeBefore + draw3)
 
   // Take-backs on the loan account.
   console.log('\nMethod B — refunds and withdrawn releases')

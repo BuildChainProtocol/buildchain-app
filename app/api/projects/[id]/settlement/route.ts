@@ -4,6 +4,7 @@ import { Wallet, xrpToDrops } from 'xrpl'
 import { getConnectedClient } from '@/lib/xrpl/client'
 import { isTestnet } from '@/lib/xrpl/escrow'
 import { buildchainAddress, settlementToken } from '@/lib/xrpl/release'
+import { FEE_TERMS_VERSION } from '@/lib/fees'
 import { issuerAllowsEscrow, setUpLoanAccount, submitAndConfirm, tokenBalance, verifyLoanAccount } from '@/lib/xrpl/settlement'
 
 // An admin chooses how a project's draws settle, and for the two-signature
@@ -24,7 +25,7 @@ async function load(id: string): Promise<{ supabase: any; project: any } | NextR
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((profile as any)?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { data: project } = await supabase
-    .from('projects').select('id, name, settlement_method, loan_account, lenders ( xrp_address, company_name )')
+    .from('projects').select('id, name, settlement_method, loan_account, lenders ( xrp_address, company_name, fee_terms_version, fee_terms_accepted_at )')
     .eq('id', id).single()
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   return { supabase, project }
@@ -41,6 +42,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     lenderWallet,
     network: isTestnet() ? 'testnet' : 'mainnet',
     tokenConfigured: !!process.env.SETTLEMENT_TOKEN_ISSUER,
+    feeTermsAccepted: project.lenders?.fee_terms_version === FEE_TERMS_VERSION && !!project.lenders?.fee_terms_accepted_at,
   }
   if (!process.env.SETTLEMENT_TOKEN_ISSUER) return NextResponse.json(out)
   try {
@@ -84,6 +86,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (!lenderWallet) return NextResponse.json({ error: 'The lender has not connected a wallet yet' }, { status: 409 })
       if (!isTestnet() && process.env.SETTLEMENT_MAINNET_ENABLED !== 'true') {
         return NextResponse.json({ error: 'Dollar-token settlement on mainnet is switched off' }, { status: 409 })
+      }
+      // Real settlement carries the protocol fee, and the Terms promise no fee
+      // applies until the lender has agreed to it. So a loan cannot be moved to
+      // real settlement before its lender has accepted the current fee terms.
+      const agreed = project.lenders?.fee_terms_version === FEE_TERMS_VERSION && !!project.lenders?.fee_terms_accepted_at
+      if (!isTestnet() && !agreed) {
+        return NextResponse.json({ error: 'The lender has not accepted the fee terms yet. They do that on their Funding page.' }, { status: 409 })
       }
       const client = await getConnectedClient()
       try {

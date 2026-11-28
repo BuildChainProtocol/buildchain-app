@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Check, Loader2, QrCode, Smartphone, X } from 'lucide-react'
 import LenderWalletCard from '@/components/lender/LenderWalletCard'
 import FeeStatement from '@/components/shared/FeeStatement'
+import FeeTermsCard from '@/components/lender/FeeTermsCard'
+import LenderInvoices from '@/components/lender/LenderInvoices'
 
 /** One payee the lender has signed for, still waiting to be released. */
 interface Locked {
@@ -145,6 +147,7 @@ export default function LenderFundingPage() {
       </div>
 
       <LenderWalletCard />
+      <FeeTermsCard />
       {error && <div className="rounded-lg border px-4 py-3 mb-5 text-sm" style={{ borderColor: 'rgba(192,57,43,0.3)', background: 'rgba(192,57,43,0.06)', color: '#c0392b' }}>{error}</div>}
       {!data && !error && <div className="text-sm" style={{ color: 'var(--bc-muted)' }}>Reading the ledger…</div>}
 
@@ -271,6 +274,7 @@ export default function LenderFundingPage() {
         </div>
       )}
 
+      <LenderInvoices />
       {data && <FeeStatement />}
     </div>
   )

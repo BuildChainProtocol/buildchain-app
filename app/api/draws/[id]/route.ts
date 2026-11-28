@@ -46,7 +46,30 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (error || !data) {
     return NextResponse.json({ error: 'Draw not found', detail: error?.message }, { status: 404 })
   }
-  return NextResponse.json(data)
+  if (!isBB) return NextResponse.json(data)
+
+  // For Building Block: everything a missed notice would have said. There is
+  // no later redelivery of a notice, so this read is how the two are brought
+  // back in step.
+  const { onTestNetwork } = await import('@/lib/network')
+  const { data: pays } = await supabase.from('draw_payments').select('*').eq('draw_request_id', params.id).order('seq')
+  const testnet = onTestNetwork()
+  return NextResponse.json({
+    ...data,
+    network: testnet ? 'testnet' : 'mainnet',
+    funds_moved: !testnet && data.status === 'funded',
+    // Dollar-token loans only: one row per payee, as the ledger stands now.
+    payments: ((pays ?? []) as any[]).map(p => ({
+      bb_pay_app_id: p.bb_pay_app_id ?? null,
+      sub_code: p.sub_code ?? null,
+      sub_name: p.payee_name ?? null,
+      amount: Number(p.amount),
+      status: p.status === 'released' ? 'paid' : p.status === 'held' ? 'held' : p.status === 'failed' ? 'failed' : 'pending',
+      tx_hash: p.status === 'released' ? p.release_txn_hash : null,
+      wallet: p.status === 'released' ? p.wallet : null,
+      held_reason: p.status === 'held' ? p.held_reason : null,
+    })),
+  })
 }
 
 // The only draw statuses a lender or admin may set through this route.

@@ -11,6 +11,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { isTestnet } from '@/lib/xrpl/escrow'
 
+/**
+ * The version of the fee terms in force (the text is in lib/fee-terms.ts).
+ * A fee can be due only from a lender who has accepted this version.
+ */
+export const FEE_TERMS_VERSION = '2026-11-27'
+
 export function feeRateBps(): number {
   const bps = parseInt(process.env.PROTOCOL_FEE_BPS ?? '30', 10)
   return Number.isFinite(bps) && bps >= 0 && bps <= 1000 ? bps : 30
@@ -36,7 +42,12 @@ export async function recordFeeAccrual(draw: {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!url || !key) return
     const supabase = createClient(url, key, { auth: { persistSession: false } })
-    const { data: project } = await supabase.from('projects').select('lender_id').eq('id', draw.project_id).single()
+    const { data: project } = await supabase.from('projects')
+      .select('lender_id, lenders ( fee_terms_version, fee_terms_accepted_at )').eq('id', draw.project_id).single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const terms = (project as any)?.lenders
+    // The Terms promise no fee applies until the lender has agreed to it.
+    const agreed = terms?.fee_terms_version === FEE_TERMS_VERSION && !!terms?.fee_terms_accepted_at
     const released = Number(draw.settlement_amount ?? draw.net_amount ?? draw.amount)
     const testnet = isTestnet()
     const active = process.env.PROTOCOL_FEES_ACTIVE === 'true'
@@ -44,12 +55,12 @@ export async function recordFeeAccrual(draw: {
     // lender carries no fee. Counted per lender, so it is the first draw of
     // that lender's first loan.
     let firstDraw = false
-    if (!testnet && active && project?.lender_id) {
+    if (!testnet && active && agreed && project?.lender_id) {
       const { count } = await supabase.from('fee_accruals').select('id', { count: 'exact', head: true })
         .eq('lender_id', project.lender_id).eq('network', 'mainnet').neq('draw_request_id', draw.id)
       firstDraw = (count ?? 0) === 0
     }
-    const waived = testnet || !active || firstDraw
+    const waived = testnet || !active || !agreed || firstDraw
     const { error: feeErr } = await supabase.from('fee_accruals').upsert({
       draw_request_id: draw.id,
       project_id: draw.project_id,
@@ -59,7 +70,7 @@ export async function recordFeeAccrual(draw: {
       rate_bps: feeRateBps(),
       fee_amount: feeFor(released),
       waived,
-      waiver_reason: testnet ? 'Pilot on the test network: no funds moved' : !active ? 'Fees not yet in force' : firstDraw ? 'First draw free' : null,
+      waiver_reason: testnet ? 'Pilot on the test network: no funds moved' : !active ? 'Fees not yet in force' : !agreed ? 'The lender has not accepted the fee terms' : firstDraw ? 'First draw free' : null,
       settlement_method: draw.settlement_method ?? 'test_xrp',
       network: testnet ? 'testnet' : 'mainnet',
     }, { onConflict: 'draw_request_id', ignoreDuplicates: true })
