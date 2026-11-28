@@ -496,3 +496,24 @@ export async function validatedResult(client: Client, hash: string): Promise<str
   }
   return null
 }
+
+/**
+ * More release slots for a two-signature loan account. Every payment, refund
+ * and withdrawal uses one slot (a ledger "ticket"), and a loan with several
+ * payees per draw runs through them. Creating more is a transaction on the
+ * loan account like any other: both signatures. It uses the account's own
+ * sequence number, so it is signed and countersigned straight away.
+ */
+export async function buildAddSlots(client: Client, o: { loanAccount: string; count: number; fee?: string }): Promise<Tx> {
+  const info = await client.request({ command: 'account_info', account: o.loanAccount, ledger_index: 'current' })
+  const sequence = Number((info.result.account_data as unknown as { Sequence: number }).Sequence)
+  return {
+    TransactionType: 'TicketCreate',
+    Account: o.loanAccount,
+    TicketCount: Math.max(1, Math.min(100, Math.floor(o.count))),
+    Sequence: sequence,
+    Fee: o.fee ?? '1000',
+    SigningPubKey: '',
+    Memos: memo({ platform: 'BuildChain', event: 'loan_add_slots' }),
+  }
+}

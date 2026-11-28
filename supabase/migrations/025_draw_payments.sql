@@ -71,6 +71,11 @@ alter table public.lender_wallet_links
   alter column payload drop not null,
   add column if not exists user_token text;
 
+-- More release slots on a loan account is one more thing a lender signs.
+alter table public.settlement_requests drop constraint if exists settlement_requests_kind_check;
+alter table public.settlement_requests add constraint settlement_requests_kind_check
+  check (kind in ('deposit', 'refund', 'escrow_cancel', 'withdraw_release', 'add_slots'));
+
 -- A take-back or a withdrawal is about one payment.
 alter table public.settlement_requests
   add column if not exists payment_id uuid references public.draw_payments(id) on delete set null;

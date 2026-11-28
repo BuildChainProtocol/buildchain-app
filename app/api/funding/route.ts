@@ -6,7 +6,7 @@ import { createSignRequest, getSignResult, isXamanConfigured } from '@/lib/xaman
 import { getConnectedClient } from '@/lib/xrpl/client'
 import { isTokenMethod, settlementToken } from '@/lib/xrpl/release'
 import {
-  buildDeposit, buildEscrowCancel, buildRefundPayment, buildVoidTicket, countersignAndSubmit,
+  buildAddSlots, buildDeposit, buildEscrowCancel, buildRefundPayment, buildVoidTicket, countersignAndSubmit,
   loanTickets, tokenBalance, usdValue, validatedResult, verifyLenderSigned,
 } from '@/lib/xrpl/settlement'
 
@@ -20,6 +20,7 @@ import {
 //         refund            money back out of it (never money committed to approved payments)
 //         escrow_cancel     take back one payee's escrow once its deadline has passed
 //         withdraw_release  cancel one payee's release the lender already signed
+//         add_slots         more release slots on a two-signature loan account
 //
 // Each payee on a draw is its own payment (draw_payments), so a take-back or a
 // withdrawal is per payment. The caller's session decides what they may see;
@@ -67,6 +68,9 @@ export async function GET(req: NextRequest) {
     ? await supabase.from('draw_payments').select('*').in('project_id', ids).in('status', ['locked', 'awaiting_signature', 'held', 'failed']).order('seq')
     : { data: [] }
   const tokenReady = !!process.env.SETTLEMENT_TOKEN_ISSUER
+  // Slots already promised to payments signed, or being signed, on a loan.
+  const mineBusy = (projectId: string) => ((pays ?? []) as any[])
+    .filter(x => x.project_id === projectId && x.release_ticket != null && ['locked', 'awaiting_signature', 'failed'].includes(x.status)).length
 
   const loans: any[] = (projects ?? []).map((p: any) => {
     const mine = ((pays ?? []) as any[]).filter(x => x.project_id === p.id)
@@ -89,6 +93,8 @@ export async function GET(req: NextRequest) {
       })),
       lockedTotal: mine.filter(x => HELD_BY_LENDER.includes(x.status)).reduce((t, x) => t + Number(x.amount), 0),
       walletBalance: null as string | null, loanAccountBalance: null as string | null,
+      // two_signature: release slots left on the loan account (each payment uses one)
+      slotsFree: null as number | null,
     }
   })
 
@@ -100,7 +106,10 @@ export async function GET(req: NextRequest) {
         for (const loan of loans) {
           if (!isTokenMethod(loan.method)) continue
           if (loan.lenderWallet) loan.walletBalance = await tokenBalance(client, loan.lenderWallet, token)
-          if (loan.loanAccount) loan.loanAccountBalance = await tokenBalance(client, loan.loanAccount, token)
+          if (loan.loanAccount) {
+            loan.loanAccountBalance = await tokenBalance(client, loan.loanAccount, token)
+            loan.slotsFree = Math.max(0, (await loanTickets(client, loan.loanAccount)).length - mineBusy(loan.id))
+          }
           for (const line of loan.locked) {
             if (loan.method !== 'token_escrow' || !line._owner || line._seq == null) continue
             try {
@@ -126,7 +135,7 @@ export async function POST(req: NextRequest) {
   const { supabase, userId, role } = s
   const body = await req.json().catch(() => ({}))
   const kind = String(body?.kind ?? '')
-  if (!['deposit', 'refund', 'escrow_cancel', 'withdraw_release'].includes(kind)) {
+  if (!['deposit', 'refund', 'escrow_cancel', 'withdraw_release', 'add_slots'].includes(kind)) {
     return NextResponse.json({ error: 'Unknown request' }, { status: 400 })
   }
   if (!isXamanConfigured()) return NextResponse.json({ error: 'Wallet signing is not set up on this site yet (Xaman keys are missing)' }, { status: 503 })
@@ -177,7 +186,26 @@ export async function POST(req: NextRequest) {
         return t
       }
 
-      if (kind === 'deposit' || kind === 'refund') {
+      if (kind === 'add_slots') {
+        if (project.settlement_method !== 'two_signature' || !project.loan_account) throw new Error('This loan has no two-signature account')
+        const free = (await loanTickets(client, project.loan_account)).length
+        if (free > 40) throw new Error(`This loan still has ${free} release slots; more can be added when fewer than 40 are left`)
+        // Each slot ties up a little XRP on the loan account. BuildChain covers
+        // that from its own wallet before asking for the signature.
+        const seed = process.env.XRPL_WALLET_SEED
+        if (!seed) throw new Error('BuildChain\'s signing wallet is not configured')
+        const platform = Wallet.fromSeed(seed)
+        const { xrpToDrops } = await import('xrpl')
+        const topUp: any = await client.autofill({
+          TransactionType: 'Payment', Account: platform.address, Destination: project.loan_account,
+          Amount: xrpToDrops(process.env.LOAN_ACCOUNT_SLOTS_XRP ?? '11'),
+        })
+        const { submitAndConfirm } = await import('@/lib/xrpl/settlement')
+        await submitAndConfirm(client, platform.sign(topUp).tx_blob)
+        txjson = await buildAddSlots(client, { loanAccount: project.loan_account, count: 50 })
+        multisign = true
+        instruction = `Add 50 release slots to the loan account for ${project.name}. This moves no money; each payment to a payee uses one slot.`
+      } else if (kind === 'deposit' || kind === 'refund') {
         if (project.settlement_method !== 'two_signature' || !project.loan_account) throw new Error('This loan has no two-signature account')
         amount = Number(body?.amount)
         usdValue(amount)
@@ -286,7 +314,7 @@ async function finish(supabase: any, requestId: string) {
     if (!claimed?.length) return NextResponse.json({ state: 'waiting' })
 
     let hash: string | null = result.txid
-    if (r.kind === 'refund' || r.kind === 'withdraw_release') {
+    if (r.kind === 'refund' || r.kind === 'withdraw_release' || r.kind === 'add_slots') {
       if (!result.hex) return close('failed', { error: 'The wallet did not return the signed transaction' })
       const problems = verifyLenderSigned(result.hex, r.txjson, lender)
       if (problems.length) return close('failed', { error: `The signature does not match the request: ${problems.join('; ')}` })

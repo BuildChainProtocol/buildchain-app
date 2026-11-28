@@ -196,6 +196,15 @@ async function main() {
   ok('the withdrawn draw\'s money is still in the loan account',
     Number(await S.tokenBalance(client, loan.address, token)) === 200000 - draw3 - 25000)
 
+  // More release slots, by both signatures.
+  const slotsBefore = (await S.loanTickets(client, loan.address)).length
+  const addSlots = await S.buildAddSlots(client, { loanAccount: loan.address, count: 5 })
+  const addSig = S.signAsSigner(lender, addSlots)
+  ok('the lender\'s signature for more slots matches the request', S.verifyLenderSigned(addSig, addSlots, lender.address).length === 0)
+  await expectRefused('BuildChain cannot add slots (or anything else) on its own', () => S.submitMultisigned(client, [S.signAsSigner(bc, addSlots)]))
+  await S.countersignAndSubmit(client, bc, addSig)
+  ok('five release slots were added to the loan account', (await S.loanTickets(client, loan.address)).length === slotsBefore + 5)
+
   await client.disconnect()
   console.log(`\nAll ${passed} checks passed on the XRPL test network.`)
 }
