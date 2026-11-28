@@ -97,6 +97,40 @@ export async function tokenBalance(client: Client, account: string, token: Token
   return line ? line.balance : null
 }
 
+/** The ledger server's own error code for a failed request ('entryNotFound', 'txnNotFound', ...), or ''. */
+export function ledgerErrorCode(err: unknown): string {
+  const data = (err as { data?: { error?: unknown } } | null)?.data
+  return typeof data?.error === 'string' ? data.error : ''
+}
+
+/**
+ * The validated transaction that used a given ticket on an account, if any.
+ * Returns null only when the account's history was read and holds no such
+ * transaction; a failed read throws, so "could not look" is never mistaken
+ * for "nothing there".
+ */
+export async function findTicketUse(client: Client, account: string, ticketSequence: number): Promise<{ hash: string; result: string } | null> {
+  let marker: unknown = undefined
+  for (let page = 0; page < 25; page++) {
+    const res = await client.request({
+      command: 'account_tx', account, ledger_index_min: -1, ledger_index_max: -1, limit: 200, forward: false,
+      ...(marker ? { marker } : {}),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    const result = res.result as unknown as { transactions?: Tx[]; marker?: unknown }
+    for (const item of result.transactions ?? []) {
+      const txj = ((item.tx_json ?? item.tx ?? {}) as Tx)
+      const meta = (item.meta ?? {}) as Tx
+      if (item.validated !== false && Number(txj.TicketSequence) === ticketSequence) {
+        return { hash: String(item.hash ?? txj.hash ?? ''), result: String(meta.TransactionResult) }
+      }
+    }
+    marker = result.marker
+    if (!marker) return null
+  }
+  throw new Error('The loan account has too long a history to search in one go')
+}
+
 /** Submit a signed blob and wait until it is in a validated ledger. */
 export async function submitAndConfirm(client: Client, txBlob: string): Promise<{ hash: string; result: string; meta: Tx }> {
   const sub = await client.request({ command: 'submit', tx_blob: txBlob })
@@ -182,7 +216,11 @@ export async function verifyLenderEscrow(client: Client, o: {
       command: 'ledger_entry', escrow: { owner: o.owner, seq: o.sequence }, ledger_index: 'validated',
     })
     node = entry.result.node as unknown as Tx
-  } catch {
+  } catch (err) {
+    // Only the ledger saying "no such entry" means there is no escrow. A
+    // dropped connection or a busy server says nothing either way, and must
+    // never be read as a mismatch.
+    if (ledgerErrorCode(err) !== 'entryNotFound') throw err
     return ['No escrow with that owner and sequence is on the ledger']
   }
   const problems: string[] = []
@@ -473,27 +511,33 @@ export async function countersignAndSubmit(client: Client, buildchain: Wallet, l
     return { hash: (await submitAndConfirm(client, combined)).hash }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    if (/tefNO_TICKET|tefPAST_SEQ|tefALREADY|not validated in time/.test(message)) {
-      // The first attempt may have been submitted a moment ago and not be in
-      // a validated ledger yet: look a few times before deciding.
-      for (let i = 0; i < 6; i++) {
-        try {
-          const found = await client.request({ command: 'tx', transaction: hash })
-          const r = found.result as unknown as { validated?: boolean; meta?: Tx }
-          if (r.validated) {
-            if (r.meta?.TransactionResult === 'tesSUCCESS') return { hash }
-            // In a validated ledger with another result: it used up the slot
-            // without doing its job. Say so, so the caller can ask to sign again.
-            throw new SlotUsedUp(String(r.meta?.TransactionResult))
-          }
-        } catch (lookupErr) {
-          if (lookupErr instanceof SlotUsedUp) throw lookupErr
-          /* not found yet */
+    const account = String(tx.Account)
+    const ticket = Number(tx.TicketSequence)
+    if (/tefNO_TICKET|tefPAST_SEQ|tefALREADY|not validated in time/.test(message) && Number.isFinite(ticket) && ticket > 0) {
+      // What happened to this slot is decided from the account's own
+      // validated history, never from a lookup that came back empty: a
+      // payment that went through must not be mistaken for one that did not,
+      // or the payee could be paid twice. Any failed read here throws, and
+      // the caller leaves the payment as it is.
+      for (let i = 0; i < 4; i++) {
+        const used = await findTicketUse(client, account, ticket)
+        if (used) {
+          if (used.hash === hash && used.result === 'tesSUCCESS') return { hash }
+          // Another transaction used the slot, or this one reached the ledger
+          // and failed there: this signature can never pay.
+          throw new SlotUsedUp(used.hash === hash ? used.result : 'the slot was used by another transaction')
         }
-        await new Promise(res => setTimeout(res, 2000))
+        // Not in the history. If the slot is still on the ledger, nothing
+        // has happened yet: an ordinary failure, safe to try again.
+        if ((await loanTickets(client, account)).includes(ticket)) throw err
+        // Slot gone and no record yet: the transaction may be between
+        // submission and validation. Look again shortly.
+        await new Promise(res => setTimeout(res, 2500))
       }
+      throw new Error('The release slot is gone from the ledger but no transaction that used it was found. Left as it is so nothing can be paid twice; this needs a person to look.')
     }
-    // A "tec" result is final and consumes the slot too.
+    // A "tec" result here came from a validated ledger: final, and it
+    // consumed the slot.
     if (/^tec[A-Z_]+/.test(message)) throw new SlotUsedUp(message)
     throw err
   }

@@ -76,7 +76,7 @@ export async function ensureInspectionCredential(admin: any, drawId: string): Pr
 
 /** Re-do any missing ledger record for an approved draw, then try to release it. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function checkConditions(admin: any, drawId: string): Promise<ConditionsResult> {
+export async function checkConditions(admin: any, drawId: string, opts: { hop?: number } = {}): Promise<ConditionsResult> {
   const { data: draw } = await admin
     .from('draw_requests').select('status, lien_waiver_nft_id').eq('id', drawId).single()
   if (!draw) return { ok: false, inspection: { passed: false, recorded: false }, lienWaiver: { confirmed: false, recorded: false }, released: false, reason: 'Draw not found' }
@@ -97,7 +97,7 @@ export async function checkConditions(admin: any, drawId: string): Promise<Condi
 
   let released = false
   if (inspection.recorded && lienWaiver.recorded) {
-    const result = await runOrchestrator(drawId)
+    const result = await runOrchestrator(drawId, opts)
     released = result.escrowFinished
     if (!released && result.reason) reasons.push(result.reason)
   }

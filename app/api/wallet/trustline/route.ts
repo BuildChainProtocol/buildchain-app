@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
+import { serviceClient } from '@/lib/supabase/service'
 import { isValidClassicAddress } from 'xrpl'
 import { createSignRequest, getSignResult, isXamanConfigured } from '@/lib/xaman'
 import { getConnectedClient } from '@/lib/xrpl/client'
@@ -20,16 +22,26 @@ import { currencyCode, tokenBalance } from '@/lib/xrpl/settlement'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// A light brake so one visitor cannot use up the wallet service's allowance.
-const recent = new Map<string, number[]>()
-function tooMany(req: NextRequest): boolean {
-  const who = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
-  const now = Date.now()
-  const hits = (recent.get(who) ?? []).filter(t => now - t < 10 * 60 * 1000)
-  hits.push(now)
-  recent.set(who, hits)
-  if (recent.size > 5000) recent.clear()
-  return hits.length > 6
+// A brake so visitors cannot use up the wallet service's allowance, which
+// lender signing depends on. It is counted in the database, so it holds
+// across every server instance: 6 per visitor in 10 minutes, 150 in all per
+// day. The visitor is stored only as a one-way hash. If the count cannot be
+// read, the request is refused rather than let through uncounted.
+async function tooMany(req: NextRequest): Promise<boolean> {
+  try {
+    const who = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
+    const source = createHash('sha256').update(`wallet-setup:${who}`).digest('hex').slice(0, 32)
+    const db = serviceClient()
+    const since = (ms: number) => new Date(Date.now() - ms).toISOString()
+    const { count: mine, error: e1 } = await db.from('public_request_log').select('id', { count: 'exact', head: true })
+      .eq('kind', 'wallet_setup').eq('source', source).gte('created_at', since(10 * 60 * 1000))
+    const { count: all, error: e2 } = await db.from('public_request_log').select('id', { count: 'exact', head: true })
+      .eq('kind', 'wallet_setup').gte('created_at', since(24 * 60 * 60 * 1000))
+    if (e1 || e2) return true
+    if ((mine ?? 0) >= 6 || (all ?? 0) >= 150) return true
+    const { error: e3 } = await db.from('public_request_log').insert({ kind: 'wallet_setup', source })
+    return !!e3
+  } catch { return true }
 }
 
 function unavailable() {
@@ -44,7 +56,7 @@ async function ready(address: string): Promise<boolean> {
 
 export async function POST(req: NextRequest) {
   if (!isXamanConfigured() || !process.env.SETTLEMENT_TOKEN_ISSUER) return unavailable()
-  if (tooMany(req)) return NextResponse.json({ error: 'Too many requests. Please wait a few minutes.' }, { status: 429 })
+  if (await tooMany(req)) return NextResponse.json({ error: 'Too many requests. Please wait a few minutes.' }, { status: 429 })
   try {
     const token = settlementToken()
     const request = await createSignRequest({

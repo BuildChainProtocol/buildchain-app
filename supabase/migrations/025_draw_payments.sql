@@ -85,3 +85,65 @@ alter table public.settlement_requests
 
 -- Replaced by payment_signatures (it held one signature per draw).
 drop table if exists public.draw_signatures;
+
+-- ── Funded, and counted, in one step ─────────────────────────────────────────
+-- Marking a draw funded and adding what it paid to the loan's drawn amount
+-- were two separate writes; a run cut off between them left the loan's total
+-- short for good. This does both or neither, and only one caller can win.
+create or replace function public.mark_draw_funded(p_draw_id uuid, p_amount numeric, p_changes jsonb default '{}'::jsonb)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_project uuid;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Only the server records a funded draw';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'The funded amount must be positive';
+  end if;
+  update draw_requests set
+    status               = 'funded',
+    funded_at            = coalesce((p_changes->>'funded_at')::timestamptz, now()),
+    reviewed_at          = coalesce((p_changes->>'reviewed_at')::timestamptz, reviewed_at),
+    verification_receipt = coalesce(p_changes->'verification_receipt', verification_receipt),
+    escrow_finish_hash   = coalesce(p_changes->>'escrow_finish_hash', escrow_finish_hash),
+    settlement_state     = coalesce(p_changes->>'settlement_state', settlement_state),
+    settlement_amount    = coalesce((p_changes->>'settlement_amount')::numeric, settlement_amount)
+  where id = p_draw_id and status = 'approved'
+  returning project_id into v_project;
+  if v_project is null then
+    return false;                       -- not approved any more: someone else funded it, or it changed
+  end if;
+  update projects set amount_drawn = coalesce(amount_drawn, 0) + p_amount, updated_at = now()
+  where id = v_project;
+  return true;
+end;
+$$;
+revoke all on function public.mark_draw_funded(uuid, numeric, jsonb) from public, anon, authenticated;
+grant execute on function public.mark_draw_funded(uuid, numeric, jsonb) to service_role;
+
+-- Set once the release has been announced (fee line, emails, Building Block's
+-- notices). A funded draw without it is finished by the daily check. Draws
+-- funded before this existed were announced at the time.
+alter table public.draw_requests add column if not exists release_announced_at timestamptz;
+update public.draw_requests set release_announced_at = coalesce(funded_at, now())
+  where status = 'funded' and release_announced_at is null;
+
+-- ── A count of requests made by people who are not signed in ─────────────────
+-- The wallet set-up page is open to anyone and each use asks the wallet
+-- service for a sign request. This lets the server cap how many, across all
+-- of its instances. It holds no personal data: the source is a one-way hash.
+create table if not exists public.public_request_log (
+  id         bigint generated always as identity primary key,
+  kind       text not null,
+  source     text,
+  created_at timestamptz not null default now()
+);
+create index if not exists public_request_log_idx on public.public_request_log (kind, created_at);
+alter table public.public_request_log enable row level security;
+revoke all on public.public_request_log from anon, authenticated;
+grant all on public.public_request_log to service_role;

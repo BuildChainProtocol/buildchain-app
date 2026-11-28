@@ -62,6 +62,15 @@ export async function GET(req: NextRequest) {
   const requestId = req.nextUrl.searchParams.get('request')
   if (requestId) return finish(supabase, requestId)
 
+  // A request the lender signed after closing its dialog was never finished
+  // (nothing else asks about it). Finish those first, so what this page then
+  // shows is true. Row-level security limits this to the caller's own loans.
+  const { data: unfinished } = await supabase.from('settlement_requests').select('id')
+    .eq('state', 'waiting').lt('created_at', new Date(Date.now() - 20 * 1000).toISOString()).order('created_at').limit(4)
+  for (const u of (unfinished ?? []) as any[]) {
+    try { await finish(supabase, u.id) } catch { /* looked at again on the next load */ }
+  }
+
   // Row-level security limits a lender to their own projects and their payments.
   const { data: projects, error } = await supabase.from('projects').select(PROJECT_SELECT).is('archived_at', null).order('name')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -283,11 +292,26 @@ async function settleDrawAfterTakeBack(admin: any, drawId: string, how: 'withdra
     return
   }
   if (how === 'withdrawn') {
-    // Nothing is signed for any more: back to review with a clean slate.
-    const { data: back } = await admin.from('draw_requests')
-      .update({ status: 'submitted', settlement_state: null, settlement_amount: null, approved_by: null })
-      .eq('id', drawId).in('status', ['submitted', 'pending', 'approved', 'held']).select('id')
-    if (back?.length) await admin.from('draw_payments').delete().eq('draw_request_id', drawId).in('status', ['pending', 'held', 'withdrawn'])
+    // Nothing is signed for any more. A draw that was still in review goes
+    // back to review with a clean slate. One that had been approved goes on
+    // hold instead, and Building Block is told: it was showing it approved.
+    const reason = 'The lender withdrew their approval. Take the draw off hold to review it again.'
+    const { data: wasApproved } = await admin.from('draw_requests')
+      .update({ status: 'held', hold_reason: reason, settlement_state: null, settlement_amount: null, approved_by: null })
+      .eq('id', drawId).eq('status', 'approved').select('id')
+    let cleared = !!wasApproved?.length
+    if (cleared) {
+      try {
+        const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
+        await sendBuildingBlockWebhook({ event: 'draw_held', bc_draw_id: drawId, reason, decided_at: new Date().toISOString() })
+      } catch { /* the sender alerts the owner itself when a notice is not accepted */ }
+    } else {
+      const { data: back } = await admin.from('draw_requests')
+        .update({ status: 'submitted', settlement_state: null, settlement_amount: null, approved_by: null })
+        .eq('id', drawId).in('status', ['submitted', 'pending']).select('id')
+      cleared = !!back?.length
+    }
+    if (cleared) await admin.from('draw_payments').delete().eq('draw_request_id', drawId).in('status', ['pending', 'held', 'withdrawn'])
   } else {
     await admin.from('draw_requests')
       .update({ status: 'declined', settlement_state: null, settlement_amount: null, decline_reason: 'The lender took back the escrow after its deadline passed.' })
@@ -344,7 +368,12 @@ async function finish(supabase: any, requestId: string) {
       }
       const client = await getConnectedClient()
       try {
-        if (r.kind === 'refund') {
+        // If this refund's slot is already gone from the ledger, an earlier
+        // try submitted it: skip the balance check (the balance has already
+        // dropped by the refund) and let the ledger's history say how it ended.
+        const slot = Number((r.txjson as any)?.TicketSequence)
+        const notYetSent = r.kind === 'refund' && (await loanTickets(client, r.projects?.loan_account)).includes(slot)
+        if (notYetSent) {
           // Payments may have been approved since this refund was opened:
           // money committed to them cannot leave the loan account.
           const committed = (await loanCommitments(admin, r.project_id)).committedUsd

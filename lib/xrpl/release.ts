@@ -16,13 +16,13 @@
  *   releasePayment        pay one payee once both draw conditions are recorded
  */
 
-import { Wallet } from 'xrpl'
+import { Wallet, decode } from 'xrpl'
 import type { Client } from 'xrpl'
 import { getConnectedClient } from './client'
 import { escrowConditionFor, finishDrawEscrow, isTestnet } from './escrow'
 import {
   buildLenderEscrowCreate, buildReleasePayment, countersignAndSubmit, finishTokenEscrow,
-  issuerAllowsEscrow, loanTickets, SlotUsedUp, tokenAmount, tokenBalance, usdValue, verifyLenderEscrow,
+  issuerAllowsEscrow, ledgerErrorCode, loanTickets, SlotUsedUp, tokenAmount, tokenBalance, usdValue, verifyLenderEscrow,
   verifyLenderSignedRelease, verifyLoanAccount,
 } from './settlement'
 import type { TokenSpec } from './settlement'
@@ -222,7 +222,7 @@ export async function confirmLenderSigning(o: {
   const token = settlementToken()
   return withClient(async (client) => {
     let found: Tx | null = null
-    for (let i = 0; i < 20 && !found; i++) {
+    for (let i = 0; i < 14 && !found; i++) {
       try {
         const res = await client.request({ command: 'tx', transaction: o.txid as string })
         const r = res.result as unknown as Tx
@@ -230,7 +230,29 @@ export async function confirmLenderSigning(o: {
       } catch { /* not in a validated ledger yet */ }
       if (!found) await new Promise(res => setTimeout(res, 1500))
     }
-    if (!found) throw new Error('The escrow transaction is not on the ledger yet. Try again in a moment.')
+    if (!found) {
+      // Not there yet, or never will be? A signed transaction names the last
+      // ledger it can enter. Once the validated ledger is past that and the
+      // ledger itself says it has no such transaction, it is dead for good
+      // and nothing was locked. Short of that certainty, keep waiting.
+      let last = 0
+      try { last = Number((decode(o.hex ?? '') as Tx).LastLedgerSequence ?? 0) } catch { /* no usable copy of the signed transaction */ }
+      if (last > 0) {
+        const validated = await client.getLedgerIndex()
+        if (validated > last + 3) {
+          try {
+            const res = await client.request({ command: 'tx', transaction: o.txid as string })
+            const r = res.result as unknown as Tx
+            if (r.validated) found = r
+          } catch (err) {
+            if (ledgerErrorCode(err) === 'txnNotFound') {
+              throw new SigningMismatch('The signed escrow never reached the ledger and no longer can. Nothing was locked.')
+            }
+          }
+        }
+      }
+      if (!found) throw new Error('The escrow transaction is not on the ledger yet. Try again in a moment.')
+    }
     const txj = (found.tx_json ?? found) as Tx
     const meta = found.meta as Tx | undefined
     if (meta?.TransactionResult !== 'tesSUCCESS') throw new SigningMismatch(`The escrow transaction failed on the ledger: ${String(meta?.TransactionResult)}`)
@@ -274,13 +296,16 @@ export async function releasePayment(
   payment: ReleasablePayment,
   method: 'token_escrow' | 'two_signature',
   lenderWallet: string | null,
+  /** a ledger connection the caller already holds (it stays open); otherwise one is opened for this payment */
+  shared?: Client,
 ): Promise<{ txnHash: string }> {
   assertNetworkAllowed()
+  const onLedger = <T>(fn: (client: Client) => Promise<T>): Promise<T> => (shared ? fn(shared) : withClient(fn))
 
   if (method === 'token_escrow') {
     if (payment.escrow_sequence == null || !payment.escrow_owner) throw new Error('This payment has no lender escrow to release')
     const { condition, fulfillment } = paymentCondition(payment.draw_request_id, payment.id)
-    const done = await withClient(client => finishTokenEscrow(client, platformWallet(), {
+    const done = await onLedger(client => finishTokenEscrow(client, platformWallet(), {
       owner: payment.escrow_owner as string, sequence: payment.escrow_sequence as number,
       condition, fulfillment, drawRequestId: payment.draw_request_id,
     }))
@@ -306,13 +331,12 @@ export async function releasePayment(
   const problems = verifyLenderSignedRelease(payment.lender_signed_blob, requested, lenderWallet)
   if (problems.length) throw new Error(`The lender's signature no longer matches the payment: ${problems.join('; ')}`)
   try {
-    const done = await withClient(client => countersignAndSubmit(client, platformWallet(), payment.lender_signed_blob as string))
+    const done = await onLedger(client => countersignAndSubmit(client, platformWallet(), payment.lender_signed_blob as string))
     return { txnHash: done.hash }
   } catch (err) {
+    // Only a definite answer from the ledger's history (SlotUsedUp) sends the
+    // payee back for a new signature. Anything unclear stays as it is.
     if (err instanceof SlotUsedUp) throw new ReleaseNeedsNewSignature(err.message)
-    const m = err instanceof Error ? err.message : String(err)
-    // The slot is gone and no successful transaction used it.
-    if (/tefNO_TICKET|tefPAST_SEQ/.test(m)) throw new ReleaseNeedsNewSignature('The release slot for this payment is no longer on the ledger and it was not paid')
     throw err
   }
 }

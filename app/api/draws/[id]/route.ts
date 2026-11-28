@@ -3,11 +3,10 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { sendEmail } from '@/lib/email/send'
-import { drawApprovedEmail, drawDeclinedEmail, drawFundedEmail } from '@/lib/email/templates'
+import { drawApprovedEmail, drawDeclinedEmail } from '@/lib/email/templates'
 import { isTokenMethod } from '@/lib/xrpl/release'
 import { serviceClient } from '@/lib/supabase/service'
 import { bearer, sameKey } from '@/lib/api-key'
-import { ledgerName, pilotNote } from '@/lib/network'
 
 // Must run on Node.js runtime — xrpl uses WebSockets (not supported in Edge)
 export const runtime = 'nodejs'
@@ -197,6 +196,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     await admin.from('draw_payments').delete().eq('draw_request_id', params.id)
   }
 
+  let claimedApproval = false
   const updates: Record<string, unknown> = {
     ...((body.status === 'declined' || body.status === 'held') && (draw as any).settlement_state === 'awaiting_lender_signature'
       ? { settlement_state: null, release_ticket: null } : {}),
@@ -222,6 +222,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     // Pilot method: BuildChain's test wallet creates the escrow.
     // A draw that was held and is approved again keeps the escrow it has.
+    // The approval is claimed first, so two approvals at once create one
+    // escrow; if the escrow then fails, the claim is undone.
+    if (!tokenSettled && draw.escrow_sequence == null) {
+      const { data: claim } = await admin.from('draw_requests')
+        .update({ status: 'approved', approved_by: user.id, reviewed_at: updates.reviewed_at })
+        .eq('id', params.id).eq('status', draw.status).select('id')
+      if (!claim?.length) {
+        return NextResponse.json({ error: 'This draw changed while you were deciding. Reload and try again.' }, { status: 409 })
+      }
+      claimedApproval = true
+    }
     if (!tokenSettled && draw.escrow_sequence == null) try {
       const { isXrplConfigured, createDrawEscrow } = await import('@/lib/xrpl/escrow')
       if (isXrplConfigured()) {
@@ -246,6 +257,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       // it was and the lender sees why.
       const message = xrplError instanceof Error ? xrplError.message : String(xrplError)
       console.error('[XRPL] EscrowCreate failed — draw not approved:', message.slice(0, 300))
+      await admin.from('draw_requests').update({ status: draw.status, approved_by: null })
+        .eq('id', params.id).eq('status', 'approved').is('escrow_sequence', null)
       return NextResponse.json(
         { error: `The escrow could not be created on the XRP Ledger, so the draw was not approved. ${message.slice(0, 200)}` },
         { status: 502 }
@@ -325,15 +338,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       )
     }
 
-    // The release went through (or no escrow applies): record its fee line and count it as drawn
-    {
-      const { recordFeeAccrual } = await import('@/lib/fees')
-      await recordFeeAccrual(draw as any)
-    }
-    await admin.rpc('increment_amount_drawn', {
-      p_project_id: draw.project_id,
+    // The release went through (or no escrow applies). Funded, and counted
+    // against the loan, in one database step that only one caller can win;
+    // then the same announcement the automatic release makes (fee line,
+    // email, notices, Building Block).
+    const { data: won, error: fundErr } = await admin.rpc('mark_draw_funded', {
+      p_draw_id: params.id,
       p_amount: draw.amount,
+      p_changes: {
+        funded_at: updates.funded_at, reviewed_at: updates.reviewed_at,
+        ...(updates.escrow_finish_hash ? { escrow_finish_hash: updates.escrow_finish_hash } : {}),
+      },
     })
+    if (fundErr) return NextResponse.json({ error: `The release went through on the ledger but the draw could not be recorded as funded: ${fundErr.message}` }, { status: 500 })
+    if (won !== true) {
+      return NextResponse.json({ error: 'This draw changed while you were deciding. Reload and try again.' }, { status: 409 })
+    }
+    const { announceRelease } = await import('@/lib/xrpl/orchestrator')
+    await announceRelease(admin, params.id, 'manual')
+    const { data: fundedDraw } = await admin.from('draw_requests').select('*').eq('id', params.id).single()
+    return NextResponse.json({ data: fundedDraw })
   }
 
   // ─── HELD ──────────────────────────────────────────────────────────────────
@@ -348,13 +372,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   // Apply updates, only if the draw is still in the state this decision was
   // made on (two people, or two clicks, deciding at once: one wins).
-  const { data: updated, error } = await admin
+  let write = admin
     .from('draw_requests')
     .update(updates)
     .eq('id', params.id)
-    .eq('status', draw.status)
-    .select()
-    .maybeSingle()
+    .eq('status', claimedApproval ? 'approved' : draw.status)
+  // A dollar-token draw is approved only while the lender's lock still stands
+  // (they may have withdrawn it a moment ago on the Funding page).
+  if (body.status === 'approved' && isTokenMethod((draw.projects as any)?.settlement_method)) {
+    write = write.eq('settlement_state', 'locked')
+  }
+  const { data: updated, error } = await write.select().maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   if (!updated) {
@@ -363,7 +391,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   // ─── BB webhooks — per §4 of the BB↔BC integration spec ──────────────
   try {
-    const { sendBuildingBlockWebhook, sendEscrowReleasedWebhooks } = await import('@/lib/webhooks/building-block')
+    const { sendBuildingBlockWebhook } = await import('@/lib/webhooks/building-block')
 
     if (body.status === 'approved') {
       await sendBuildingBlockWebhook({
@@ -404,25 +432,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       })
     }
 
-    // waiver_nft_minted is fired later (in the async IIFE below) after NFT minting
-
-    if (body.status === 'funded') {
-      // Manual funded path — the same release payload as the orchestrator's
-      const { data: lineItems } = await supabase
-        .from('draw_line_items')
-        .select('bb_pay_app_id, sub_code, current_payment_due')
-        .eq('draw_request_id', params.id)
-
-      await sendEscrowReleasedWebhooks({
-        bcDrawId:         params.id,
-        escrowFinishHash: updated.escrow_finish_hash ?? null,
-        netAmount:        updated.net_amount ?? updated.amount,
-        payees:           (updated as any).payees ?? null,
-        lineItems:        lineItems ?? [],
-        fundedAt:         String(updates.reviewed_at),
-        trigger:          'manual',
-      })
-    }
+    // waiver_nft_minted is fired later (in the async IIFE below) after NFT minting.
+    // A funded draw never reaches here: its release is announced above.
   } catch (webhookErr) {
     console.warn('[BB webhook] dispatch failed (non-fatal):', webhookErr instanceof Error ? webhookErr.message : webhookErr)
   }
@@ -438,9 +449,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       status: body.status,
       ...(body.status === 'approved' && updated.escrow_txn_hash
         ? { xrpl_escrow_hash: updated.escrow_txn_hash, xrpl_sequence: updated.escrow_sequence }
-        : {}),
-      ...(body.status === 'funded' && updated.escrow_finish_hash
-        ? { xrpl_finish_hash: updated.escrow_finish_hash }
         : {}),
       ...(body.lien_waiver === true ? { lien_waiver_confirmed: true } : {}),
     },
@@ -496,17 +504,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         })
         await sendEmail({ to: borrowerEmail, subject, html })
 
-      } else if (body.status === 'funded') {
-        // project.amount_drawn already reflects the increment (RPC ran before this email block)
-        const { subject, html } = drawFundedEmail({
-          borrowerName,
-          projectName: project.name,
-          drawAmount: draw.amount,
-          totalDrawn: project.amount_drawn ?? draw.amount,
-          loanAmount: project.loan_amount,
-          escrowFinishHash: updated.escrow_finish_hash ?? null,
-        })
-        await sendEmail({ to: borrowerEmail, subject, html })
       }
     }
 
@@ -535,11 +532,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           body: body.decline_reason
             ? `Draw ${updated.request_number} was not approved. Reason: ${body.decline_reason}`
             : `Draw ${updated.request_number} was not approved. Contact ${lenderName} for details.`,
-        },
-        funded: {
-          type: 'draw_funded',
-          title: 'Draw Release Recorded',
-          body: `Draw ${updated.request_number} for ${fmt(draw.amount)} was released on ${ledgerName()}.${pilotNote()}`,
         },
       }
       const notif = notifMap[body.status]

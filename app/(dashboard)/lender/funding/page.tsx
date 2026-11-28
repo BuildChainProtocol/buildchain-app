@@ -100,7 +100,7 @@ export default function LenderFundingPage() {
           <div className="w-full max-w-[440px] rounded-lg border" style={{ background: 'var(--bc-card)', borderColor: 'var(--bc-border)' }}>
             <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--bc-border)' }}>
               <h2 style={{ fontSize: '1.1rem' }}>{open.title}</h2>
-              <button onClick={() => setOpen(null)} aria-label="Close" className="p-1.5 rounded hover:bg-slate-900/5"><X size={18} style={{ color: 'var(--bc-muted)' }} /></button>
+              <button onClick={() => { setOpen(null); load() }} aria-label="Close" className="p-1.5 rounded hover:bg-slate-900/5"><X size={18} style={{ color: 'var(--bc-muted)' }} /></button>
             </div>
             <div className="px-6 py-6 text-center">
               <p className="text-sm text-left mb-5" style={{ color: 'var(--bc-text)' }}>{open.instruction}</p>
@@ -139,7 +139,7 @@ export default function LenderFundingPage() {
                   <div className="mt-1" style={{ color: 'var(--bc-muted)' }}>Nothing moved.</div>
                 </div>
               )}
-              {outcome && <button onClick={() => setOpen(null)} className="mt-4 px-4 py-2 rounded-lg text-sm font-bold border" style={{ borderColor: 'var(--bc-border)' }}>Close</button>}
+              {outcome && <button onClick={() => { setOpen(null); load() }} className="mt-4 px-4 py-2 rounded-lg text-sm font-bold border" style={{ borderColor: 'var(--bc-border)' }}>Close</button>}
             </div>
           </div>
         </div>

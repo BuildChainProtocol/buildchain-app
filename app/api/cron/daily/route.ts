@@ -46,12 +46,39 @@ export async function GET(req: NextRequest) {
   const problems: string[] = []
   const fixed: string[] = []
   const old = (minutes: number) => new Date(Date.now() - minutes * MINUTE).toISOString()
-  // The platform stops this job at 60 seconds. Ledger work stops at 40, so
-  // there is always time left to report what was and was not done.
+  // The platform stops this job at 60 seconds.
   const started = Date.now()
-  const timeLeft = () => Date.now() - started < 40 * 1000
+  // A single draw's release can itself take over 30 seconds, so no new
+  // ledger work is started after 20.
+  const timeLeft = () => Date.now() - started < 20 * 1000
 
   try {
+    // 0. A payee the lender has not signed for within a day, on an approved
+    //    draw, goes on hold so the rest of the draw can be released.
+    {
+      const { data: waiting } = await db.from('draw_payments')
+        .select('draw_request_id, draw_requests!inner ( request_number, status )')
+        .in('status', ['pending', 'awaiting_signature']).lt('updated_at', old(24 * 60))
+        .eq('draw_requests.status', 'approved').limit(40)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const byDraw = new Map<string, string>()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const p of (waiting ?? []) as any[]) {
+        const d = Array.isArray(p.draw_requests) ? p.draw_requests[0] : p.draw_requests
+        byDraw.set(p.draw_request_id, d?.request_number ?? '')
+      }
+      const { holdUnsignedPayees } = await import('@/lib/unsigned-payees')
+      for (const [drawId, number] of Array.from(byDraw.entries())) {
+        try {
+          const r = await holdUnsignedPayees(db, drawId, old(24 * 60))
+          if (r.held) fixed.push(`Draw ${number}: ${r.held} payee(s) not signed for within a day were put on hold so the rest can be released`)
+          if (r.stillOpen) problems.push(`Draw ${number}: a signature request is still open or was signed but not confirmed; the lender should open the draw`)
+        } catch (err) {
+          problems.push(`Draw ${number}: its unsigned payees could not be looked at (${err instanceof Error ? err.message.slice(0, 100) : 'error'})`)
+        }
+      }
+    }
+
     // a. Approved draws that have waited: re-do any missing ledger record and
     //    try the release again (the same thing as the "Check again" button).
     const { data: approved } = await db.from('draw_requests')
@@ -93,6 +120,22 @@ export async function GET(req: NextRequest) {
       const { count } = await db.from('fee_accruals').select('id', { count: 'exact', head: true }).eq('draw_request_id', d.id)
       if (count) fixed.push(`Draw ${d.request_number}: its missing fee line was written`)
       else problems.push(`Draw ${d.request_number} was released but has no fee line, and one could not be written`)
+    }
+
+    //    Released draws whose announcement was cut short (fee line, emails,
+    //    Building Block's notices): finish it.
+    {
+      const { data: quiet } = await db.from('draw_requests')
+        .select('id, request_number').eq('status', 'funded').is('release_announced_at', null).lt('funded_at', old(10)).limit(10)
+      const { announceRelease } = await import('@/lib/xrpl/orchestrator')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const d of (quiet ?? []) as any[]) {
+        try {
+          if (await announceRelease(db, d.id, 'orchestrator')) fixed.push(`Draw ${d.request_number}: its release notices, cut short at the time, were sent`)
+        } catch (err) {
+          problems.push(`Draw ${d.request_number} was released but its notices could not be sent (${err instanceof Error ? err.message.slice(0, 100) : 'error'})`)
+        }
+      }
     }
 
     // c. Signatures and funding requests that have been open too long.

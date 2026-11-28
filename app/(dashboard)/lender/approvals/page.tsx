@@ -746,6 +746,22 @@ export default function LenderApprovalsPage() {
                     </div>
                   )}
 
+                  {/* Approved, but a payee still needs the lender's signature */}
+                  {tab === 'approved' && !draw.funded_at && draw.settlement_state === 'awaiting_lender_signature' && (
+                    <div className="rounded-lg p-3 mt-1 mb-3" style={{ background: 'rgba(180,83,9,0.06)', border: '1px solid rgba(180,83,9,0.35)' }}>
+                      <p className="text-sm font-semibold mb-1">A payee on this draw still needs your signature</p>
+                      <p className="text-xs mb-2.5" style={{ color: 'var(--bc-muted)' }}>
+                        Nobody on this draw is paid until every payee is either signed for or on hold. If it is not signed
+                        within a day, that payee goes on hold and the rest of the draw is released.
+                      </p>
+                      <button onClick={() => setSignDrawId(draw.id)} disabled={!!actionLoading}
+                        className="px-4 py-2 rounded-lg text-sm font-bold"
+                        style={{ background: 'var(--bc-gold)', color: 'var(--bc-dark)', opacity: actionLoading ? 0.7 : 1 }}>
+                        Sign for remaining payees
+                      </button>
+                    </div>
+                  )}
+
                   {/* Release conditions: approved, not yet released */}
                   {tab === 'approved' && !draw.funded_at && (
                     <div className="rounded-lg p-3 mt-1" style={{ background: 'rgba(13,27,42,0.02)', border: '1px solid var(--bc-border)' }}>

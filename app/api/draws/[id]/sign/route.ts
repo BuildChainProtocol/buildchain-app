@@ -131,7 +131,14 @@ function view(draw: any, rows: any[], method: string) {
  * else's release, so there it goes on hold instead (the lender can sign for
  * it later by opening the draw again) and the rest of the draw moves on.
  */
-async function resetPayment(admin: any, payment: any, payload: string | null, draw: any, method: string) {
+async function resetPayment(admin: any, payment: any, payload: string | null, draw: any, method: string, spent = false): Promise<boolean> {
+  // The record is cleared only once the request can never be signed. `spent`
+  // means the wallet service has already said so (rejected, expired, or
+  // signed and found wrong). Otherwise it is withdrawn first, and if that
+  // cannot be confirmed (it is open on the phone, was just signed, or the
+  // service did not answer) the payment stays exactly as it is. Clearing it
+  // anyway is how money gets locked twice, or locked with no record.
+  if (!spent && payload && !(await cancelSignRequest(payload))) return false
   const approved = draw.status === 'approved'
   const { data: cleared } = await admin.from('draw_payments')
     .update({
@@ -140,11 +147,16 @@ async function resetPayment(admin: any, payment: any, payload: string | null, dr
     })
     .eq('id', payment.id).eq('status', 'awaiting_signature').select('id')
   if (cleared?.length) {
-    await cancelSignRequest(payload)
     await admin.from('payment_signatures').delete().eq('payment_id', payment.id)
-    if (approved) await finalize(admin, draw, method)
+    if (approved) { try { await finalize(admin, draw, method) } catch { /* reported when the lender next opens the draw */ } }
   }
+  return true
 }
+
+// A sign request lives 30 minutes. A payment claimed with no request on file
+// (the call that claimed it died before saving one) is left alone for longer
+// than that, so a request nobody can see can no longer be signed.
+const ORPHAN_CLAIM_MS = 31 * 60 * 1000
 
 /** The request already out for a payment, to show again. Null while its request is still being created. */
 async function showOpen(admin: any, payment: any): Promise<Open | null> {
@@ -223,10 +235,13 @@ async function openNext(admin: any, draw: any, method: 'token_escrow' | 'two_sig
       }
       return { paymentId: next.id, qrPng: request.qrPng, url: request.url, pushed: request.pushed, cancelAfter: plan.cancelAfter }
     } catch (err) {
-      // Nothing is left half-open: withdraw the request and hand the payment back.
-      await cancelSignRequest(request?.uuid)
-      await admin.from('payment_signatures').delete().eq('payment_id', next.id)
-      await release('pending')
+      // Nothing is left half-open: withdraw the request and hand the payment
+      // back. If the request cannot be withdrawn it could still be signed, so
+      // the payment stays claimed until that request has expired.
+      if (await cancelSignRequest(request?.uuid)) {
+        await admin.from('payment_signatures').delete().eq('payment_id', next.id)
+        await release('pending')
+      }
       throw err
     }
   }
@@ -242,6 +257,13 @@ async function finalize(admin: any, draw: any, method: string): Promise<boolean>
   if (rows.some(r => r.status === 'pending' || r.status === 'awaiting_signature')) return false
   const signed = rows.filter(r => SIGNED.includes(r.status))
   if (!signed.length) return false
+  // Every payee on the draw must be on the list, paid or not, before it is
+  // locked: a payee missing from it would be missing from every report.
+  const net = Number(draw.net_amount ?? draw.amount)
+  const listed = rows.reduce((t, r) => t + Number(r.amount), 0)
+  if (cents(listed) !== cents(net)) {
+    throw new Error(`This draw's payment list adds up to ${usd(listed)}, not its net amount of ${usd(net)}, so it was not locked. Close this and open the draw again; if it repeats, contact BuildChain.`)
+  }
   await admin.from('draw_requests').update({
     settlement_method: method, settlement_state: 'locked',
     settlement_amount: signed.reduce((t, r) => t + Number(r.amount), 0),
@@ -307,9 +329,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       }).eq('id', draw.id).in('status', ['submitted', 'pending']).select('id')
       if (!marked?.length) return NextResponse.json({ error: 'This draw changed while you were opening it. Reload and try again.' }, { status: 409 })
       await admin.from('draw_payments').delete().eq('draw_request_id', draw.id).in('status', ['pending', 'held'])
-      const { error: insErr } = await admin.from('draw_payments').insert(planned.map((p: any, i: number) => ({
+      // Two calls at once build the same list; neither may fail or leave a
+      // gap, so a row the other call already wrote is kept, not an error.
+      const { error: insErr } = await admin.from('draw_payments').upsert(planned.map((p: any, i: number) => ({
         draw_request_id: draw.id, project_id: draw.project_id, seq: i + 1, ...p,
-      })))
+      })), { onConflict: 'draw_request_id,seq', ignoreDuplicates: true })
       if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
     } else {
       // A payee held because the wallet could not receive the token gets
@@ -333,12 +357,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         if (state.resolved && state.signed) {
           return NextResponse.json({ method, signatureNeeded: true, state: 'checking', current: null, ...view(draw, rows, method) })
         }
-        await resetPayment(admin, open, sig.payload, draw, method)
-      } else if (Date.now() - new Date(open.updated_at).getTime() < 60 * 1000) {
-        // Another call is opening this request right now.
+        // Rejected or expired: the wallet service says it can never be signed.
+        await resetPayment(admin, open, sig.payload, draw, method, true)
+      } else if (Date.now() - new Date(open.updated_at).getTime() < ORPHAN_CLAIM_MS) {
+        // Another call is opening this request right now (or died doing so).
         return NextResponse.json({ method, signatureNeeded: true, state: 'checking', current: null, ...view(draw, rows, method) })
       } else {
-        await resetPayment(admin, open, null, draw, method)
+        await resetPayment(admin, open, null, draw, method, true)
       }
     }
 
@@ -381,36 +406,43 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const open = rows.find(r => r.status === 'awaiting_signature')
   if (!open) {
     if (draw.settlement_state === 'locked') return NextResponse.json({ state: 'locked', current: null, ...view(draw, rows, method) })
-    if (draw.settlement_state === 'awaiting_lender_signature' && await finalize(admin, draw, method)) {
-      return NextResponse.json({ state: 'locked', current: null, ...view(draw, await payments(admin, draw.id), method) })
+    try {
+      if (draw.settlement_state === 'awaiting_lender_signature' && SIGNABLE_DRAW.includes(draw.status) && await finalize(admin, draw, method)) {
+        return NextResponse.json({ state: 'locked', current: null, ...view(draw, await payments(admin, draw.id), method) })
+      }
+    } catch (err) {
+      return NextResponse.json({ state: 'problem', error: err instanceof Error ? err.message.slice(0, 300) : 'The draw could not be locked', current: null, ...view(draw, rows, method) }, { status: 409 })
     }
     return NextResponse.json({ state: 'none', current: null, ...view(draw, rows, method) })
   }
   const { data: sig } = await admin.from('payment_signatures').select('payload, txjson').eq('payment_id', open.id).maybeSingle()
   const age = Date.now() - new Date(open.updated_at).getTime()
   if (!sig?.payload) {
-    // Its request is still being created by another call; give that a minute.
-    if (age < 60 * 1000) return NextResponse.json({ state: 'waiting', ...view(draw, rows, method) })
-    await resetPayment(admin, open, null, draw, method)
+    // Its request is still being created by another call (or that call died).
+    if (age < ORPHAN_CLAIM_MS) return NextResponse.json({ state: 'waiting', note: 'Preparing the request', ...view(draw, rows, method) })
+    await resetPayment(admin, open, null, draw, method, true)
     return NextResponse.json({ state: 'none', current: null, ...view(draw, await payments(admin, draw.id), method) })
   }
-
-  // A declined or released draw has nothing left to sign.
-  if (!SIGNABLE_DRAW.includes(draw.status)) {
-    await resetPayment(admin, open, sig.payload, draw, method)
-    return NextResponse.json({ state: 'none', current: null, ...view(draw, await payments(admin, draw.id), method) })
-  }
+  const signable = SIGNABLE_DRAW.includes(draw.status)
 
   try {
     const result = await getSignResult(sig.payload)
     if (!result.resolved) {
-      if (result.expired) { await resetPayment(admin, open, sig.payload, draw, method); return NextResponse.json({ state: 'expired', current: null, ...view(draw, await payments(admin, draw.id), method) }) }
+      if (result.expired) { await resetPayment(admin, open, sig.payload, draw, method, true); return NextResponse.json({ state: 'expired', current: null, ...view(draw, await payments(admin, draw.id), method) }) }
+      // A declined or released draw has nothing left to sign: withdraw the
+      // request. If it cannot be withdrawn (it is open on the phone right
+      // now), keep watching it; a signature must never go unrecorded.
+      if (!signable && await resetPayment(admin, open, sig.payload, draw, method)) {
+        return NextResponse.json({ state: 'none', current: null, ...view(draw, await payments(admin, draw.id), method) })
+      }
       return NextResponse.json({ state: 'waiting', ...view(draw, rows, method) })
     }
     if (!result.signed) {
-      await resetPayment(admin, open, sig.payload, draw, method)
+      await resetPayment(admin, open, sig.payload, draw, method, true)
       return NextResponse.json({ state: 'rejected', current: null, ...view(draw, await payments(admin, draw.id), method) })
     }
+    // Signed. Whatever has happened to the draw since, what was signed is
+    // confirmed and written down: for an escrow, money is locked on the ledger.
 
     const lenderWallet = draw.projects?.lenders?.xrp_address
     const proof = await confirmLenderSigning({
@@ -434,6 +466,19 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       await admin.from('lender_wallet_links').upsert({ lender_id: draw.projects.lenders.id, user_token: result.userToken }, { onConflict: 'lender_id' })
     }
 
+    if (!signable) {
+      // The draw closed while this was being signed. The payment is on record
+      // as signed for (an escrow shows on the Funding page, where it can be
+      // taken back once its deadline passes), and a person is told.
+      const { alertOwner } = await import('@/lib/alerts')
+      await alertOwner({
+        title: 'A payee was signed for after its draw closed',
+        body: `Draw ${draw.request_number}: the lender signed for ${open.payee_name ?? 'a payee'} (${usd(Number(open.amount))}) after the draw became ${draw.status}. It is recorded as signed for and was not paid.`,
+        link: '/admin/draws', details: { draw: draw.id, payment: open.id },
+      })
+      return NextResponse.json({ state: 'none', current: null, ...view(draw, await payments(admin, draw.id), method) })
+    }
+
     // On to the next payee, if any.
     const current = await openNext(admin, draw, method, lenderWallet)
     rows = await payments(admin, draw.id)
@@ -446,18 +491,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     if (err instanceof SigningMismatch) {
       // Signed, but definitely not what was asked for (or by another wallet,
       // or refused by the ledger): the request is spent, so clear it.
-      await resetPayment(admin, open, sig.payload, draw, method)
+      await resetPayment(admin, open, sig.payload, draw, method, true)
       return NextResponse.json({ state: 'problem', error: message.slice(0, 300), current: null, ...view(draw, await payments(admin, draw.id), method) }, { status: 409 })
     }
     // Anything else (the wallet service or the ledger did not answer, or the
     // transaction is not in a validated ledger yet) says nothing about the
-    // signature: keep it and let the screen ask again. But not for ever: a
-    // signed transaction that has not reached a validated ledger in fifteen
-    // minutes never will (its validity window is long past).
-    if (age > 15 * 60 * 1000) {
-      await resetPayment(admin, open, sig.payload, draw, method)
-      return NextResponse.json({ state: 'expired', current: null, error: 'The signed request never reached the ledger. Nothing was locked. Please sign again.', ...view(draw, await payments(admin, draw.id), method) })
-    }
+    // signature: keep it and let the screen ask again, for as long as it
+    // takes. Only the ledger's own answer ends the wait (a signed escrow that
+    // can no longer enter the ledger is reported above as a mismatch).
     console.warn('[sign] could not confirm yet:', message.slice(0, 200))
     return NextResponse.json({ state: 'waiting', note: 'Still confirming with the ledger', ...view(draw, rows, method) })
   }
