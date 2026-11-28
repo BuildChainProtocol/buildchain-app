@@ -1,3 +1,4 @@
+import { onTestNetwork } from '@/lib/network'
 /**
  * Building Block webhook sender.
  *
@@ -151,10 +152,16 @@ export async function sendBuildingBlockWebhook(
   const unixSeconds = Math.floor(Date.now() / 1000)
   const eventId = payload.event_id || crypto.randomUUID()
 
+  const testnet = onTestNetwork()
   const bodyObj = {
     ...payload,
     event_id:  eventId,
     timestamp: new Date(unixSeconds * 1000).toISOString(),
+    // Stated on every event: which ledger network this happened on, and
+    // whether real funds moved. On the test network nothing of value moves,
+    // whatever dollar amounts the event carries.
+    network:     testnet ? 'testnet' : 'mainnet',
+    funds_moved: !testnet && (payload.event === 'escrow_released' || payload.event === 'payment_confirmed'),
   }
   const rawBody = JSON.stringify(bodyObj)
   const sig     = sign(unixSeconds, rawBody)
@@ -167,7 +174,19 @@ export async function sendBuildingBlockWebhook(
   }
   if (sig) headers['X-BuildChain-Signature'] = sig
 
-  return sendWithRetry(url, headers, rawBody, payload.event, payload.bc_draw_id)
+  const sent = await sendWithRetry(url, headers, rawBody, payload.event, payload.bc_draw_id)
+  if (!sent.ok) {
+    // Building Block records money facts only from these notices, so a lost
+    // one leaves the two products disagreeing until someone steps in.
+    const { alertOwner } = await import('@/lib/alerts')
+    await alertOwner({
+      title: 'Building Block did not accept a notice',
+      body: `The "${payload.event}" notice for a draw was not accepted after three tries. Building Block may show that draw in an older state.`,
+      link: '/admin/draws',
+      details: { event: payload.event, draw: payload.bc_draw_id, status: sent.status ?? 'no answer', error: String(sent.error ?? '').slice(0, 200) },
+    })
+  }
+  return sent
 }
 
 // ── Convenience builders ──────────────────────────────────────────────────────

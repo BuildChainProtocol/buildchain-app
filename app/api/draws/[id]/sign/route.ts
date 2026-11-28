@@ -18,7 +18,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const DRAW_SELECT = `
-  id, status, amount, net_amount, request_number, project_id, gc_wallet,
+  id, status, amount, net_amount, request_number, project_id, gc_wallet, payees,
   settlement_method, settlement_state, settlement_amount, settlement_payee,
   release_ticket, escrow_txn_hash,
   projects ( name, settlement_method, loan_account,
@@ -88,6 +88,20 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'The contractor has no wallet on file to be paid to' }, { status: 409 })
   }
   const amountUsd = Number(draw.net_amount ?? draw.amount)
+
+  // A dollar-token draw is one payment to one wallet. If the draw lists other
+  // payees (subcontractors with their own wallets, or payees with none), that
+  // single payment would not pay them, and saying it did would be false. Such
+  // a draw cannot be settled this way until each payee is paid separately.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const others = (Array.isArray(draw.payees) ? draw.payees : []).filter((p: any) =>
+    Number(p?.amount) > 0 && (typeof p?.wallet !== 'string' || p.wallet !== payee))
+  if (others.length) {
+    return NextResponse.json({
+      error: `This draw pays ${others.length + 1 > 2 ? 'several payees' : 'more than one payee'}. Dollar settlement currently pays one wallet per draw, so it cannot be approved by signature yet. Paying each payee separately is being built.`,
+      code: 'several_payees',
+    }, { status: 409 })
+  }
 
   try {
     // A request that is still open on the lender's phone is reused, so two

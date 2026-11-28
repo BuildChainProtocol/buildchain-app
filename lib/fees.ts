@@ -50,7 +50,7 @@ export async function recordFeeAccrual(draw: {
       firstDraw = (count ?? 0) === 0
     }
     const waived = testnet || !active || firstDraw
-    await supabase.from('fee_accruals').upsert({
+    const { error: feeErr } = await supabase.from('fee_accruals').upsert({
       draw_request_id: draw.id,
       project_id: draw.project_id,
       lender_id: project?.lender_id ?? null,
@@ -63,7 +63,18 @@ export async function recordFeeAccrual(draw: {
       settlement_method: draw.settlement_method ?? 'test_xrp',
       network: testnet ? 'testnet' : 'mainnet',
     }, { onConflict: 'draw_request_id', ignoreDuplicates: true })
+    // The database reports a refused write in the result; make it count as a failure.
+    if (feeErr) throw new Error(feeErr.message)
   } catch (err) {
     console.warn('[fees] accrual not recorded (non-fatal):', err instanceof Error ? err.message : err)
+    try {
+      const { alertOwner } = await import('@/lib/alerts')
+      await alertOwner({
+        title: 'A fee line could not be written',
+        body: 'A draw was released but its fee line was not recorded. The daily check will try again.',
+        link: '/admin/fees',
+        details: { draw: draw.id, error: err instanceof Error ? err.message.slice(0, 200) : 'error' },
+      })
+    } catch { /* never let reporting a problem cause another */ }
   }
 }

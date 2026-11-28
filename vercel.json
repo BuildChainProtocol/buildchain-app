@@ -4,6 +4,6 @@
   "devCommand": "next dev",
   "installCommand": "npm install",
   "crons": [
-    { "path": "/api/keepalive", "schedule": "17 9 * * *" }
+    { "path": "/api/cron/daily", "schedule": "17 9 * * *" }
   ]
 }

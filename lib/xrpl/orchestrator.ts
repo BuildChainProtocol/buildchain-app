@@ -339,6 +339,15 @@ export async function runOrchestrator(drawId: string): Promise<OrchestratorResul
     }
     console.error('[Orchestrator] Auto-fund failed:', message)
     result.reason = `Release failed: ${message}`
+    {
+      const { alertOwner } = await import('@/lib/alerts')
+      await alertOwner({
+        title: 'A draw could not be released',
+        body: `Draw ${draw.request_number} met both conditions but its release failed. It is still approved. Open Draw Requests and use "Check again".`,
+        link: '/admin/draws',
+        details: { draw: drawId, error: message.slice(0, 300) },
+      })
+    }
 
     // Fire escrow_failed webhook — BB must know the auto-release failed
     try {
